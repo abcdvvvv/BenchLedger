@@ -301,7 +301,7 @@ function App() {
         <div className="brand">
             <div className="brand-mark">BL</div>
             <div>
-              <strong>BenchLens</strong>
+              <strong>BenchLedger</strong>
               <span>Benchmark Lens</span>
             </div>
         </div>
