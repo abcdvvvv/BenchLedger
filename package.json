@@ -1,0 +1,28 @@
+{
+  "name": "benchlens",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "plotly.js-basic-dist-min": "^3.6.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-plotly.js": "^3.0.0",
+    "sql.js": "^1.14.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@types/react-plotly.js": "^2.6.4",
+    "@types/plotly.js": "^2.35.0",
+    "@types/sql.js": "^1.4.11",
+    "@vitejs/plugin-react": "^6.0.2",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.16"
+  }
+}
