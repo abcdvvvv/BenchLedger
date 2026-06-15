@@ -54,3 +54,48 @@ export type PairComparison = {
   memory_delta: number;
   alloc_delta: number;
 };
+
+export type BenchLedgerManifestDatabase = {
+  id: string;
+  name?: string;
+  description?: string;
+  url: string;
+  sha256?: string;
+  size_bytes?: number;
+  packed_at?: string;
+  schema_version?: number;
+  metadata_preview?: Record<string, string | null>;
+};
+
+export type BenchLedgerManifest = {
+  manifest_version: number;
+  benchledger_web_version?: string;
+  generated_at?: string;
+  site?: {
+    title?: string;
+    description?: string;
+  };
+  databases: BenchLedgerManifestDatabase[];
+};
+
+export type BenchLedgerMetadata = {
+  schema_version: number | null;
+  project_name: string;
+  project_description: string;
+  project_url: string;
+  logo_url: string;
+  producer: string;
+  producer_version: string;
+  created_at: string;
+  updated_at: string;
+  default_metric: string;
+  notes: string;
+  raw: Record<string, string>;
+};
+
+export type LoadedBenchmarkDataset = {
+  rows: BenchmarkRow[];
+  metadata: BenchLedgerMetadata;
+  source_label: string;
+  source_url: string | null;
+};

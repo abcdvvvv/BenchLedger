@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Plot from "./components/Plot";
 import {
   deltaClass,
@@ -11,12 +11,24 @@ import {
   shortCommit,
   unique
 } from "./lib/format";
-import { loadBenchmarkRows } from "./lib/sqlite";
-import type { BenchmarkRow, BenchmarkRun, PairComparison } from "./lib/types";
-import sqliteUrl from "./data/results.sqlite?url";
+import {
+  loadBenchmarkRowsFromFile,
+  loadBenchmarkRowsFromManifestDatabase,
+  loadManifest
+} from "./lib/sqlite";
+import type {
+  BenchmarkRow,
+  BenchmarkRun,
+  BenchLedgerManifest,
+  BenchLedgerManifestDatabase,
+  BenchLedgerMetadata,
+  LoadedBenchmarkDataset,
+  PairComparison
+} from "./lib/types";
 
 type ThemeMode = "light" | "dark";
 type TrendAxisMode = "commit" | "time";
+type AppPhase = "booting" | "select-source" | "loading-database" | "ready";
 
 const THEME_STORAGE_KEY = "componentlogging-perf-theme";
 
@@ -88,10 +100,36 @@ function buildRuns(rows: BenchmarkRow[]): BenchmarkRun[] {
   return Array.from(runsById.values()).sort(compareRuns);
 }
 
+function databaseTitle(database: BenchLedgerManifestDatabase): string {
+  return database.name || database.id;
+}
+
+function metadataTitle(metadata: BenchLedgerMetadata): string {
+  return metadata.project_name || "BenchLedger";
+}
+
+function metadataDescription(metadata: BenchLedgerMetadata): string {
+  return metadata.project_description || metadata.notes || "Performance tracking for benchmark datasets.";
+}
+
+function sourceSummary(dataset: LoadedBenchmarkDataset | null): string {
+  if (!dataset) return "No benchmark database loaded";
+  return dataset.source_url ? `Serving ${dataset.source_label}` : `Loaded local file ${dataset.source_label}`;
+}
+
+function formatSchemaVersion(metadata: BenchLedgerMetadata): string {
+  return metadata.schema_version === null ? "Unknown schema" : `Schema v${metadata.schema_version}`;
+}
+
 function App() {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [rows, setRows] = useState<BenchmarkRow[]>([]);
-  const [error, setError] = useState<string>("");
-  const [isLoading, setIsLoading] = useState(true);
+  const [dataset, setDataset] = useState<LoadedBenchmarkDataset | null>(null);
+  const [manifest, setManifest] = useState<BenchLedgerManifest | null>(null);
+  const [manifestUrl, setManifestUrl] = useState<string | null>(null);
+  const [selectedDatabaseId, setSelectedDatabaseId] = useState("");
+  const [error, setError] = useState("");
+  const [phase, setPhase] = useState<AppPhase>("booting");
   const [theme, setTheme] = useState<ThemeMode>(initialTheme);
   const [machine, setMachine] = useState("");
   const [metricKind, setMetricKind] = useState("");
@@ -109,24 +147,93 @@ function App() {
 
   useEffect(() => {
     let cancelled = false;
-    setIsLoading(true);
-    loadBenchmarkRows()
-      .then((loadedRows) => {
+    async function boot() {
+      setPhase("booting");
+      setError("");
+      try {
+        const manifestEntry = await loadManifest();
         if (cancelled) return;
-        setRows(loadedRows);
-        setError("");
-      })
-      .catch((loadError: unknown) => {
+        if (!manifestEntry) {
+          setManifest(null);
+          setManifestUrl(null);
+          setPhase("select-source");
+          return;
+        }
+        setManifest(manifestEntry.manifest);
+        setManifestUrl(manifestEntry.url);
+        const databases = manifestEntry.manifest.databases;
+        if (!databases.length) {
+          setPhase("select-source");
+          return;
+        }
+        if (databases.length === 1) {
+          await selectManifestDatabase(databases[0], manifestEntry.url, cancelled);
+          return;
+        }
+        setSelectedDatabaseId((current) => current || databases[0].id);
+        setPhase("select-source");
+      } catch (loadError: unknown) {
         if (cancelled) return;
-        setError(loadError instanceof Error ? loadError.message : "Failed to load benchmark data.");
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoading(false);
-      });
+        setError(loadError instanceof Error ? loadError.message : "Failed to initialize BenchLedger.");
+        setPhase("select-source");
+      }
+    }
+    void boot();
     return () => {
       cancelled = true;
     };
   }, []);
+
+  async function selectManifestDatabase(
+    database: BenchLedgerManifestDatabase,
+    activeManifestUrl: string,
+    cancelled = false
+  ) {
+    setPhase("loading-database");
+    setError("");
+    try {
+      const loadedDataset = await loadBenchmarkRowsFromManifestDatabase(database, activeManifestUrl);
+      if (cancelled) return;
+      setDataset(loadedDataset);
+      setRows(loadedDataset.rows);
+      setSelectedDatabaseId(database.id);
+      setPhase("ready");
+    } catch (loadError: unknown) {
+      if (cancelled) return;
+      setRows([]);
+      setDataset(null);
+      setError(loadError instanceof Error ? loadError.message : "Failed to load the selected database.");
+      setPhase("select-source");
+    }
+  }
+
+  async function handleDatabaseSelection(databaseId: string) {
+    if (!manifest || !manifestUrl) return;
+    const database = manifest.databases.find((entry) => entry.id === databaseId);
+    if (!database) return;
+    await selectManifestDatabase(database, manifestUrl);
+  }
+
+  async function handleLocalFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setPhase("loading-database");
+    setError("");
+    try {
+      const loadedDataset = await loadBenchmarkRowsFromFile(file);
+      setManifest((current) => current);
+      setDataset(loadedDataset);
+      setRows(loadedDataset.rows);
+      setPhase("ready");
+    } catch (loadError: unknown) {
+      setRows([]);
+      setDataset(null);
+      setError(loadError instanceof Error ? loadError.message : "Failed to load the selected SQLite file.");
+      setPhase("select-source");
+    } finally {
+      event.target.value = "";
+    }
+  }
 
   const runs = useMemo(() => buildRuns(rows), [rows]);
   const latestRun = runs[0] ?? null;
@@ -140,8 +247,13 @@ function App() {
 
   useEffect(() => {
     if (!metricOptions.length) return;
-    setMetricKind((current) => (current && metricOptions.includes(current) ? current : metricOptions[0]));
-  }, [metricOptions]);
+    const metadataMetric = dataset?.metadata.default_metric ?? "";
+    setMetricKind((current) => {
+      if (current && metricOptions.includes(current)) return current;
+      if (metadataMetric && metricOptions.includes(metadataMetric)) return metadataMetric;
+      return metricOptions[0];
+    });
+  }, [dataset?.metadata.default_metric, metricOptions]);
 
   const filteredRuns = useMemo(
     () => runs.filter((run) => run.machine_id === machine && run.metric_kind === metricKind),
@@ -283,27 +395,95 @@ function App() {
     };
   }, [theme]);
 
-  if (isLoading) {
-    return <div className="state-shell">Loading benchmark dashboard...</div>;
+  const sourceDatabases = manifest?.databases ?? [];
+  const currentMetadata = dataset?.metadata ?? null;
+  const siteTitle = currentMetadata ? metadataTitle(currentMetadata) : manifest?.site?.title || "BenchLedger";
+  const siteDescription = currentMetadata ? metadataDescription(currentMetadata) : manifest?.site?.description || "Load a benchmark SQLite database to inspect runs and trends.";
+
+  function openLocalFilePicker() {
+    fileInputRef.current?.click();
   }
 
-  if (error) {
-    return <div className="state-shell">Failed to load SQLite data: {error}</div>;
+  if (phase === "booting" || phase === "loading-database") {
+    return <div className="state-shell">{phase === "booting" ? "Discovering benchmark sources..." : "Loading benchmark database..."}</div>;
   }
 
-  if (!rows.length) {
-    return <div className="state-shell">No benchmark rows were found in `results.sqlite`.</div>;
+  if (!dataset || !rows.length) {
+    return (
+      <div className="state-shell state-shell-rich">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".db,.sqlite,.sqlite3,application/vnd.sqlite3"
+          className="visually-hidden"
+          onChange={(event) => {
+            void handleLocalFileChange(event);
+          }}
+        />
+        <div className="state-card surface-card">
+          <div className="brand">
+            <div className="brand-mark">BL</div>
+            <div>
+              <strong>{manifest?.site?.title || "BenchLedger"}</strong>
+              <span>Runtime benchmark viewer</span>
+            </div>
+          </div>
+          <div className="state-copy">
+            <h1>No benchmark database is loaded</h1>
+            <p>
+              {error
+                ? `BenchLedger could not open the default dataset. ${error}`
+                : "Pick a local SQLite database or select one from the packaged manifest to start exploring benchmark history."}
+            </p>
+          </div>
+          {sourceDatabases.length > 0 ? (
+            <div className="state-section">
+              <span className="state-label">Packaged Databases</span>
+              <div className="source-list">
+                {sourceDatabases.map((database) => (
+                  <button
+                    key={database.id}
+                    type="button"
+                    className="source-card subtle-card"
+                    onClick={() => {
+                      void handleDatabaseSelection(database.id);
+                    }}
+                  >
+                    <strong>{databaseTitle(database)}</strong>
+                    <span>{database.description || database.metadata_preview?.project_name || database.url}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          <div className="state-actions">
+            <button type="button" className="button button-primary" onClick={openLocalFilePicker}>
+              Choose Local SQLite
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="dashboard-app">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".db,.sqlite,.sqlite3,application/vnd.sqlite3"
+        className="visually-hidden"
+        onChange={(event) => {
+          void handleLocalFileChange(event);
+        }}
+      />
       <aside className="sidebar">
         <div className="brand">
-            <div className="brand-mark">BL</div>
-            <div>
-              <strong>BenchLedger</strong>
-              <span>Benchmark Lens</span>
-            </div>
+          <div className="brand-mark">BL</div>
+          <div>
+            <strong>{siteTitle}</strong>
+            <span>{formatSchemaVersion(dataset.metadata)}</span>
+          </div>
         </div>
         <nav className="nav-section">
           <span className="nav-label">Navigation</span>
@@ -333,8 +513,26 @@ function App() {
                 {groupOptions.map((option) => <option key={option} value={option}>{option}</option>)}
               </select>
             </label>
+            {sourceDatabases.length > 1 ? (
+              <label className="sidebar-field">
+                <span>Database</span>
+                <select
+                  value={selectedDatabaseId}
+                  onChange={(event) => {
+                    void handleDatabaseSelection(event.target.value);
+                  }}
+                >
+                  {sourceDatabases.map((database) => <option key={database.id} value={database.id}>{databaseTitle(database)}</option>)}
+                </select>
+              </label>
+            ) : null}
           </div>
         </nav>
+        <div className="sidebar-note subtle-card">
+          <strong>Source</strong>
+          <span>{sourceSummary(dataset)}</span>
+          {dataset.metadata.producer ? <p>{dataset.metadata.producer_version ? `${dataset.metadata.producer} ${dataset.metadata.producer_version}` : dataset.metadata.producer}</p> : null}
+        </div>
         <div className="sidebar-footer">
           <button
             type="button"
@@ -351,9 +549,9 @@ function App() {
             </span>
           </button>
           <div className="operator">
-            <div className="operator-avatar">JL</div>
+            <div className="operator-avatar">BL</div>
             <div>
-              <strong>{latestRun?.machine_id ?? "No machine"}</strong>
+              <strong>{latestRun?.machine_id ?? dataset.source_label}</strong>
               <span>{latestRun ? formatDate(latestRun.date) : "No benchmark run"}</span>
             </div>
           </div>
@@ -363,8 +561,8 @@ function App() {
         <header className="topbar">
           <div className="topbar-copy">
             <div className="breadcrumb">Benchmarking <span>›</span> Executive Overview</div>
-            <h1>Executive Overview</h1>
-            <p>Performance tracking for Julia libraries.</p>
+            <h1>{siteTitle}</h1>
+            <p>{siteDescription}</p>
           </div>
           <div className="topbar-actions">
             <label className="field control-card control-card-wide">
@@ -379,8 +577,10 @@ function App() {
                 {filteredRuns.map((run) => <option key={run.run_id} value={run.run_id}>{runHeadline(run)} · {formatDate(run.date)}</option>)}
               </select>
             </label>
-            <a className="button button-secondary" href={sqliteUrl}>Open SQLite</a>
-            <a className="button button-primary" href={sqliteUrl} download="results.sqlite">Export</a>
+            <button type="button" className="button button-secondary" onClick={openLocalFilePicker}>Choose SQLite</button>
+            {dataset.source_url ? (
+              <a className="button button-primary" href={dataset.source_url} download={dataset.source_label}>Download</a>
+            ) : null}
           </div>
         </header>
         <section className="stats-grid">
@@ -479,7 +679,7 @@ function App() {
                 <article className="subtle-card insight-card">
                   <span>Data posture</span>
                   <strong>{focusRun ? (focusRun.is_dirty ? "Dirty snapshot captured" : "Clean code state captured") : "No run selected"}</strong>
-                  <p>{focusRun?.notes || "No additional notes were attached to this run."}</p>
+                  <p>{focusRun?.notes || currentMetadata?.notes || "No additional notes were attached to this dataset."}</p>
                 </article>
               </div>
             </div>
@@ -534,7 +734,7 @@ function App() {
                 <tr><th>Branch</th><td>{focusRun?.branch || "n/a"}</td></tr>
                 <tr><th>Machine</th><td>{focusRun?.machine_id || "n/a"}</td></tr>
                 <tr><th>CPU</th><td>{focusRun?.cpu_model || "n/a"}</td></tr>
-                <tr><th>Threads</th><td>{focusRun?.cpu_threads.toLocaleString() || "n/a"}</td></tr>
+                <tr><th>Threads</th><td>{focusRun ? focusRun.cpu_threads.toLocaleString() : "n/a"}</td></tr>
                 <tr><th>Platform</th><td>{focusRun ? `${focusRun.os} · ${focusRun.arch}` : "n/a"}</td></tr>
                 <tr><th>Julia</th><td>{focusRun?.julia_version || "n/a"}</td></tr>
                 <tr><th>Dirty</th><td>{focusRun ? String(focusRun.is_dirty) : "n/a"}</td></tr>
