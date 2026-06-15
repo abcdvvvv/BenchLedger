@@ -8,18 +8,15 @@ import type {
   LoadedBenchmarkDataset
 } from "./types";
 
-const _Default_Manifest_Urls = ["./benchledger.json", "./manifest.json"];
+const _Default_Manifest_Url = "./benchledger.json";
 const _Compatible_Schema_Versions = new Set([1]);
 const _Metadata_Defaults = {
-  project_name: "",
-  project_description: "",
+  name: "",
+  description: "",
   project_url: "",
   logo_url: "",
-  producer: "",
-  producer_version: "",
   created_at: "",
   updated_at: "",
-  default_metric: "",
   notes: ""
 } as const;
 
@@ -215,15 +212,12 @@ function readMetadata(db: Database): BenchLedgerMetadata {
   const schemaVersion = schemaValue ? Number(schemaValue) : null;
   return {
     schema_version: Number.isFinite(schemaVersion) ? schemaVersion : null,
-    project_name: raw.project_name ?? _Metadata_Defaults.project_name,
-    project_description: raw.project_description ?? _Metadata_Defaults.project_description,
+    name: raw.name ?? _Metadata_Defaults.name,
+    description: raw.description ?? _Metadata_Defaults.description,
     project_url: raw.project_url ?? _Metadata_Defaults.project_url,
     logo_url: raw.logo_url ?? _Metadata_Defaults.logo_url,
-    producer: raw.producer ?? _Metadata_Defaults.producer,
-    producer_version: raw.producer_version ?? _Metadata_Defaults.producer_version,
     created_at: raw.created_at ?? _Metadata_Defaults.created_at,
     updated_at: raw.updated_at ?? _Metadata_Defaults.updated_at,
-    default_metric: raw.default_metric ?? _Metadata_Defaults.default_metric,
     notes: raw.notes ?? _Metadata_Defaults.notes,
     raw
   };
@@ -269,26 +263,18 @@ function sourceLabelFromUrl(url: string): string {
 }
 
 export async function loadManifest(manifestUrl?: string): Promise<{ manifest: BenchLedgerManifest; url: string } | null> {
-  const candidates = manifestUrl ? [manifestUrl] : _Default_Manifest_Urls;
-  let lastResponseStatus = 404;
-  for (const candidate of candidates) {
-    const response = await fetch(candidate, { cache: "no-store" });
-    if (response.status === 404) {
-      lastResponseStatus = response.status;
-      continue;
-    }
-    if (!response.ok) {
-      throw new Error(`Failed to load manifest: ${response.status}`);
-    }
-    const json = await response.json();
-    const manifest = normalizeManifest(json);
-    if (!manifest) {
-      throw new Error("Manifest format is invalid.");
-    }
-    return { manifest, url: candidate };
+  const url = manifestUrl ?? _Default_Manifest_Url;
+  const response = await fetch(url, { cache: "no-store" });
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    throw new Error(`Failed to load benchledger.json: ${response.status}`);
   }
-  if (lastResponseStatus === 404) return null;
-  return null;
+  const json = await response.json();
+  const manifest = normalizeManifest(json);
+  if (!manifest) {
+    throw new Error("benchledger.json format is invalid.");
+  }
+  return { manifest, url };
 }
 
 export async function loadBenchmarkRowsFromUrl(url: string, sourceLabel = sourceLabelFromUrl(url)): Promise<LoadedBenchmarkDataset> {
@@ -307,7 +293,7 @@ export async function loadBenchmarkRowsFromFile(file: File): Promise<LoadedBench
 
 export async function loadBenchmarkRowsFromManifestDatabase(
   database: BenchLedgerManifestDatabase,
-  manifestUrl = _Default_Manifest_Urls[0]
+  manifestUrl = _Default_Manifest_Url
 ): Promise<LoadedBenchmarkDataset> {
   const manifestPath = new URL(manifestUrl, window.location.href).toString();
   const databaseUrl = joinRelativeUrl(manifestPath, database.url);

@@ -1,0 +1,37 @@
+name: Release Frontend Dist
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Pack dist
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          TAR="BenchLedger-${VERSION}-dist.tar.gz"
+          tar -czf "$TAR" -C dist .
+          echo "TAR_NAME=$TAR" >> $GITHUB_ENV
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.TAR_NAME }}

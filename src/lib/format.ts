@@ -41,14 +41,18 @@ export function percentageChange(current: number, baseline: number): number {
   return ((current - baseline) / baseline) * 100;
 }
 
+const Percent_Digits = 1;
+const Neutral_Delta_Threshold = 0.5 * 10 ** -Percent_Digits;
+
 export function formatPercent(value: number): string {
   if (!Number.isFinite(value)) return "n/a";
   const sign = value > 0 ? "+" : "";
-  return `${sign}${value.toFixed(1)}%`;
+  return `${sign}${value.toFixed(Percent_Digits)}%`;
 }
 
 export function deltaClass(value: number): "up" | "down" | "neutral" {
   if (!Number.isFinite(value)) return "neutral";
+  if (Math.abs(value) < Neutral_Delta_Threshold) return "neutral";
   if (value > 0) return "up";
   if (value < 0) return "down";
   return "neutral";

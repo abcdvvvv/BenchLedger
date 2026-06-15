@@ -80,15 +80,12 @@ export type BenchLedgerManifest = {
 
 export type BenchLedgerMetadata = {
   schema_version: number | null;
-  project_name: string;
-  project_description: string;
+  name: string;
+  description: string;
   project_url: string;
   logo_url: string;
-  producer: string;
-  producer_version: string;
   created_at: string;
   updated_at: string;
-  default_metric: string;
   notes: string;
   raw: Record<string, string>;
 };
