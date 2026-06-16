@@ -12,6 +12,10 @@ Store, query, and visualize benchmark history.
 
 It is designed for library performance tracking: run benchmarks elsewhere, write the results to SQLite, and use BenchLedger to inspect trends, run context, and benchmark deltas directly in the browser.
 
+## Example Projects
+
+- [ComponentLogging.jl](https://github.com/JuliaLogging/ComponentLogging.jl): [benchmark dashboard](https://julialogging.github.io/ComponentLogging.jl/benchledger/)
+
 ## Development
 
 ```bash
@@ -159,8 +163,8 @@ trend charts are ordered by the version history instead of the backfill date.
 
 ## Colors
 
-Graphite black #18181B
-Amber          #F59E0B
-Copper         #B45309
-Sand           #FFFBEB
+Graphite black #18181B  
+Amber          #F59E0B  
+Copper         #B45309  
+Sand           #FFFBEB  
 Stone gray     #78716C
