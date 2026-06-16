@@ -85,6 +85,7 @@ type UISettings = {
 
 const UI_SETTINGS_STORAGE_KEY = "benchledger-ui-settings";
 const Trend_Y_Padding_Ratio = 0.08;
+const Asset_Base_URL = import.meta.env.BASE_URL;
 
 const deltaColorKey = {
   up: "deltaUp",
@@ -824,7 +825,7 @@ function App() {
       />
       <aside className="sidebar">
         <div className="brand">
-          <img className="brand-logo" src={theme === "dark" ? "/LightLogo.png" : "/DarkLogo.png"} alt="BenchLedger" />
+          <img className="brand-logo" src={`${Asset_Base_URL}${theme === "dark" ? "LightLogo.png" : "DarkLogo.png"}`} alt="BenchLedger" />
         </div>
         <nav className="nav-section">
           <span className="nav-label">Navigation</span>
