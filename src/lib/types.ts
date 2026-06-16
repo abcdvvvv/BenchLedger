@@ -5,7 +5,9 @@ export type BenchmarkRow = {
   label: string;
   commit_sha: string;
   date: string;
-  benchmark_key: string;
+  benchmark_path: string[];
+  benchmark_id: string;
+  benchmark_label: string;
   metric_kind: string;
   time_ns_median: number;
   time_ns_min: number;
@@ -43,7 +45,8 @@ export type BenchmarkRun = {
 };
 
 export type PairComparison = {
-  benchmark_key: string;
+  benchmark_id: string;
+  benchmark_label: string;
   focus_time_ns_median: number;
   baseline_time_ns_median: number;
   focus_memory_bytes_min: number;

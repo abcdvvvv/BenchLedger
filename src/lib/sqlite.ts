@@ -9,7 +9,7 @@ import type {
 } from "./types";
 
 const _Default_Manifest_Url = "./benchledger.json";
-const _Compatible_Schema_Versions = new Set([1]);
+const _Compatible_Schema_Versions = new Set([2]);
 const _Metadata_Defaults = {
   name: "",
   description: "",
@@ -31,7 +31,21 @@ async function loadSqlJs() {
   return sqlPromise;
 }
 
+function normalizeBenchmarkPath(value: unknown): string[] {
+  if (typeof value !== "string" || !value) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+  const path = parsed.filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
+  return path;
+}
+
 function normalizeRow(values: Record<string, unknown>): BenchmarkRow {
+  const benchmark_path = normalizeBenchmarkPath(values.benchmark_path);
   return {
     branch: String(values.branch ?? ""),
     tag: String(values.tag ?? ""),
@@ -39,7 +53,9 @@ function normalizeRow(values: Record<string, unknown>): BenchmarkRow {
     label: String(values.label ?? ""),
     commit_sha: String(values.commit_sha ?? ""),
     date: String(values.date ?? ""),
-    benchmark_key: String(values.benchmark_key ?? ""),
+    benchmark_path,
+    benchmark_id: String(values.benchmark_id ?? ""),
+    benchmark_label: String(values.benchmark_label ?? ""),
     metric_kind: String(values.metric_kind ?? ""),
     time_ns_median: Number(values.time_ns_median ?? 0),
     time_ns_min: Number(values.time_ns_min ?? 0),
@@ -53,7 +69,7 @@ function normalizeRow(values: Record<string, unknown>): BenchmarkRow {
     julia_version: String(values.julia_version ?? ""),
     is_dirty: Boolean(values.is_dirty),
     notes: String(values.notes ?? ""),
-    group: String(values.benchmark_key ?? "").split("/")[0] || "other"
+    group: benchmark_path[0] || "other"
   };
 }
 
@@ -128,46 +144,40 @@ function tableExists(db: Database, tableName: string): boolean {
 }
 
 function selectMeasurementsQuery(db: Database): string {
-  if (tableExists(db, "measurements")) {
-    const measurementsResult = db.exec("SELECT * FROM measurements LIMIT 1")[0];
-    const columns = getResultColumns(measurementsResult);
-    const benchmarkKeyColumn = columns.has("benchmark_key") ? "benchmark_key" : "benchmark_path";
-    const commitColumn = columns.has("commit_sha") ? "commit_sha" : columns.has("commit") ? "\"commit\"" : "''";
-    const dateColumn = columns.has("date") ? "date" : columns.has("date_utc") ? "date_utc" : "''";
-    const timeMedianColumn = columns.has("time_ns_median") ? "time_ns_median" : "median_time_ns";
-    const timeMinColumn = columns.has("time_ns_min") ? "time_ns_min" : columns.has("min_time_ns") ? "min_time_ns" : "0";
-    const memoryColumn = columns.has("memory_bytes_min") ? "memory_bytes_min" : columns.has("memory_bytes") ? "memory_bytes" : "0";
-    const allocsColumn = columns.has("allocs_min") ? "allocs_min" : columns.has("allocs") ? "allocs" : "0";
-    const juliaVersionColumn = columns.has("julia_version") ? "julia_version" : "''";
-    return `
-      SELECT
-        COALESCE(branch, '') AS branch,
-        COALESCE(tag, '') AS tag,
-        COALESCE(code_state_id, run_id, '') AS code_state_id,
-        COALESCE(label, '') AS label,
-        COALESCE(${commitColumn}, '') AS commit_sha,
-        COALESCE(${dateColumn}, '') AS date,
-        COALESCE(${benchmarkKeyColumn}, '') AS benchmark_key,
-        COALESCE(metric_kind, '') AS metric_kind,
-        COALESCE(${timeMedianColumn}, 0) AS time_ns_median,
-        COALESCE(${timeMinColumn}, 0) AS time_ns_min,
-        COALESCE(${memoryColumn}, 0) AS memory_bytes_min,
-        COALESCE(${allocsColumn}, 0) AS allocs_min,
-        COALESCE(machine_id, '') AS machine_id,
-        COALESCE(cpu_model, '') AS cpu_model,
-        COALESCE(cpu_threads, 0) AS cpu_threads,
-        COALESCE(arch, '') AS arch,
-        COALESCE(os, '') AS os,
-        COALESCE(${juliaVersionColumn}, '') AS julia_version,
-        COALESCE(is_dirty, 0) AS is_dirty,
-        COALESCE(notes, '') AS notes
-      FROM measurements
-      ORDER BY ${dateColumn}, ${benchmarkKeyColumn}
-    `;
-  }
-
   if (!tableExists(db, "benchmark_results")) {
     throw new Error("No supported benchmark table was found in this SQLite database.");
+  }
+
+  const benchmarkResults = db.exec("SELECT * FROM benchmark_results LIMIT 1")[0];
+  const columns = getResultColumns(benchmarkResults);
+  const requiredColumns = [
+    "branch",
+    "tag",
+    "code_state_id",
+    "label",
+    "commit",
+    "date",
+    "benchmark_path",
+    "benchmark_id",
+    "benchmark_label",
+    "metric_kind",
+    "time_ns_median",
+    "time_ns_min",
+    "memory_bytes_min",
+    "allocs_min",
+    "machine_id",
+    "cpu_model",
+    "cpu_threads",
+    "arch",
+    "os",
+    "julia_version",
+    "is_dirty",
+    "notes"
+  ];
+  for (const column of requiredColumns) {
+    if (!columns.has(column)) {
+      throw new Error(`Unsupported benchmark_results schema: missing ${column}.`);
+    }
   }
 
   return `
@@ -178,7 +188,9 @@ function selectMeasurementsQuery(db: Database): string {
       label,
       "commit" AS commit_sha,
       date,
-      benchmark_key,
+      benchmark_path,
+      benchmark_id,
+      benchmark_label,
       metric_kind,
       time_ns_median,
       time_ns_min,
@@ -193,7 +205,7 @@ function selectMeasurementsQuery(db: Database): string {
       is_dirty,
       notes
     FROM benchmark_results
-    ORDER BY date, benchmark_key
+    ORDER BY date, benchmark_label, benchmark_id
   `;
 }
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FiActivity, FiClock, FiDatabase, FiGitBranch } from "react-icons/fi";
+import { GroupCascadeMenu, type GroupMenuOption } from "./components/GroupCascadeMenu";
 import Plot from "./components/Plot";
 import {
   deltaClass,
@@ -78,7 +79,7 @@ type UISettings = {
   timeStart: string;
   timeEnd: string;
   displayStrategy: DisplayStrategy;
-  benchmarkKey: string;
+  benchmarkId: string;
   trendLineShape: TrendLineShape;
   trendAxisMode: TrendAxisMode;
 };
@@ -135,7 +136,7 @@ function readUISettings(): UISettings {
     timeStart: "",
     timeEnd: todayDateInput(),
     displayStrategy: "all",
-    benchmarkKey: "",
+    benchmarkId: "",
     trendLineShape: "curve",
     trendAxisMode: "commit"
   };
@@ -158,7 +159,7 @@ function readUISettings(): UISettings {
       timeStart: stringSetting(parsedSettings, "timeStart"),
       timeEnd: stringSetting(parsedSettings, "timeEnd") || defaults.timeEnd,
       displayStrategy: parsedSettings.displayStrategy === "all" || parsedSettings.displayStrategy === "tagged-only" || parsedSettings.displayStrategy === "tagged-main" ? parsedSettings.displayStrategy : defaults.displayStrategy,
-      benchmarkKey: stringSetting(parsedSettings, "benchmarkKey"),
+      benchmarkId: stringSetting(parsedSettings, "benchmarkId"),
       trendLineShape: parsedSettings.trendLineShape === "line" || parsedSettings.trendLineShape === "curve" ? parsedSettings.trendLineShape : defaults.trendLineShape,
       trendAxisMode: parsedSettings.trendAxisMode === "commit" || parsedSettings.trendAxisMode === "time" ? parsedSettings.trendAxisMode : defaults.trendAxisMode
     };
@@ -236,7 +237,7 @@ function rowMatchesDisplayStrategy(row: BenchmarkRow, strategy: DisplayStrategy)
 }
 
 function runPairSortValue(row: PairComparison, key: RunPairSortKey): string | number {
-  if (key === "benchmark") return row.benchmark_key;
+  if (key === "benchmark") return row.benchmark_label;
   if (key === "focus") return row.focus_time_ns_median;
   if (key === "baseline") return row.baseline_time_ns_median;
   if (key === "delta") return row.runtime_delta;
@@ -343,7 +344,7 @@ function App() {
   const [timeStart, setTimeStart] = useState(initialSettings.timeStart);
   const [timeEnd, setTimeEnd] = useState(initialSettings.timeEnd);
   const [displayStrategy, setDisplayStrategy] = useState<DisplayStrategy>(initialSettings.displayStrategy);
-  const [benchmarkKey, setBenchmarkKey] = useState(initialSettings.benchmarkKey);
+  const [benchmarkId, setBenchmarkId] = useState(initialSettings.benchmarkId);
   const [trendLineShape, setTrendLineShape] = useState<TrendLineShape>(initialSettings.trendLineShape);
   const [trendAxisMode, setTrendAxisMode] = useState<TrendAxisMode>(initialSettings.trendAxisMode);
   const [runPairSort, setRunPairSort] = useState<RunPairSort | null>(null);
@@ -381,7 +382,7 @@ function App() {
       timeStart,
       timeEnd,
       displayStrategy,
-      benchmarkKey,
+      benchmarkId,
       trendLineShape,
       trendAxisMode
     };
@@ -389,7 +390,7 @@ function App() {
   }, [
     activePage,
     baselineRunId,
-    benchmarkKey,
+    benchmarkId,
     branch,
     displayStrategy,
     focusRunId,
@@ -548,16 +549,55 @@ function App() {
     return true;
   }), [branch, displayStrategy, machine, metricKind, rows, timeEndValue, timeStartValue]);
 
-  const groupOptions = useMemo(() => ["all", ...unique(filteredRows.map((row) => row.group)).sort()], [filteredRows]);
+  const groupOptions = useMemo(() => {
+    const optionsByValue = new Map<string, GroupMenuOption>();
+    for (const row of filteredRows) {
+      for (let depth = 1; depth <= row.benchmark_path.length; depth += 1) {
+        const path = row.benchmark_path.slice(0, depth);
+        const value = JSON.stringify(path);
+        if (optionsByValue.has(value)) continue;
+        optionsByValue.set(value, {
+          value,
+          path
+        });
+      }
+    }
+    return Array.from(optionsByValue.values()).sort((left, right) => {
+      const length = Math.min(left.path.length, right.path.length);
+      for (let index = 0; index < length; index += 1) {
+        const order = left.path[index].localeCompare(right.path[index]);
+        if (order !== 0) return order;
+      }
+      return left.path.length - right.path.length;
+    });
+  }, [filteredRows]);
+
+  const groupOptionsByValue = useMemo(
+    () => new Map(groupOptions.map((option) => [option.value, option])),
+    [groupOptions]
+  );
 
   useEffect(() => {
-    if (!groupOptions.length) return;
-    setGroup((current) => (groupOptions.includes(current) ? current : "all"));
-  }, [groupOptions]);
+    setGroup((current) => (current === "all" || groupOptionsByValue.has(current) ? current : "all"));
+  }, [groupOptionsByValue]);
+
+  const selectedGroupPath = useMemo(
+    () => (group === "all" ? null : groupOptionsByValue.get(group)?.path ?? null),
+    [group, groupOptionsByValue]
+  );
+
+  const selectedGroupLabel = useMemo(() => {
+    if (group === "all") return "All groups";
+    const option = groupOptionsByValue.get(group);
+    return option ? option.path.join(" > ") : "All groups";
+  }, [group, groupOptionsByValue]);
 
   const scopedRows = useMemo(
-    () => filteredRows.filter((row) => group === "all" || row.group === group),
-    [filteredRows, group]
+    () => filteredRows.filter((row) => {
+      if (!selectedGroupPath) return true;
+      return selectedGroupPath.every((segment, index) => row.benchmark_path[index] === segment);
+    }),
+    [filteredRows, selectedGroupPath]
   );
 
   const runs = useMemo(() => buildRuns(scopedRows), [scopedRows]);
@@ -573,11 +613,15 @@ function App() {
     });
   }, [filteredRuns]);
 
-  const benchmarkOptions = useMemo(() => unique(scopedRows.map((row) => row.benchmark_key)).sort(), [scopedRows]);
+  const benchmarkOptions = useMemo(() => {
+    return Array.from(new Map(scopedRows.map((row) => [row.benchmark_id, row.benchmark_label])).entries())
+      .map(([id, label]) => ({ id, label }))
+      .sort((left, right) => left.label.localeCompare(right.label) || left.id.localeCompare(right.id));
+  }, [scopedRows]);
 
   useEffect(() => {
     if (!benchmarkOptions.length) return;
-    setBenchmarkKey((current) => (current && benchmarkOptions.includes(current) ? current : benchmarkOptions[0]));
+    setBenchmarkId((current) => (current && benchmarkOptions.some((option) => option.id === current) ? current : benchmarkOptions[0].id));
   }, [benchmarkOptions]);
 
   const focusRun = filteredRuns.find((run) => run.run_id === focusRunId) ?? filteredRuns[0] ?? null;
@@ -593,11 +637,11 @@ function App() {
     [baselineRun, scopedRows]
   );
 
-  const focusByBenchmark = useMemo(() => new Map(focusRows.map((row) => [row.benchmark_key, row])), [focusRows]);
-  const baselineByBenchmark = useMemo(() => new Map(baselineRows.map((row) => [row.benchmark_key, row])), [baselineRows]);
+  const focusByBenchmark = useMemo(() => new Map(focusRows.map((row) => [row.benchmark_id, row])), [focusRows]);
+  const baselineByBenchmark = useMemo(() => new Map(baselineRows.map((row) => [row.benchmark_id, row])), [baselineRows]);
 
-  const focusBenchmark = benchmarkKey ? focusByBenchmark.get(benchmarkKey) ?? null : null;
-  const baselineBenchmark = benchmarkKey ? baselineByBenchmark.get(benchmarkKey) ?? null : null;
+  const focusBenchmark = benchmarkId ? focusByBenchmark.get(benchmarkId) ?? null : null;
+  const baselineBenchmark = benchmarkId ? baselineByBenchmark.get(benchmarkId) ?? null : null;
 
   const comparisonRows = useMemo<PairComparison[]>(() => {
     const keys = unique([...focusByBenchmark.keys(), ...baselineByBenchmark.keys()]).sort();
@@ -607,7 +651,8 @@ function App() {
         const baseline = baselineByBenchmark.get(key);
         if (!focus || !baseline) return null;
         return {
-          benchmark_key: key,
+          benchmark_id: key,
+          benchmark_label: focus.benchmark_label,
           focus_time_ns_median: focus.time_ns_median,
           baseline_time_ns_median: baseline.time_ns_median,
           focus_memory_bytes_min: focus.memory_bytes_min,
@@ -646,7 +691,7 @@ function App() {
 
   const trendRows = useMemo(() => {
     return scopedRows
-      .filter((row) => row.benchmark_key === benchmarkKey)
+      .filter((row) => row.benchmark_id === benchmarkId)
       .map((row) => {
         const run = runs.find((candidate) => candidate.run_id === runId(row));
         return {
@@ -659,7 +704,7 @@ function App() {
       })
       .filter((row) => row.date_value)
       .sort((left, right) => left.date_value!.valueOf() - right.date_value!.valueOf());
-  }, [benchmarkKey, runs, scopedRows]);
+  }, [benchmarkId, runs, scopedRows]);
 
   const selectedRuntimeDelta = focusBenchmark && baselineBenchmark
     ? percentageChange(focusBenchmark.time_ns_median, baselineBenchmark.time_ns_median)
@@ -672,7 +717,7 @@ function App() {
       value: scopedRows.length.toLocaleString(),
       delta: latestRun ? `+${latestRun.benchmark_count.toLocaleString()}` : "",
       deltaTone: latestRun?.benchmark_count ? "positive" : "neutral",
-      detail: `${unique(scopedRows.map((row) => row.benchmark_key)).length.toLocaleString()} keys in slice`
+      detail: `${unique(scopedRows.map((row) => row.benchmark_id)).length.toLocaleString()} benchmarks in slice`
     },
     {
       Icon: FiActivity,
@@ -742,7 +787,7 @@ function App() {
     return {
       rowCount: rows.length,
       runCount: allRuns.length,
-      keyCount: unique(rows.map((row) => row.benchmark_key)).length,
+      keyCount: unique(rows.map((row) => row.benchmark_id)).length,
       machineCount: unique(rows.map((row) => row.machine_id)).length,
       metrics: unique(rows.map((row) => row.metric_kind)).sort(),
       latestRunDate: latestDatabaseRun?.date ?? "",
@@ -858,7 +903,7 @@ function App() {
             <span className="nav-label">Data Source</span>
             <div className="sidebar-controls">
               <label className="sidebar-field">
-                <span>Database</span>
+                <span className="field-label">Database</span>
                 <select
                   value={selectedDatabaseId}
                   onChange={(event) => {
@@ -911,13 +956,13 @@ function App() {
           </div>
           <div className="topbar-actions">
             <label className="field control-card control-card-wide">
-              <span>Focus run</span>
+              <span className="field-label">Focus run</span>
               <select value={focusRunId} onChange={(event) => setFocusRunId(event.target.value)} disabled={!filteredRuns.length}>
                 {filteredRuns.map((run) => <option key={run.run_id} value={run.run_id}>{runHeadline(run)} · {formatDate(run.date)}</option>)}
               </select>
             </label>
             <label className="field control-card control-card-wide">
-              <span>Baseline run</span>
+              <span className="field-label">Baseline run</span>
               <select value={baselineRunId} onChange={(event) => setBaselineRunId(event.target.value)} disabled={!filteredRuns.length}>
                 {filteredRuns.map((run) => <option key={run.run_id} value={run.run_id}>{runHeadline(run)} · {formatDate(run.date)}</option>)}
               </select>
@@ -939,31 +984,35 @@ function App() {
         ) : null}
         <section className="filter-grid">
             <label className="field">
-              <span>Machine</span>
+              <span className="field-label">Machine</span>
               <select value={machine} onChange={(event) => setMachine(event.target.value)} disabled={!machineOptions.length}>
                 {machineOptions.map((option) => <option key={option} value={option}>{option}</option>)}
               </select>
             </label>
             <label className="field">
-              <span>Metric</span>
+              <span className="field-label">Metric</span>
               <select value={metricKind} onChange={(event) => setMetricKind(event.target.value)} disabled={!metricOptions.length}>
                 {metricOptions.map((option) => <option key={option} value={option}>{option}</option>)}
               </select>
             </label>
+            <div className="field">
+              <span className="field-label">Group</span>
+              <GroupCascadeMenu
+                disabled={!hasDataset}
+                options={groupOptions}
+                selectedValue={group}
+                selectedLabel={selectedGroupLabel}
+                onSelect={setGroup}
+              />
+            </div>
             <label className="field">
-              <span>Group</span>
-              <select value={group} onChange={(event) => setGroup(event.target.value)} disabled={!hasDataset}>
-                {groupOptions.map((option) => <option key={option} value={option}>{option === "all" ? "All groups" : option}</option>)}
-              </select>
-            </label>
-            <label className="field">
-              <span>Branch</span>
+              <span className="field-label">Branch</span>
               <select value={branch} onChange={(event) => setBranch(event.target.value)} disabled={!branchOptions.length}>
                 {branchOptions.map((option) => <option key={option} value={option}>{option === "all" ? "All branches" : option}</option>)}
               </select>
             </label>
             <div className="field time-range-field">
-              <span>Time Range</span>
+              <span className="field-label">Time Range</span>
               <details className="date-range-picker" ref={timeRangePickerRef}>
                 <summary
                   className={`date-range-summary${hasDataset ? "" : " date-range-summary-disabled"}`}
@@ -980,7 +1029,7 @@ function App() {
                 </summary>
                 <div className="date-range-popover">
                   <label className="date-range-input">
-                    <span>Start</span>
+                    <span className="field-label">Start</span>
                     <input
                       ref={timeStartInputRef}
                       type="date"
@@ -991,7 +1040,7 @@ function App() {
                     />
                   </label>
                   <label className="date-range-input">
-                    <span>End</span>
+                    <span className="field-label">End</span>
                     <input
                       type="date"
                       value={timeEnd}
@@ -1004,7 +1053,7 @@ function App() {
               </details>
             </div>
             <label className="field filter-strategy-field">
-              <span>Display Strategy</span>
+              <span className="field-label">Display Strategy</span>
               <select value={displayStrategy} onChange={(event) => setDisplayStrategy(event.target.value as DisplayStrategy)} disabled={!hasDataset}>
                 <option value="all">All records</option>
                 <option value="tagged-only">Tagged only</option>
@@ -1038,10 +1087,10 @@ function App() {
                 <select
                   className="trend-benchmark-select"
                   aria-label="Benchmark"
-                  value={benchmarkKey}
-                  onChange={(event) => setBenchmarkKey(event.target.value)}
+                  value={benchmarkId}
+                  onChange={(event) => setBenchmarkId(event.target.value)}
                 >
-                  {benchmarkOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+                  {benchmarkOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
                 </select>
               </div>
               <button
@@ -1121,7 +1170,7 @@ function App() {
                   <span>Top insight</span>
                   <strong>
                     {focusBenchmark && baselineBenchmark
-                      ? `${benchmarkKey} is ${formatPercent(percentageChange(focusBenchmark.time_ns_median, baselineBenchmark.time_ns_median))}`
+                      ? `${focusBenchmark.benchmark_label} is ${formatPercent(percentageChange(focusBenchmark.time_ns_median, baselineBenchmark.time_ns_median))}`
                       : "Choose two runs for a direct benchmark delta"}
                   </strong>
                   <p>
@@ -1159,7 +1208,7 @@ function App() {
                     type: "bar",
                     orientation: "h",
                     x: comparisonRows.slice(0, 6).map((row) => row.runtime_delta).reverse(),
-                    y: comparisonRows.slice(0, 6).map((row) => row.benchmark_key).reverse(),
+                    y: comparisonRows.slice(0, 6).map((row) => row.benchmark_label).reverse(),
                     marker: {
                       color: comparisonRows.slice(0, 6).map((row) => plotTheme[deltaColorKey[deltaClass(row.runtime_delta)]]).reverse()
                     },
@@ -1223,8 +1272,8 @@ function App() {
                 </thead>
                 <tbody>
                   {sortedComparisonRows.map((row) => (
-                    <tr key={row.benchmark_key}>
-                      <td><code>{row.benchmark_key}</code></td>
+                    <tr key={row.benchmark_id}>
+                      <td><code>{row.benchmark_label}</code></td>
                       <td>{formatRuntime(row.focus_time_ns_median)}</td>
                       <td>{formatRuntime(row.baseline_time_ns_median)}</td>
                       <td><span className={`delta-badge delta-${deltaClass(row.runtime_delta)}`}>{formatPercent(row.runtime_delta)}</span></td>
@@ -1256,8 +1305,8 @@ function App() {
                 </thead>
                 <tbody>
                   {focusRows.map((row) => (
-                    <tr key={row.benchmark_key}>
-                      <td><code>{row.benchmark_key}</code></td>
+                    <tr key={row.benchmark_id}>
+                      <td><code>{row.benchmark_label}</code></td>
                       <td>{formatRuntime(row.time_ns_median)}</td>
                       <td>{formatRuntime(row.time_ns_min)}</td>
                       <td>{formatBytes(row.memory_bytes_min)}</td>
