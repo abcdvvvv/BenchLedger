@@ -24,7 +24,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  BENCHLEDGER_VERSION: "0.3.2"
+  BENCHLEDGER_VERSION: "0.3.3"
   BENCH_PACKAGE_NAME: "YourPackageName.jl"
   BENCH_PACKAGE_DESCRIPTION: "Benchmark history for YourPackageName.jl"
   BENCH_PACKAGE_URL: "https://..."
