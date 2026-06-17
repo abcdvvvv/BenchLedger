@@ -68,7 +68,9 @@ export function AppSidebar(props: AppSidebarProps) {
   const ThemeIcon = theme === "dark" ? FiSun : FiMoon;
   const defaultLogoSrc = `${assetBaseUrl}${theme === "dark" ? "LightLogo.png" : "DarkLogo.png"}`;
   const defaultLogoHref = "https://github.com/abcdvvvv/BenchLedger";
-  const customLogoUrl = currentMetadata?.logo_url.trim() || "";
+  const customLogoUrl = theme === "dark"
+    ? currentMetadata?.logo_url_dark.trim() || currentMetadata?.logo_url.trim() || ""
+    : currentMetadata?.logo_url_light.trim() || currentMetadata?.logo_url.trim() || "";
   const customProjectUrl = currentMetadata?.project_url.trim() || "";
   const resolvedCustomLogoUrl = resolveLogoUrl(customLogoUrl);
   const [brandLogoKind, setBrandLogoKind] = useState<"rectangular" | "square">("rectangular");

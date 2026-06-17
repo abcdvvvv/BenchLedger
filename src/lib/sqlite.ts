@@ -15,6 +15,8 @@ const _Metadata_Defaults = {
   description: "",
   project_url: "",
   logo_url: "",
+  logo_url_light: "",
+  logo_url_dark: "",
   created_at: "",
   updated_at: "",
   notes: ""
@@ -239,6 +241,8 @@ function readMetadata(db: Database): BenchLedgerMetadata {
     description: raw.description ?? _Metadata_Defaults.description,
     project_url: raw.project_url ?? _Metadata_Defaults.project_url,
     logo_url: raw.logo_url ?? _Metadata_Defaults.logo_url,
+    logo_url_light: raw.logo_url_light ?? _Metadata_Defaults.logo_url_light,
+    logo_url_dark: raw.logo_url_dark ?? _Metadata_Defaults.logo_url_dark,
     created_at: raw.created_at ?? _Metadata_Defaults.created_at,
     updated_at: raw.updated_at ?? _Metadata_Defaults.updated_at,
     notes: raw.notes ?? _Metadata_Defaults.notes,

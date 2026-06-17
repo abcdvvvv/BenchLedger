@@ -69,20 +69,20 @@ Versioned frontend distributions are published from Git tags. For a new release,
 commit the changes, create a `v*` tag, and push the tag:
 
 ```bash
-git tag v0.3.1
+git tag v0.3.2
 git push origin main
-git push origin v0.3.1
+git push origin v0.3.2
 ```
 
 The release workflow builds the Vite app and uploads a static dist archive named
-`BenchLedger-0.3.1-dist.tar.gz` to the matching GitHub Release.
+`BenchLedger-0.3.2-dist.tar.gz` to the matching GitHub Release.
 
 ### Recommended `benchledger.json`
 
 ```json
 {
   "manifest_version": 1,
-  "benchledger_web_version": "0.3.1",
+  "benchledger_web_version": "0.3.2",
   "generated_at": "2026-06-15T06:30:00.000Z",
   "site": {
     "title": "BenchLedger",
@@ -101,7 +101,9 @@ The release workflow builds the Vite app and uploads a static dist archive named
       "metadata_preview": {
         "name": "MyPkg",
         "project_url": "https://example.com",
-        "logo_url": null
+        "logo_url": null,
+        "logo_url_light": null,
+        "logo_url_dark": null
       }
     }
   ]
@@ -132,6 +134,8 @@ name
 description
 project_url
 logo_url
+logo_url_light
+logo_url_dark
 created_at
 updated_at
 notes
