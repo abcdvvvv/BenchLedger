@@ -101,14 +101,14 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
 
   return (
     <>
-      <header className="topbar trend-board-topbar">
+      <header className="topbar page-topbar">
         <div className="breadcrumb">Benchmarking <span>›</span> Trend Board</div>
-        <div className="trend-board-topbar-row">
-          <div className="trend-board-topbar-title">
+        <div className="page-topbar-row">
+          <div className="page-topbar-title">
             <h1>Trend Board</h1>
           </div>
-          <div className="topbar-actions trend-board-topbar-actions">
-            <div className="trend-board-benchmark-field">
+          <div className="topbar-actions page-topbar-actions">
+            <div className="topbar-benchmark-field">
               <BenchmarkKeyCascadeFilter
                 options={benchmarkOptions}
                 selectedValues={selectedBenchmarkIds}
@@ -117,7 +117,7 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
                 stretchWidth
               />
             </div>
-            <label className="field trend-board-columns-field">
+            <label className="field topbar-floating-field">
               <span className="field-label">Columns</span>
               <input
                 type="number"
@@ -133,7 +133,7 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
             </label>
             <button
               type="button"
-              className="button button-secondary button-compact trend-board-axis-button"
+              className="button button-secondary button-compact topbar-axis-button"
               onClick={onToggleTrendAxisMode}
             >
               X-Axis: {trendAxisMode === "commit" ? "Commit" : "Time"}

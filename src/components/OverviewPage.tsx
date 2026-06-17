@@ -16,6 +16,7 @@ import {
 } from "../lib/dashboard";
 import {
   formatDate,
+  formatDateOnly,
   formatMetricValue,
   metricDeltaClass,
   formatPercent,
@@ -146,28 +147,28 @@ export function OverviewPage(props: OverviewPageProps) {
 
   return (
     <>
-      <header className="topbar trend-board-topbar dashboard-topbar">
+      <header className="topbar page-topbar dashboard-topbar">
         <div className="breadcrumb">Benchmarking <span>›</span> Dashboard</div>
-        <div className="trend-board-topbar-row dashboard-topbar-row">
-          <div className="trend-board-topbar-title">
+        <div className="page-topbar-row dashboard-topbar-row">
+          <div className="page-topbar-title">
             <h1>{siteTitle}</h1>
           </div>
-          <div className="topbar-actions trend-board-topbar-actions dashboard-topbar-actions">
-            <label className="field trend-board-columns-field dashboard-run-field">
+          <div className="topbar-actions">
+            <label className="field topbar-floating-field dashboard-run-field">
               <span className="field-label">Focus run</span>
               <select value={focusRunId} onChange={(event) => onFocusRunChange(event.target.value)} disabled={!filteredRuns.length}>
-                {filteredRuns.map((run) => <option key={run.run_id} value={run.run_id}>{runHeadline(run)} · measured {formatDate(run.measured_at)}</option>)}
+                {filteredRuns.map((run) => <option key={run.run_id} value={run.run_id} title={formatDate(run.measured_at)}>{runHeadline(run)} · {formatDateOnly(run.measured_at)}</option>)}
               </select>
             </label>
-            <label className="field trend-board-columns-field dashboard-run-field">
+            <label className="field topbar-floating-field dashboard-run-field">
               <span className="field-label">Baseline run</span>
               <select value={baselineRunId} onChange={(event) => onBaselineRunChange(event.target.value)} disabled={!filteredRuns.length}>
-                {filteredRuns.map((run) => <option key={run.run_id} value={run.run_id}>{runHeadline(run)} · measured {formatDate(run.measured_at)}</option>)}
+                {filteredRuns.map((run) => <option key={run.run_id} value={run.run_id} title={formatDate(run.measured_at)}>{runHeadline(run)} · {formatDateOnly(run.measured_at)}</option>)}
               </select>
             </label>
             <button type="button" className="button button-secondary button-compact" onClick={onOpenLocalFilePicker}>Choose SQLite</button>
             {downloadUrl ? (
-              <a className="button button-primary button-compact" href={downloadUrl} download={downloadLabel}>Download</a>
+              <a className="button button-secondary button-compact" href={downloadUrl} download={downloadLabel}>Download</a>
             ) : null}
           </div>
         </div>

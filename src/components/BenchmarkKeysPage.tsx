@@ -126,13 +126,13 @@ export function BenchmarkKeysPage(props: BenchmarkKeysPageProps) {
 
   return (
     <>
-      <header className="topbar trend-board-topbar">
+      <header className="topbar page-topbar">
         <div className="breadcrumb">Benchmarking <span>›</span> Benchmark Keys</div>
-        <div className="trend-board-topbar-row">
-          <div className="trend-board-topbar-title">
+        <div className="page-topbar-row">
+          <div className="page-topbar-title">
             <h1>Benchmark Keys</h1>
           </div>
-          <div className="topbar-actions trend-board-topbar-actions trend-board-topbar-actions-empty" aria-hidden="true" />
+          <div className="topbar-actions page-topbar-actions page-topbar-actions-empty" aria-hidden="true" />
         </div>
         <p>Explore the benchmark key hierarchy as an icicle chart built from the loaded dataset.</p>
       </header>

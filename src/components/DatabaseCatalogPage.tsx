@@ -15,13 +15,13 @@ export function DatabaseCatalogPage(props: DatabaseCatalogPageProps) {
 
   return (
     <>
-      <header className="topbar trend-board-topbar">
+      <header className="topbar page-topbar">
         <div className="breadcrumb">Benchmarking <span>›</span> Databases</div>
-        <div className="trend-board-topbar-row">
-          <div className="trend-board-topbar-title">
+        <div className="page-topbar-row">
+          <div className="page-topbar-title">
             <h1>Databases</h1>
           </div>
-          <div className="topbar-actions trend-board-topbar-actions database-topbar-actions">
+          <div className="topbar-actions page-topbar-actions database-topbar-actions">
             <button type="button" className="button button-secondary button-compact" onClick={onOpenLocalFilePicker}>Choose SQLite</button>
           </div>
         </div>

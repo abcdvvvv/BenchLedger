@@ -20,6 +20,16 @@ export function formatDate(value: string): string {
   })}`;
 }
 
+export function formatDateOnly(value: string): string {
+  const date = parseDate(value);
+  if (!date) return value || "n/a";
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  });
+}
+
 export function formatRuntime(value: number): string {
   if (!Number.isFinite(value)) return "n/a";
   if (value < 1_000) return `${value.toFixed(1)} ns`;

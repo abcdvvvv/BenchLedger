@@ -749,8 +749,8 @@ function App() {
     () => benchmarkOptions.flatMap((option) => overviewTrendRowsByBenchmark.get(option.value) ?? []),
     [benchmarkOptions, overviewTrendRowsByBenchmark]
   );
-  const trendPlotMargin = trendRows.length ? { t: 10, r: 16, b: 40, l: 60 } : { t: 10, r: 16, b: 40, l: 20 };
-  const deltaPlotMargin = comparisonRows.length ? { t: 10, r: 12, b: 36, l: 180 } : { t: 10, r: 12, b: 36, l: 20 };
+  const trendPlotMargin = trendRows.length ? { t: 10, r: 16, b: 40, l: 55 } : { t: 10, r: 16, b: 40, l: 20 };
+  const deltaPlotMargin = comparisonRows.length ? { t: 10, r: 12, b: 36, l: 170 } : { t: 10, r: 12, b: 36, l: 20 };
   const trendY = trendRows.map((row) => row.value);
   const trendYMin = trendY.length ? Math.min(...trendY) : 0;
   const trendYMax = trendY.length ? Math.max(...trendY) : 0;

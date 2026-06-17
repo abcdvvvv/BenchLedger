@@ -10,13 +10,13 @@ export function ChartTuningPage(props: ChartTuningPageProps) {
 
   return (
     <>
-      <header className="topbar trend-board-topbar">
+      <header className="topbar page-topbar">
         <div className="breadcrumb">Benchmarking <span>›</span> Chart Tuning</div>
-        <div className="trend-board-topbar-row">
-          <div className="trend-board-topbar-title">
+        <div className="page-topbar-row">
+          <div className="page-topbar-title">
             <h1>Chart Tuning</h1>
           </div>
-          <div className="topbar-actions trend-board-topbar-actions trend-board-topbar-actions-empty" aria-hidden="true" />
+          <div className="topbar-actions page-topbar-actions page-topbar-actions-empty" aria-hidden="true" />
         </div>
         <p>Small display preferences for benchmark charts. These settings are saved in this browser.</p>
       </header>

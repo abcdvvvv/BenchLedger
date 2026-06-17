@@ -293,9 +293,9 @@ export function readUISettings(): UISettings {
     branch: "all",
     trendBoardBranch: "all",
     timeStart: "",
-    timeEnd: todayDateInput(),
+    timeEnd: "",
     trendBoardTimeStart: "",
-    trendBoardTimeEnd: todayDateInput(),
+    trendBoardTimeEnd: "",
     displayStrategy: "all",
     overviewSelectedBenchmarkIds: [],
     trendBoardSelectedBenchmarkIds: [],
@@ -343,9 +343,9 @@ export function readUISettings(): UISettings {
       branch: stringSetting(parsedSettings, "branch") || defaults.branch,
       trendBoardBranch: stringSetting(parsedSettings, "trendBoardBranch") || defaults.trendBoardBranch,
       timeStart: stringSetting(parsedSettings, "timeStart"),
-      timeEnd: stringSetting(parsedSettings, "timeEnd") || defaults.timeEnd,
+      timeEnd: stringSetting(parsedSettings, "timeEnd"),
       trendBoardTimeStart: stringSetting(parsedSettings, "trendBoardTimeStart"),
-      trendBoardTimeEnd: stringSetting(parsedSettings, "trendBoardTimeEnd") || defaults.trendBoardTimeEnd,
+      trendBoardTimeEnd: stringSetting(parsedSettings, "trendBoardTimeEnd"),
       displayStrategy:
         parsedSettings.displayStrategy === "all" ||
         parsedSettings.displayStrategy === "tagged-only" ||
