@@ -971,11 +971,6 @@ a:focus-visible {
   min-width: 15rem;
 }
 
-.dashboard-topbar-download {
-  display: flex;
-  justify-content: flex-end;
-}
-
 .trend-board-topbar {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

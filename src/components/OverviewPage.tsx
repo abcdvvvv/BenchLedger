@@ -165,14 +165,12 @@ export function OverviewPage(props: OverviewPageProps) {
               </select>
             </label>
             <button type="button" className="button button-secondary button-compact" onClick={onOpenLocalFilePicker}>Choose SQLite</button>
+            {downloadUrl ? (
+              <a className="button button-primary button-compact" href={downloadUrl} download={downloadLabel}>Download</a>
+            ) : null}
           </div>
         </div>
         <p>{siteDescription}</p>
-        {downloadUrl ? (
-          <div className="dashboard-topbar-download">
-            <a className="button button-primary" href={downloadUrl} download={downloadLabel}>Download</a>
-          </div>
-        ) : null}
       </header>
       {!hasDataset || error ? (
         <section className="data-banner surface-card">
