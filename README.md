@@ -69,20 +69,20 @@ Versioned frontend distributions are published from Git tags. For a new release,
 commit the changes, create a `v*` tag, and push the tag:
 
 ```bash
-git tag v0.2.0
+git tag v0.3.0
 git push origin main
-git push origin v0.2.0
+git push origin v0.3.0
 ```
 
 The release workflow builds the Vite app and uploads a static dist archive named
-`BenchLedger-0.2.0-dist.tar.gz` to the matching GitHub Release.
+`BenchLedger-0.3.0-dist.tar.gz` to the matching GitHub Release.
 
 ### Recommended `benchledger.json`
 
 ```json
 {
   "manifest_version": 1,
-  "benchledger_web_version": "0.2.0",
+  "benchledger_web_version": "0.3.0",
   "generated_at": "2026-06-15T06:30:00.000Z",
   "site": {
     "title": "BenchLedger",
@@ -97,7 +97,7 @@ The release workflow builds the Vite app and uploads a static dist archive named
       "sha256": "a1b2c3...",
       "size_bytes": 12345678,
       "packed_at": "2026-06-15T06:30:00.000Z",
-      "schema_version": 1,
+      "schema_version": 3,
       "metadata_preview": {
         "name": "MyPkg",
         "project_url": "https://example.com",
@@ -137,7 +137,96 @@ updated_at
 notes
 ```
 
-These are the only BenchLedger metadata keys defined by the v1 protocol.
+These are the metadata keys used by the current BenchLedger schema.
+
+## SQLite Schema v3
+
+BenchLedger v3 separates benchmark execution metadata from benchmark result rows.
+
+```sql
+CREATE TABLE benchmark_runs (
+  run_id TEXT PRIMARY KEY,
+  code_state_id TEXT NOT NULL,
+  branch TEXT NOT NULL,
+  tag TEXT NOT NULL,
+  label TEXT NOT NULL,
+  "commit" TEXT NOT NULL,
+  code_date TEXT NOT NULL,
+  measured_at TEXT NOT NULL,
+  machine_id TEXT NOT NULL,
+  cpu_model TEXT NOT NULL,
+  cpu_threads INTEGER NOT NULL,
+  arch TEXT NOT NULL,
+  os TEXT NOT NULL,
+  julia_version TEXT NOT NULL,
+  is_dirty INTEGER NOT NULL,
+  notes TEXT NOT NULL
+);
+
+CREATE TABLE benchmark_results (
+  run_id TEXT NOT NULL,
+  benchmark_id TEXT NOT NULL,
+  benchmark_path TEXT NOT NULL,
+  benchmark_label TEXT NOT NULL,
+  metric_name TEXT NOT NULL,
+  statistic TEXT NOT NULL,
+  unit TEXT NOT NULL,
+  value REAL NOT NULL,
+  better TEXT NOT NULL,
+  PRIMARY KEY (run_id, benchmark_id, metric_name, statistic)
+);
+
+CREATE VIEW benchmark_results_latest AS
+SELECT
+  run_id,
+  branch,
+  tag,
+  code_state_id,
+  label,
+  "commit",
+  code_date,
+  measured_at,
+  machine_id,
+  cpu_model,
+  cpu_threads,
+  arch,
+  os,
+  julia_version,
+  is_dirty,
+  notes,
+  benchmark_path,
+  benchmark_id,
+  benchmark_label,
+  metric_name,
+  statistic,
+  unit,
+  value,
+  better
+FROM (
+  SELECT
+    runs.*,
+    results.benchmark_path,
+    results.benchmark_id,
+    results.benchmark_label,
+    results.metric_name,
+    results.statistic,
+    results.unit,
+    results.value,
+    results.better,
+    ROW_NUMBER() OVER (
+      PARTITION BY runs.code_state_id, runs.machine_id, results.benchmark_id, results.metric_name, results.statistic
+      ORDER BY runs.measured_at DESC, results.run_id DESC
+    ) AS rn
+  FROM benchmark_results AS results
+  JOIN benchmark_runs AS runs USING (run_id)
+)
+WHERE rn = 1;
+```
+
+The frontend currently reads `benchmark_results_latest` by default. Raw facts
+exist only once in `benchmark_runs` and `benchmark_results`, while the view
+provides the latest deduplicated row for each
+`(code_state_id, machine_id, benchmark_id, metric_name, statistic)` slice.
 
 ## Backfill Old Versions
 
@@ -151,7 +240,7 @@ The benchmark runner should support these environment variables:
 ```text
 BENCH_TARGET_PATH  Package source tree to benchmark.
 BENCH_DB_PATH      SQLite database path to write.
-BENCH_DATE         Timestamp to store for this benchmark run.
+BENCH_DATE         Historical code timestamp for the version being measured.
 BENCH_NOTES        Per-run note.
 ```
 
@@ -192,8 +281,10 @@ rm -rf "$HARNESS"
 
 This keeps the user's main checkout untouched. The temporary worktree supplies
 the historical package source, while `HARNESS` supplies the current benchmark
-runner and benchmark definitions. `BENCH_DATE` uses the historical commit date so
-trend charts are ordered by the version history instead of the backfill date.
+runner and benchmark definitions. `BENCH_DATE` keeps trend charts ordered by the
+version history, while the runner records the actual execution time at insert
+time. That means the same historical tag can be measured multiple times without
+overwriting earlier runs.
 
 ## Colors
 

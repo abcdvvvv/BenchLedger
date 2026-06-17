@@ -51,6 +51,7 @@ type TrendBoardPageProps = {
   onTimeEndChange: (value: string) => void;
   trendBoardColumns: number;
   onTrendBoardColumnsChange: (value: number) => void;
+  selectedMetricLabel: string;
   trendAxisMode: TrendAxisMode;
   onToggleTrendAxisMode: () => void;
   trendBoardCards: TrendBoardCard[];
@@ -90,6 +91,7 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
     onTimeEndChange,
     trendBoardColumns,
     onTrendBoardColumnsChange,
+    selectedMetricLabel,
     trendAxisMode,
     onToggleTrendAxisMode,
     trendBoardCards,
@@ -250,7 +252,7 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
                   font: { color: plotTheme.axis },
                   xaxis: { showgrid: false, color: plotTheme.axis, tickfont: { size: 14 } },
                   yaxis: {
-                    title: { text: "Median runtime (ns)" },
+                    title: { text: selectedMetricLabel || "Metric value" },
                     gridcolor: plotTheme.grid,
                     zeroline: false,
                     color: plotTheme.axis,

@@ -9,7 +9,7 @@ import type {
 } from "./types";
 
 const _Default_Manifest_Url = "./benchledger.json";
-const _Compatible_Schema_Versions = new Set([2]);
+const _Compatible_Schema_Versions = new Set([3]);
 const _Metadata_Defaults = {
   name: "",
   description: "",
@@ -47,20 +47,22 @@ function normalizeBenchmarkPath(value: unknown): string[] {
 function normalizeRow(values: Record<string, unknown>): BenchmarkRow {
   const benchmark_path = normalizeBenchmarkPath(values.benchmark_path);
   return {
+    run_id: String(values.run_id ?? ""),
     branch: String(values.branch ?? ""),
     tag: String(values.tag ?? ""),
     code_state_id: String(values.code_state_id ?? ""),
     label: String(values.label ?? ""),
     commit_sha: String(values.commit_sha ?? ""),
-    date: String(values.date ?? ""),
+    code_date: String(values.code_date ?? ""),
+    measured_at: String(values.measured_at ?? ""),
     benchmark_path,
     benchmark_id: String(values.benchmark_id ?? ""),
     benchmark_label: String(values.benchmark_label ?? ""),
-    metric_kind: String(values.metric_kind ?? ""),
-    time_ns_median: Number(values.time_ns_median ?? 0),
-    time_ns_min: Number(values.time_ns_min ?? 0),
-    memory_bytes_min: Number(values.memory_bytes_min ?? 0),
-    allocs_min: Number(values.allocs_min ?? 0),
+    metric_name: String(values.metric_name ?? ""),
+    statistic: String(values.statistic ?? ""),
+    unit: String(values.unit ?? ""),
+    value: Number(values.value ?? 0),
+    better: values.better === "higher" || values.better === "neutral" ? values.better : "lower",
     machine_id: String(values.machine_id ?? ""),
     cpu_model: String(values.cpu_model ?? ""),
     cpu_threads: Number(values.cpu_threads ?? 0),
@@ -130,41 +132,48 @@ function normalizeManifest(json: unknown): BenchLedgerManifest | null {
   };
 }
 
-function getResultColumns(result: QueryExecResult | undefined): Set<string> {
-  return new Set(result?.columns ?? []);
-}
-
-function tableExists(db: Database, tableName: string): boolean {
+function relationExists(db: Database, relationName: string): boolean {
   const result = db.exec(`
     SELECT name
     FROM sqlite_master
-    WHERE type = 'table' AND name = '${tableName}'
+    WHERE type IN ('table', 'view') AND name = '${relationName}'
   `)[0];
   return Boolean(result?.values.length);
 }
 
+function relationColumns(db: Database, relationName: string): Set<string> {
+  const result = db.exec(`PRAGMA table_info(${relationName})`)[0];
+  if (!result) return new Set();
+  return new Set(
+    result.values
+      .map((row) => row[result.columns.indexOf("name")])
+      .filter((value): value is string => typeof value === "string" && value.length > 0)
+  );
+}
+
 function selectMeasurementsQuery(db: Database): string {
-  if (!tableExists(db, "benchmark_results")) {
+  if (!relationExists(db, "benchmark_results_latest")) {
     throw new Error("No supported benchmark table was found in this SQLite database.");
   }
 
-  const benchmarkResults = db.exec("SELECT * FROM benchmark_results LIMIT 1")[0];
-  const columns = getResultColumns(benchmarkResults);
+  const columns = relationColumns(db, "benchmark_results_latest");
   const requiredColumns = [
+    "run_id",
     "branch",
     "tag",
     "code_state_id",
     "label",
     "commit",
-    "date",
+    "code_date",
+    "measured_at",
     "benchmark_path",
     "benchmark_id",
     "benchmark_label",
-    "metric_kind",
-    "time_ns_median",
-    "time_ns_min",
-    "memory_bytes_min",
-    "allocs_min",
+    "metric_name",
+    "statistic",
+    "unit",
+    "value",
+    "better",
     "machine_id",
     "cpu_model",
     "cpu_threads",
@@ -176,26 +185,28 @@ function selectMeasurementsQuery(db: Database): string {
   ];
   for (const column of requiredColumns) {
     if (!columns.has(column)) {
-      throw new Error(`Unsupported benchmark_results schema: missing ${column}.`);
+      throw new Error(`Unsupported benchmark_results_latest schema: missing ${column}.`);
     }
   }
 
   return `
     SELECT
+      run_id,
       branch,
       tag,
       code_state_id,
       label,
       "commit" AS commit_sha,
-      date,
+      code_date,
+      measured_at,
       benchmark_path,
       benchmark_id,
       benchmark_label,
-      metric_kind,
-      time_ns_median,
-      time_ns_min,
-      memory_bytes_min,
-      allocs_min,
+      metric_name,
+      statistic,
+      unit,
+      value,
+      better,
       machine_id,
       cpu_model,
       cpu_threads,
@@ -204,14 +215,14 @@ function selectMeasurementsQuery(db: Database): string {
       julia_version,
       is_dirty,
       notes
-    FROM benchmark_results
-    ORDER BY date, benchmark_label, benchmark_id
+    FROM benchmark_results_latest
+    ORDER BY code_date, measured_at, benchmark_label, metric_name, statistic
   `;
 }
 
 function readMetadata(db: Database): BenchLedgerMetadata {
   const raw: Record<string, string> = {};
-  if (tableExists(db, "benchledger_metadata")) {
+  if (relationExists(db, "benchledger_metadata")) {
     const metadataResult = db.exec("SELECT key, value FROM benchledger_metadata")[0];
     for (const row of singleResultRows(metadataResult)) {
       const key = String(row.key ?? "");

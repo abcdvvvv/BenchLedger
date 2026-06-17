@@ -1,5 +1,5 @@
 import { schemeTableau10 } from "d3-scale-chromatic";
-import { formatDate, parseDate, shortCommit } from "./format";
+import { formatDate, formatMetricValue, parseDate, shortCommit } from "./format";
 import type {
   BenchmarkRow,
   BenchmarkRun,
@@ -15,7 +15,7 @@ export type TrendAxisMode = "commit" | "time";
 export type DisplayStrategy = "all" | "tagged-only" | "tagged-main";
 export type ActivePage = "overview" | "trend-board" | "benchmark-keys" | "chart-tuning" | "database-catalog";
 export type AppPhase = "booting" | "select-source" | "loading-database" | "ready";
-export type RunPairSortKey = "benchmark" | "focus" | "baseline" | "delta" | "memory" | "allocs";
+export type RunPairSortKey = "benchmark" | "focus" | "baseline" | "delta" | "unit";
 export type SortDirection = "asc" | "desc";
 export type RunPairSort = {
   key: RunPairSortKey;
@@ -81,6 +81,12 @@ export type TrendPlotRow = BenchmarkRow & {
   run_tone: "tag" | "master" | "branch";
 };
 
+export type MetricDescriptor = {
+  metric_name: string;
+  statistic: string;
+  unit: string;
+};
+
 export type PlotTheme = {
   paper: string;
   plot: string;
@@ -123,8 +129,7 @@ export const runPairTableColumns: { key: RunPairSortKey; label: string }[] = [
   { key: "focus", label: "Focus" },
   { key: "baseline", label: "Baseline" },
   { key: "delta", label: "Delta" },
-  { key: "memory", label: "Memory" },
-  { key: "allocs", label: "Allocs" }
+  { key: "unit", label: "Unit" }
 ];
 
 const _Trend_Categorical_Colors = schemeTableau10;
@@ -179,6 +184,20 @@ export function colorForBenchmark(index: number): string {
   return _Trend_Categorical_Colors[index % _Trend_Categorical_Colors.length];
 }
 
+export function metricKey(row: Pick<BenchmarkRow, "metric_name" | "statistic" | "unit">): string {
+  return `${row.metric_name}::${row.statistic}::${row.unit}`;
+}
+
+export function isPrimaryMetric(row: Pick<BenchmarkRow, "metric_name" | "statistic" | "unit">): boolean {
+  return row.metric_name === "time" &&
+    row.statistic === "median" &&
+    row.unit === "ns";
+}
+
+export function metricLabel(row: Pick<BenchmarkRow, "metric_name" | "statistic" | "unit">): string {
+  return `${row.metric_name} ${row.statistic} ${row.unit}`;
+}
+
 export function buildTrendTrace(
   rows: TrendPlotRow[],
   options: {
@@ -207,8 +226,9 @@ export function buildTrendTrace(
     showLegend,
     fillGradientScale
   } = options;
-  const x = rows.map((row) => axisMode === "commit" ? row.run_axis_label : row.date);
-  const y = rows.map((row) => row.time_ns_median);
+  const x = rows.map((row) => axisMode === "commit" ? row.run_axis_label : row.code_date);
+  const y = rows.map((row) => row.value);
+  const unit = rows[0]?.unit ?? "";
   const gradientStart = colorWithAlpha(color, 0);
   const gradientEnd = colorWithAlpha(color, theme === "dark" ? 0.2 : 0.2);
   const colorscale = fillGradientScale ?? [
@@ -233,7 +253,7 @@ export function buildTrendTrace(
       name: label,
       x,
       y,
-      customdata: rows.map((row) => row.date),
+      customdata: rows.map((row) => [row.code_date, row.measured_at, formatMetricValue(row.value, row.unit)]),
       line: {
         color,
         width: 2.5,
@@ -250,7 +270,7 @@ export function buildTrendTrace(
         type: "vertical",
         colorscale
       },
-      hovertemplate: "%{x}<br>%{customdata}<br>%{y:.2f} ns<extra></extra>",
+      hovertemplate: `%{x}<br>Code date: %{customdata[0]}<br>Measured: %{customdata[1]}<br>Value: %{customdata[2]}<br>Unit: ${unit || "n/a"}<extra></extra>`,
       showlegend: showLegend
     }
   ];
@@ -353,8 +373,8 @@ export function readUISettings(): UISettings {
   }
 }
 
-export function runId(row: Pick<BenchmarkRow, "code_state_id" | "machine_id" | "metric_kind">): string {
-  return `${row.code_state_id}::${row.machine_id}::${row.metric_kind}`;
+export function runId(row: Pick<BenchmarkRow, "run_id">): string {
+  return row.run_id;
 }
 
 export function runHeadline(run: BenchmarkRun): string {
@@ -419,11 +439,10 @@ export function rowMatchesDisplayStrategy(row: BenchmarkRow, strategy: DisplaySt
 
 export function runPairSortValue(row: PairComparison, key: RunPairSortKey): string | number {
   if (key === "benchmark") return row.benchmark_label;
-  if (key === "focus") return row.focus_time_ns_median;
-  if (key === "baseline") return row.baseline_time_ns_median;
-  if (key === "delta") return row.runtime_delta;
-  if (key === "memory") return row.focus_memory_bytes_min;
-  return row.focus_allocs_min;
+  if (key === "focus") return row.focus_value;
+  if (key === "baseline") return row.baseline_value;
+  if (key === "unit") return row.unit;
+  return row.delta;
 }
 
 export function defaultRunPairSortDirection(key: RunPairSortKey): SortDirection {
@@ -431,21 +450,30 @@ export function defaultRunPairSortDirection(key: RunPairSortKey): SortDirection 
 }
 
 function compareRuns(left: BenchmarkRun, right: BenchmarkRun): number {
-  const leftDate = parseDate(left.date)?.valueOf() ?? 0;
-  const rightDate = parseDate(right.date)?.valueOf() ?? 0;
-  if (leftDate !== rightDate) return rightDate - leftDate;
+  const leftMeasuredAt = parseDate(left.measured_at)?.valueOf() ?? 0;
+  const rightMeasuredAt = parseDate(right.measured_at)?.valueOf() ?? 0;
+  if (leftMeasuredAt !== rightMeasuredAt) return rightMeasuredAt - leftMeasuredAt;
+  const leftCodeDate = parseDate(left.code_date)?.valueOf() ?? 0;
+  const rightCodeDate = parseDate(right.code_date)?.valueOf() ?? 0;
+  if (leftCodeDate !== rightCodeDate) return rightCodeDate - leftCodeDate;
   return right.run_id.localeCompare(left.run_id);
 }
 
 export function buildRuns(rows: BenchmarkRow[]): BenchmarkRun[] {
   const runsById = new Map<string, BenchmarkRun>();
+  const benchmarkIdsByRun = new Map<string, Set<string>>();
   for (const row of rows) {
     const id = runId(row);
     const existing = runsById.get(id);
     if (existing) {
-      existing.benchmark_count += 1;
+      const benchmarkIds = benchmarkIdsByRun.get(id)!;
+      if (!benchmarkIds.has(row.benchmark_id)) {
+        benchmarkIds.add(row.benchmark_id);
+        existing.benchmark_count += 1;
+      }
       continue;
     }
+    benchmarkIdsByRun.set(id, new Set([row.benchmark_id]));
     runsById.set(id, {
       run_id: id,
       code_state_id: row.code_state_id,
@@ -453,8 +481,8 @@ export function buildRuns(rows: BenchmarkRow[]): BenchmarkRun[] {
       tag: row.tag,
       label: row.label,
       commit_sha: row.commit_sha,
-      date: row.date,
-      metric_kind: row.metric_kind,
+      code_date: row.code_date,
+      measured_at: row.measured_at,
       machine_id: row.machine_id,
       cpu_model: row.cpu_model,
       cpu_threads: row.cpu_threads,

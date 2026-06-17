@@ -15,11 +15,10 @@ import {
   type TrendAxisMode
 } from "../lib/dashboard";
 import {
-  deltaClass,
-  formatBytes,
   formatDate,
+  formatMetricValue,
+  metricDeltaClass,
   formatPercent,
-  formatRuntime
 } from "../lib/format";
 import type { BenchmarkRun, PairComparison } from "../lib/types";
 
@@ -74,6 +73,7 @@ type OverviewPageProps = {
   benchmarkOptions: BenchmarkKeyFilterOption[];
   selectedBenchmarkIds: string[];
   onSelectedBenchmarkIdsChange: (values: string[]) => void;
+  selectedMetricLabel: string;
   trendAxisMode: TrendAxisMode;
   onToggleTrendAxisMode: () => void;
   trendTraces: Array<Record<string, unknown>>;
@@ -130,6 +130,7 @@ export function OverviewPage(props: OverviewPageProps) {
     benchmarkOptions,
     selectedBenchmarkIds,
     onSelectedBenchmarkIdsChange,
+    selectedMetricLabel,
     trendAxisMode,
     onToggleTrendAxisMode,
     trendTraces,
@@ -155,13 +156,13 @@ export function OverviewPage(props: OverviewPageProps) {
             <label className="field trend-board-columns-field dashboard-run-field">
               <span className="field-label">Focus run</span>
               <select value={focusRunId} onChange={(event) => onFocusRunChange(event.target.value)} disabled={!filteredRuns.length}>
-                {filteredRuns.map((run) => <option key={run.run_id} value={run.run_id}>{runHeadline(run)} · {formatDate(run.date)}</option>)}
+                {filteredRuns.map((run) => <option key={run.run_id} value={run.run_id}>{runHeadline(run)} · measured {formatDate(run.measured_at)}</option>)}
               </select>
             </label>
             <label className="field trend-board-columns-field dashboard-run-field">
               <span className="field-label">Baseline run</span>
               <select value={baselineRunId} onChange={(event) => onBaselineRunChange(event.target.value)} disabled={!filteredRuns.length}>
-                {filteredRuns.map((run) => <option key={run.run_id} value={run.run_id}>{runHeadline(run)} · {formatDate(run.date)}</option>)}
+                {filteredRuns.map((run) => <option key={run.run_id} value={run.run_id}>{runHeadline(run)} · measured {formatDate(run.measured_at)}</option>)}
               </select>
             </label>
             <button type="button" className="button button-secondary button-compact" onClick={onOpenLocalFilePicker}>Choose SQLite</button>
@@ -316,7 +317,7 @@ export function OverviewPage(props: OverviewPageProps) {
                   font: { color: plotTheme.axis },
                   xaxis: { showgrid: false, color: plotTheme.axis, tickfont: { size: 14 } },
                   yaxis: {
-                    title: { text: "Median runtime (ns)" },
+                    title: { text: selectedMetricLabel || "Metric value" },
                     gridcolor: plotTheme.grid,
                     zeroline: false,
                     color: plotTheme.axis,
@@ -343,7 +344,7 @@ export function OverviewPage(props: OverviewPageProps) {
         <article className="surface-card panel panel-full">
           <div className="panel-head">
             <div>
-              <h2>Largest Runtime Deltas</h2>
+              <h2>Largest Deltas</h2>
               <p>Top movers between the focus run and the baseline run.</p>
             </div>
           </div>
@@ -355,10 +356,13 @@ export function OverviewPage(props: OverviewPageProps) {
                 {
                   type: "bar",
                   orientation: "h",
-                  x: comparisonRows.slice(0, 6).map((row) => row.runtime_delta).reverse(),
+                  x: comparisonRows.slice(0, 6).map((row) => row.delta).reverse(),
                   y: comparisonRows.slice(0, 6).map((row) => row.benchmark_label).reverse(),
                   marker: {
-                    color: comparisonRows.slice(0, 6).map((row) => plotTheme[deltaColorKey[deltaClass(row.runtime_delta)]]).reverse()
+                    color: comparisonRows
+                      .slice(0, 6)
+                      .map((row) => plotTheme[deltaColorKey[metricDeltaClass(row.delta, row.better)]])
+                      .reverse()
                   },
                   hovertemplate: "%{y}<br>%{x:.2f}%<extra></extra>"
                 }
@@ -369,7 +373,7 @@ export function OverviewPage(props: OverviewPageProps) {
                 paper_bgcolor: plotTheme.paper,
                 plot_bgcolor: plotTheme.plot,
                 font: { color: plotTheme.axis },
-                xaxis: { title: "Runtime delta (%)", gridcolor: plotTheme.grid, zerolinecolor: plotTheme.zero, color: plotTheme.axis },
+                xaxis: { title: "Delta (%)", gridcolor: plotTheme.grid, zerolinecolor: plotTheme.zero, color: plotTheme.axis },
                 yaxis: { automargin: true, color: plotTheme.axis },
                 showlegend: false
               }}
@@ -387,6 +391,8 @@ export function OverviewPage(props: OverviewPageProps) {
           <table className="meta-table">
             <tbody>
               <tr><th>Run</th><td>{focusRun ? runHeadline(focusRun) : "n/a"}</td></tr>
+              <tr><th>Code Date</th><td>{focusRun ? formatDate(focusRun.code_date) : "n/a"}</td></tr>
+              <tr><th>Measured</th><td>{focusRun ? formatDate(focusRun.measured_at) : "n/a"}</td></tr>
               <tr><th>Branch</th><td>{focusRun?.branch || "n/a"}</td></tr>
               <tr><th>Machine</th><td>{focusRun?.machine_id || "n/a"}</td></tr>
               <tr><th>CPU</th><td>{focusRun?.cpu_model || "n/a"}</td></tr>
@@ -401,7 +407,7 @@ export function OverviewPage(props: OverviewPageProps) {
           <div className="panel-head">
             <div>
               <h2>Run Pair Table</h2>
-              <p>All comparable benchmark rows in the selected pair.</p>
+              <p>All comparable benchmark rows in the selected pair for the chosen metric.</p>
             </div>
           </div>
           <div className="table-wrap">
@@ -422,11 +428,10 @@ export function OverviewPage(props: OverviewPageProps) {
                 {sortedComparisonRows.map((row) => (
                   <tr key={row.benchmark_id}>
                     <td><code>{row.benchmark_label}</code></td>
-                    <td>{formatRuntime(row.focus_time_ns_median)}</td>
-                    <td>{formatRuntime(row.baseline_time_ns_median)}</td>
-                    <td><span className={`delta-badge delta-${deltaClass(row.runtime_delta)}`}>{formatPercent(row.runtime_delta)}</span></td>
-                    <td>{formatBytes(row.focus_memory_bytes_min)}</td>
-                    <td>{row.focus_allocs_min}</td>
+                    <td>{formatMetricValue(row.focus_value, row.unit)}</td>
+                    <td>{formatMetricValue(row.baseline_value, row.unit)}</td>
+                    <td><span className={`delta-badge delta-${metricDeltaClass(row.delta, row.better)}`}>{formatPercent(row.delta)}</span></td>
+                    <td>{row.unit}</td>
                   </tr>
                 ))}
               </tbody>

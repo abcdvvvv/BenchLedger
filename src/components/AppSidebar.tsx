@@ -182,7 +182,7 @@ export function AppSidebar(props: AppSidebarProps) {
           <div className="operator-avatar">BL</div>
           <div>
             <strong>{latestRun?.machine_id ?? dataset?.source_label ?? "No database"}</strong>
-            <span>{latestRun ? formatDate(latestRun.date) : "No benchmark run"}</span>
+            <span>{latestRun ? formatDate(latestRun.measured_at) : "No benchmark run"}</span>
           </div>
         </div>
       </div>

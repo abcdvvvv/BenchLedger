@@ -36,6 +36,15 @@ export function formatBytes(value: number): string {
   return `${(value / 1024 ** 3).toFixed(2)} GiB`;
 }
 
+export function formatMetricValue(value: number, unit: string): string {
+  if (!Number.isFinite(value)) return "n/a";
+  if (unit === "ns") return formatRuntime(value);
+  if (unit === "bytes") return formatBytes(value);
+  if (unit === "count") return value.toLocaleString();
+  if (unit === "ops/s") return `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })} ops/s`;
+  return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
 export function percentageChange(current: number, baseline: number): number {
   if (!Number.isFinite(current) || !Number.isFinite(baseline) || baseline === 0) return Number.NaN;
   return ((current - baseline) / baseline) * 100;
@@ -56,6 +65,15 @@ export function deltaClass(value: number): "up" | "down" | "neutral" {
   if (value > 0) return "up";
   if (value < 0) return "down";
   return "neutral";
+}
+
+export function metricDeltaClass(
+  value: number,
+  better: "lower" | "higher" | "neutral"
+): "up" | "down" | "neutral" {
+  const direction = deltaClass(value);
+  if (direction === "neutral" || better !== "higher") return direction;
+  return direction === "up" ? "down" : "up";
 }
 
 export function shortCommit(commitSha: string): string {

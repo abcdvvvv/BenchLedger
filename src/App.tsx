@@ -8,7 +8,7 @@ import { DatabaseCatalogPage } from "./components/DatabaseCatalogPage";
 import { type GroupMenuOption } from "./components/GroupCascadeMenu";
 import { OverviewPage, type OverviewStat } from "./components/OverviewPage";
 import { TrendBoardPage, type TrendBoardCard } from "./components/TrendBoardPage";
-import { deltaClass, formatPercent, formatRuntime, parseDate, percentageChange, unique } from "./lib/format";
+import { formatMetricValue, formatPercent, metricDeltaClass, parseDate, percentageChange, unique } from "./lib/format";
 import {
   loadBenchmarkRowsFromFile,
   loadBenchmarkRowsFromManifestDatabase,
@@ -39,6 +39,7 @@ import {
   metadataDescription,
   metadataTitle,
   readUISettings,
+  metricLabel,
   rowMatchesDisplayStrategy,
   runAxisLabel,
   runHeadline,
@@ -284,11 +285,11 @@ function App() {
   const machineOptions = useMemo(() => unique(allRuns.map((run) => run.machine_id)).sort(), [allRuns]);
   const metricOptions = useMemo(() => {
     const metricRows = machine ? rows.filter((row) => row.machine_id === machine) : rows;
-    return unique(metricRows.map((row) => row.metric_kind)).sort();
+    return unique(metricRows.map((row) => metricLabel(row))).sort();
   }, [machine, rows]);
   const trendBoardMetricOptions = useMemo(() => {
     const metricRows = trendBoardMachine ? rows.filter((row) => row.machine_id === trendBoardMachine) : rows;
-    return unique(metricRows.map((row) => row.metric_kind)).sort();
+    return unique(metricRows.map((row) => metricLabel(row))).sort();
   }, [rows, trendBoardMachine]);
   const branchOptions = useMemo(() => ["all", ...unique(rows.map((row) => row.branch).filter(Boolean)).sort()], [rows]);
   const trendBoardBranchOptions = branchOptions;
@@ -297,14 +298,14 @@ function App() {
   const trendBoardTimeStartValue = useMemo(() => dateRangeStart(trendBoardTimeStart), [trendBoardTimeStart]);
   const trendBoardTimeEndValue = useMemo(() => dateRangeEnd(trendBoardTimeEnd), [trendBoardTimeEnd]);
   const datasetTimeStart = useMemo(() => dateInputValue(rows.reduce((earliest, row) => {
-    const rowDate = parseDate(row.date)?.valueOf() ?? Number.POSITIVE_INFINITY;
+    const rowDate = parseDate(row.code_date)?.valueOf() ?? Number.POSITIVE_INFINITY;
     const earliestDate = parseDate(earliest)?.valueOf() ?? Number.POSITIVE_INFINITY;
-    return rowDate < earliestDate ? row.date : earliest;
+    return rowDate < earliestDate ? row.code_date : earliest;
   }, "")), [rows]);
   const datasetTimeEnd = useMemo(() => dateInputValue(rows.reduce((latest, row) => {
-    const rowDate = parseDate(row.date)?.valueOf() ?? Number.NEGATIVE_INFINITY;
+    const rowDate = parseDate(row.code_date)?.valueOf() ?? Number.NEGATIVE_INFINITY;
     const latestDate = parseDate(latest)?.valueOf() ?? Number.NEGATIVE_INFINITY;
-    return rowDate > latestDate ? row.date : latest;
+    return rowDate > latestDate ? row.code_date : latest;
   }, "")), [rows]);
 
   useEffect(() => {
@@ -344,10 +345,10 @@ function App() {
   }, [trendBoardBranchOptions]);
 
   const filteredRows = useMemo(() => rows.filter((row) => {
-    if (row.machine_id !== machine || row.metric_kind !== metricKind) return false;
+    if (row.machine_id !== machine || metricLabel(row) !== metricKind) return false;
     if (branch !== "all" && row.branch !== branch) return false;
     if (!rowMatchesDisplayStrategy(row, displayStrategy)) return false;
-    const rowDate = parseDate(row.date)?.valueOf() ?? null;
+    const rowDate = parseDate(row.code_date)?.valueOf() ?? null;
     if (timeStartValue !== null && (rowDate === null || rowDate < timeStartValue)) return false;
     if (timeEndValue !== null && (rowDate === null || rowDate > timeEndValue)) return false;
     return true;
@@ -366,10 +367,10 @@ function App() {
     return Array.from(optionsByValue.values()).sort((left, right) => comparePath(left.path, right.path));
   }, [filteredRows]);
   const trendBoardFilteredRows = useMemo(() => rows.filter((row) => {
-    if (row.machine_id !== trendBoardMachine || row.metric_kind !== trendBoardMetricKind) return false;
+    if (row.machine_id !== trendBoardMachine || metricLabel(row) !== trendBoardMetricKind) return false;
     if (trendBoardBranch !== "all" && row.branch !== trendBoardBranch) return false;
     if (!rowMatchesDisplayStrategy(row, trendBoardDisplayStrategy)) return false;
-    const rowDate = parseDate(row.date)?.valueOf() ?? null;
+    const rowDate = parseDate(row.code_date)?.valueOf() ?? null;
     if (trendBoardTimeStartValue !== null && (rowDate === null || rowDate < trendBoardTimeStartValue)) return false;
     if (trendBoardTimeEndValue !== null && (rowDate === null || rowDate > trendBoardTimeEndValue)) return false;
     return true;
@@ -521,19 +522,15 @@ function App() {
         return {
           benchmark_id: key,
           benchmark_label: focus.benchmark_label,
-          focus_time_ns_median: focus.time_ns_median,
-          baseline_time_ns_median: baseline.time_ns_median,
-          focus_memory_bytes_min: focus.memory_bytes_min,
-          baseline_memory_bytes_min: baseline.memory_bytes_min,
-          focus_allocs_min: focus.allocs_min,
-          baseline_allocs_min: baseline.allocs_min,
-          runtime_delta: percentageChange(focus.time_ns_median, baseline.time_ns_median),
-          memory_delta: percentageChange(focus.memory_bytes_min, baseline.memory_bytes_min),
-          alloc_delta: percentageChange(focus.allocs_min, baseline.allocs_min)
+          focus_value: focus.value,
+          baseline_value: baseline.value,
+          delta: percentageChange(focus.value, baseline.value),
+          unit: focus.unit,
+          better: focus.better
         };
       })
       .filter((row): row is PairComparison => row !== null)
-      .sort((left, right) => Math.abs(right.runtime_delta) - Math.abs(left.runtime_delta));
+      .sort((left, right) => Math.abs(right.delta) - Math.abs(left.delta));
   }, [baselineByBenchmark, focusByBenchmark]);
 
   const sortedComparisonRows = useMemo(() => {
@@ -566,7 +563,7 @@ function App() {
       const run = runs.find((candidate) => candidate.run_id === runId(row));
       const entry = {
         ...row,
-        date_value: parseDate(row.date),
+        date_value: parseDate(row.code_date),
         run_axis_label: runAxisLabel(row),
         run_headline: run ? runHeadline(run) : row.label,
         run_tone: run ? runTone(run) : "branch"
@@ -593,7 +590,7 @@ function App() {
       const run = trendBoardRuns.find((candidate) => candidate.run_id === runId(row));
       const entry = {
         ...row,
-        date_value: parseDate(row.date),
+        date_value: parseDate(row.code_date),
         run_axis_label: runAxisLabel(row),
         run_headline: run ? runHeadline(run) : row.label,
         run_tone: run ? runTone(run) : "branch"
@@ -611,8 +608,8 @@ function App() {
     return rowsByBenchmark;
   }, [trendBoardRuns, trendBoardScopedRows, trendBoardSelectedBenchmarkIds]);
 
-  const selectedRuntimeDelta = focusBenchmark && baselineBenchmark
-    ? percentageChange(focusBenchmark.time_ns_median, baselineBenchmark.time_ns_median)
+  const selectedMetricDelta = focusBenchmark && baselineBenchmark
+    ? percentageChange(focusBenchmark.value, baselineBenchmark.value)
     : null;
 
   const stats = useMemo<OverviewStat[]>(() => [
@@ -634,10 +631,12 @@ function App() {
     },
     {
       Icon: FiClock,
-      label: "Selected Runtime",
-      value: focusBenchmark ? formatRuntime(focusBenchmark.time_ns_median) : "n/a",
-      delta: selectedRuntimeDelta === null ? "" : formatPercent(selectedRuntimeDelta),
-      deltaTone: selectedRuntimeDelta === null ? "neutral" : statDeltaTone[deltaClass(selectedRuntimeDelta)],
+      label: "Selected Metric",
+      value: focusBenchmark ? formatMetricValue(focusBenchmark.value, focusBenchmark.unit) : "n/a",
+      delta: selectedMetricDelta === null ? "" : formatPercent(selectedMetricDelta),
+      deltaTone: selectedMetricDelta === null || !focusBenchmark
+        ? "neutral"
+        : statDeltaTone[metricDeltaClass(selectedMetricDelta, focusBenchmark.better)],
       detail: focusBenchmark && baselineBenchmark ? "vs baseline" : "Pick a comparable baseline run"
     },
     {
@@ -648,7 +647,7 @@ function App() {
       deltaTone: "neutral",
       detail: latestRun?.is_dirty ? "Latest run was recorded from a dirty worktree" : "Latest run is clean"
     }
-  ], [baselineBenchmark, filteredRuns, focusBenchmark, latestRun, machine, metricKind, scopedRows, selectedRuntimeDelta]);
+  ], [baselineBenchmark, filteredRuns, focusBenchmark, latestRun, machine, metricKind, scopedRows, selectedMetricDelta]);
 
   const plotTheme = useMemo<PlotTheme>(() => {
     if (theme === "dark") {
@@ -699,11 +698,11 @@ function App() {
       runCount: allRuns.length,
       keyCount: unique(rows.map((row) => row.benchmark_id)).length,
       machineCount: unique(rows.map((row) => row.machine_id)).length,
-      metrics: unique(rows.map((row) => row.metric_kind)).sort(),
-      latestRunDate: latestDatabaseRun?.date ?? "",
+      metrics: unique(rows.map((row) => `${row.metric_name} ${row.statistic} ${row.unit}`)).sort(),
+      latestRunDate: latestDatabaseRun?.measured_at ?? "",
       dirtyRunCount: allRuns.filter((run) => run.is_dirty).length
     };
-  }, [allRuns, dataset, latestDatabaseRun?.date, rows]);
+  }, [allRuns, dataset, latestDatabaseRun?.measured_at, rows]);
 
   const databaseCatalog = useMemo<DatabaseCatalogEntry[]>(() => {
     const manifestEntries = sourceDatabases.map((database) => {
@@ -752,7 +751,7 @@ function App() {
   );
   const trendPlotMargin = trendRows.length ? { t: 10, r: 16, b: 40, l: 60 } : { t: 10, r: 16, b: 40, l: 20 };
   const deltaPlotMargin = comparisonRows.length ? { t: 10, r: 12, b: 36, l: 180 } : { t: 10, r: 12, b: 36, l: 20 };
-  const trendY = trendRows.map((row) => row.time_ns_median);
+  const trendY = trendRows.map((row) => row.value);
   const trendYMin = trendY.length ? Math.min(...trendY) : 0;
   const trendYMax = trendY.length ? Math.max(...trendY) : 0;
   const trendYSpan = trendYMax - trendYMin;
@@ -808,7 +807,7 @@ function App() {
       const color = colorForBenchmark(index);
       const option = trendBoardBenchmarkOptions.find((entry) => entry.value === benchmarkKey);
       const label = option?.label ?? benchmarkKey;
-      const yValues = cardRows.map((row) => row.time_ns_median);
+      const yValues = cardRows.map((row) => row.value);
       const yMin = Math.min(...yValues);
       const yMax = Math.max(...yValues);
       const ySpan = yMax - yMin;
@@ -923,6 +922,7 @@ function App() {
             benchmarkOptions={benchmarkOptions}
             selectedBenchmarkIds={overviewSelectedBenchmarkIds}
             onSelectedBenchmarkIdsChange={setOverviewSelectedBenchmarkIds}
+            selectedMetricLabel={metricKind}
             trendAxisMode={trendAxisMode}
             onToggleTrendAxisMode={() => setTrendAxisMode((current) => (current === "commit" ? "time" : "commit"))}
             trendTraces={trendTraces}
@@ -967,6 +967,7 @@ function App() {
             onTimeEndChange={setTrendBoardTimeEnd}
             trendBoardColumns={trendBoardColumns}
             onTrendBoardColumnsChange={setTrendBoardColumns}
+            selectedMetricLabel={trendBoardMetricKind}
             trendAxisMode={trendAxisMode}
             onToggleTrendAxisMode={() => setTrendAxisMode((current) => (current === "commit" ? "time" : "commit"))}
             trendBoardCards={trendBoardCards}

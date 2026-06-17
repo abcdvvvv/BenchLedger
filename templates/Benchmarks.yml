@@ -24,7 +24,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  BENCHLEDGER_VERSION: "0.2.0"
+  BENCHLEDGER_VERSION: "0.3.0"
   BENCH_PACKAGE_NAME: "YourPackageName.jl"
   BENCH_PACKAGE_DESCRIPTION: "Benchmark history for YourPackageName.jl"
   BENCH_PACKAGE_URL: "https://..."
@@ -118,7 +118,7 @@ jobs:
 
           cat > gh-pages/benchmarks/benchledger.json <<EOF
           {
-            "manifest_version": 1,
+            "manifest_version": 3,
             "benchledger_web_version": "${BENCHLEDGER_VERSION}",
             "generated_at": "${generated_at}",
             "site": {

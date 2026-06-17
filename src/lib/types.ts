@@ -1,18 +1,20 @@
 export type BenchmarkRow = {
+  run_id: string;
   branch: string;
   tag: string;
   code_state_id: string;
   label: string;
   commit_sha: string;
-  date: string;
+  code_date: string;
+  measured_at: string;
   benchmark_path: string[];
   benchmark_id: string;
   benchmark_label: string;
-  metric_kind: string;
-  time_ns_median: number;
-  time_ns_min: number;
-  memory_bytes_min: number;
-  allocs_min: number;
+  metric_name: string;
+  statistic: string;
+  unit: string;
+  value: number;
+  better: "lower" | "higher" | "neutral";
   machine_id: string;
   cpu_model: string;
   cpu_threads: number;
@@ -31,8 +33,8 @@ export type BenchmarkRun = {
   tag: string;
   label: string;
   commit_sha: string;
-  date: string;
-  metric_kind: string;
+  code_date: string;
+  measured_at: string;
   machine_id: string;
   cpu_model: string;
   cpu_threads: number;
@@ -47,15 +49,11 @@ export type BenchmarkRun = {
 export type PairComparison = {
   benchmark_id: string;
   benchmark_label: string;
-  focus_time_ns_median: number;
-  baseline_time_ns_median: number;
-  focus_memory_bytes_min: number;
-  baseline_memory_bytes_min: number;
-  focus_allocs_min: number;
-  baseline_allocs_min: number;
-  runtime_delta: number;
-  memory_delta: number;
-  alloc_delta: number;
+  focus_value: number;
+  baseline_value: number;
+  delta: number;
+  unit: string;
+  better: "lower" | "higher" | "neutral";
 };
 
 export type BenchLedgerManifestDatabase = {
