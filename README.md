@@ -16,6 +16,33 @@ It is designed for library performance tracking: run benchmarks elsewhere, write
 
 - [ComponentLogging.jl](https://github.com/JuliaLogging/ComponentLogging.jl): [benchmark dashboard](https://julialogging.github.io/ComponentLogging.jl/benchledger/)
 
+## Quick Start
+
+For Julia packages, the fastest way to get started is to copy the two template files in [`templates/`](./templates):
+
+```text
+templates/runbench.jl
+templates/Benchmarks.yml
+```
+
+Recommended destination:
+
+```text
+YourPackage/
+├── benchmark/
+│   └── runbench.jl
+└── .github/
+    └── workflows/
+        └── Benchmarks.yml
+```
+
+Then edit:
+
+- [`benchmark/runbench.jl`](./templates/runbench.jl): replace the arrow-marked block with your benchmark suite, and update the metadata defaults in that same block.
+- [`.github/workflows/Benchmarks.yml`](./templates/Benchmarks.yml): set your main benchmark branch, BenchLedger version, package name, description, and project URL in the top-level `env:` section.
+
+After that, commit the two files, push to your default branch, and let GitHub Actions generate and publish your benchmark database to `gh-pages`.
+
 ## Development
 
 ```bash
@@ -28,6 +55,11 @@ npm run dev
 ```bash
 npm run build
 ```
+
+## License
+
+This repository is MIT-licensed by default.
+Files under [`templates/`](./templates) are separately marked as `MIT-0` with file-level SPDX headers so Julia users can copy them into their own packages with minimal friction.
 
 See [changelog.md](./changelog.md) for release history.
 
