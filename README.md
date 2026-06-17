@@ -29,26 +29,28 @@ npm run dev
 npm run build
 ```
 
+See [changelog.md](./changelog.md) for release history.
+
 ## Release
 
 Versioned frontend distributions are published from Git tags. For a new release,
 commit the changes, create a `v*` tag, and push the tag:
 
 ```bash
-git tag v0.1.0
+git tag v0.2.0
 git push origin main
-git push origin v0.1.0
+git push origin v0.2.0
 ```
 
 The release workflow builds the Vite app and uploads a static dist archive named
-`BenchLedger-0.1.0-dist.tar.gz` to the matching GitHub Release.
+`BenchLedger-0.2.0-dist.tar.gz` to the matching GitHub Release.
 
 ### Recommended `benchledger.json`
 
 ```json
 {
   "manifest_version": 1,
-  "benchledger_web_version": "0.1.0",
+  "benchledger_web_version": "0.2.0",
   "generated_at": "2026-06-15T06:30:00.000Z",
   "site": {
     "title": "BenchLedger",

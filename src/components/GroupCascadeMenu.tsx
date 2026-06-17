@@ -133,7 +133,7 @@ export function GroupCascadeMenu(props: GroupCascadeMenuProps) {
         <strong className="group-cascade-trigger-label">{selectedLabel}</strong>
         <span aria-hidden="true">▾</span>
       </MenuButton>
-      <Menu gutter={0} sameWidth unmountOnHide className="group-cascade-menu group-cascade-root-menu">
+      <Menu gutter={-1} sameWidth unmountOnHide className="group-cascade-menu group-cascade-root-menu">
         <MenuItem className="group-cascade-item" onClick={() => onSelect("all")}>
           All groups
         </MenuItem>
