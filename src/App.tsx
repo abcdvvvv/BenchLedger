@@ -9,6 +9,7 @@ import { type GroupMenuOption } from "./components/GroupCascadeMenu";
 import { OverviewPage, type OverviewStat } from "./components/OverviewPage";
 import { TrendBoardPage, type TrendBoardCard } from "./components/TrendBoardPage";
 import { formatMetricValue, formatPercent, metricDeltaClass, parseDate, percentageChange, unique } from "./lib/format";
+import type { TrendMarkerSymbol } from "./lib/trend-marker-symbols";
 import {
   loadBenchmarkRowsFromFile,
   loadBenchmarkRowsFromManifestDatabase,
@@ -48,6 +49,7 @@ import {
   runPairSortValue,
   runTone,
   statDeltaTone,
+  trendDisplayUnitContext,
   type ActivePage,
   type AppPhase,
   type DatabaseCatalogEntry,
@@ -59,6 +61,7 @@ import {
   type ThemeMode,
   type TrendAxisMode,
   type TrendLineShape,
+  type TrendMarkerFillMode,
   type TrendPlotRow,
   type UISettings
 } from "./lib/dashboard";
@@ -66,10 +69,6 @@ import {
 function App() {
   const initialSettings = useMemo(readUISettings, []);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const timeRangePickerRef = useRef<HTMLDetailsElement | null>(null);
-  const timeStartInputRef = useRef<HTMLInputElement | null>(null);
-  const trendBoardTimeRangePickerRef = useRef<HTMLDetailsElement | null>(null);
-  const trendBoardTimeStartInputRef = useRef<HTMLInputElement | null>(null);
   const [rows, setRows] = useState<BenchmarkRow[]>([]);
   const [dataset, setDataset] = useState<LoadedBenchmarkDataset | null>(null);
   const [manifest, setManifest] = useState<BenchLedgerManifest | null>(null);
@@ -98,6 +97,8 @@ function App() {
   const [overviewSelectedBenchmarkIds, setOverviewSelectedBenchmarkIds] = useState(initialSettings.overviewSelectedBenchmarkIds);
   const [trendBoardSelectedBenchmarkIds, setTrendBoardSelectedBenchmarkIds] = useState(initialSettings.trendBoardSelectedBenchmarkIds);
   const [trendLineShape, setTrendLineShape] = useState<TrendLineShape>(initialSettings.trendLineShape);
+  const [trendMarkerSymbol, setTrendMarkerSymbol] = useState<TrendMarkerSymbol>(initialSettings.trendMarkerSymbol);
+  const [trendMarkerFillMode, setTrendMarkerFillMode] = useState<TrendMarkerFillMode>(initialSettings.trendMarkerFillMode);
   const [trendAxisMode, setTrendAxisMode] = useState<TrendAxisMode>(initialSettings.trendAxisMode);
   const [trendBoardColumns, setTrendBoardColumns] = useState(initialSettings.trendBoardColumns);
   const [runPairSort, setRunPairSort] = useState<RunPairSort | null>(null);
@@ -106,29 +107,6 @@ function App() {
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
   }, [theme]);
-
-  useEffect(() => {
-    function closeTimeRangePicker(event: PointerEvent) {
-      const picker = timeRangePickerRef.current;
-      if (!picker?.open) return;
-      if (event.target instanceof Node && picker.contains(event.target)) return;
-      picker.open = false;
-    }
-
-    function closeTrendBoardTimeRangePicker(event: PointerEvent) {
-      const picker = trendBoardTimeRangePickerRef.current;
-      if (!picker?.open) return;
-      if (event.target instanceof Node && picker.contains(event.target)) return;
-      picker.open = false;
-    }
-
-    document.addEventListener("pointerdown", closeTimeRangePicker);
-    document.addEventListener("pointerdown", closeTrendBoardTimeRangePicker);
-    return () => {
-      document.removeEventListener("pointerdown", closeTimeRangePicker);
-      document.removeEventListener("pointerdown", closeTrendBoardTimeRangePicker);
-    };
-  }, []);
 
   useEffect(() => {
     const settings: UISettings = {
@@ -154,6 +132,8 @@ function App() {
       overviewSelectedBenchmarkIds,
       trendBoardSelectedBenchmarkIds,
       trendLineShape,
+      trendMarkerSymbol,
+      trendMarkerFillMode,
       trendAxisMode,
       trendBoardColumns
     };
@@ -182,7 +162,9 @@ function App() {
     trendBoardSelectedBenchmarkIds,
     trendBoardColumns,
     trendAxisMode,
-    trendLineShape
+    trendLineShape,
+    trendMarkerSymbol,
+    trendMarkerFillMode
   ]);
 
   useEffect(() => {
@@ -795,6 +777,14 @@ function App() {
     () => benchmarkOptions.flatMap((option) => overviewTrendRowsByBenchmark.get(option.value) ?? []),
     [benchmarkOptions, overviewTrendRowsByBenchmark]
   );
+  const trendDisplayContext = useMemo(
+    () => trendDisplayUnitContext(trendRows),
+    [trendRows]
+  );
+  const trendMetricLabel = useMemo(
+    () => trendDisplayContext.formatMetricLabel(metricKind),
+    [metricKind, trendDisplayContext]
+  );
   const trendPlotMargin = trendRows.length ? { t: 10, r: 16, b: 40, l: 55 } : { t: 10, r: 16, b: 40, l: 20 };
   const deltaPlotMargin = comparisonRows.length ? { t: 10, r: 12, b: 36, l: 170 } : { t: 10, r: 12, b: 36, l: 20 };
   const trendY = trendRows.map((row) => row.value);
@@ -817,6 +807,9 @@ function App() {
       return buildTrendTrace(traceRows, {
         axisMode: trendAxisMode,
         lineShape: trendLineShape,
+        markerSymbol: trendMarkerSymbol,
+        markerFillMode: trendMarkerFillMode,
+        displayUnitContext: trendDisplayContext,
         color,
         label,
         plotTheme,
@@ -833,6 +826,9 @@ function App() {
     theme,
     trendAxisMode,
     trendLineShape,
+    trendMarkerSymbol,
+    trendMarkerFillMode,
+    trendDisplayContext,
     overviewTrendRowsByBenchmark,
     trendYMin,
     trendYPadding
@@ -850,6 +846,7 @@ function App() {
     return trendBoardSelectedBenchmarkIds.flatMap((benchmarkKey, index) => {
       const cardRows = trendBoardRowsByBenchmark.get(benchmarkKey) ?? [];
       if (!cardRows.length) return [];
+      const displayUnitContext = trendDisplayUnitContext(cardRows);
       const color = colorForBenchmark(index);
       const option = trendBoardBenchmarkOptions.find((entry) => entry.value === benchmarkKey);
       const path = option?.path?.length ? option.path : [option?.label ?? benchmarkKey];
@@ -865,9 +862,13 @@ function App() {
         benchmarkId: benchmarkKey,
         label,
         path,
+        metricLabel: displayUnitContext.formatMetricLabel(trendBoardMetricKind),
         traces: buildTrendTrace(cardRows, {
           axisMode: trendAxisMode,
           lineShape: trendLineShape,
+          markerSymbol: trendMarkerSymbol,
+          markerFillMode: trendMarkerFillMode,
+          displayUnitContext,
           color,
           label,
           plotTheme,
@@ -887,6 +888,9 @@ function App() {
     theme,
     trendAxisMode,
     trendLineShape,
+    trendMarkerSymbol,
+    trendMarkerFillMode,
+    trendBoardMetricKind,
     trendBoardBenchmarkOptions,
     trendBoardRowsByBenchmark,
     trendBoardSelectedBenchmarkIds
@@ -954,8 +958,6 @@ function App() {
             branch={branch}
             branchOptions={branchOptions}
             onBranchChange={setBranch}
-            timeRangePickerRef={timeRangePickerRef}
-            timeStartInputRef={timeStartInputRef}
             timeRangeLabel={timeRangeLabel}
             timeStart={timeStart}
             timeEnd={timeEnd}
@@ -969,7 +971,7 @@ function App() {
             benchmarkOptions={benchmarkOptions}
             selectedBenchmarkIds={overviewSelectedBenchmarkIds}
             onSelectedBenchmarkIdsChange={setOverviewSelectedBenchmarkIds}
-            selectedMetricLabel={metricKind}
+            selectedMetricLabel={trendMetricLabel}
             trendAxisMode={trendAxisMode}
             onToggleTrendAxisMode={() => setTrendAxisMode((current) => (current === "commit" ? "time" : "commit"))}
             trendTraces={trendTraces}
@@ -1003,8 +1005,6 @@ function App() {
             branch={trendBoardBranch}
             branchOptions={trendBoardBranchOptions}
             onBranchChange={setTrendBoardBranch}
-            timeRangePickerRef={trendBoardTimeRangePickerRef}
-            timeStartInputRef={trendBoardTimeStartInputRef}
             timeRangeLabel={trendBoardTimeRangeLabel}
             timeStart={trendBoardTimeStart}
             timeEnd={trendBoardTimeEnd}
@@ -1027,10 +1027,14 @@ function App() {
             plotTheme={plotTheme}
             theme={theme}
           />
-        ) : activePage === "chart-tuning" ? (
+        ) : activePage === "settings" ? (
           <ChartTuningPage
             trendLineShape={trendLineShape}
+            trendMarkerSymbol={trendMarkerSymbol}
+            trendMarkerFillMode={trendMarkerFillMode}
             onTrendLineShapeChange={setTrendLineShape}
+            onTrendMarkerSymbolChange={setTrendMarkerSymbol}
+            onTrendMarkerFillModeChange={setTrendMarkerFillMode}
           />
         ) : (
           <DatabaseCatalogPage

@@ -1,0 +1,41 @@
+export const Trend_Marker_Symbol_Options = [
+  { value: "circle", path: "M7,0A7,7 0 1,1 0,-7A7,7 0 0,1 7,0Z", noFill: false },
+  { value: "square", path: "M7,7H-7V-7H7Z", noFill: false },
+  { value: "diamond", path: "M9.1,0L0,9.1L-9.1,0L0,-9.1Z", noFill: false },
+  { value: "cross", path: "M8.4,2.8H2.8V8.4H-2.8V2.8H-8.4V-2.8H-2.8V-8.4H2.8V-2.8H8.4Z", noFill: false },
+  { value: "x", path: "M0,3.96l3.96,3.96l3.96,-3.96l-3.96,-3.96l3.96,-3.96l-3.96,-3.96l-3.96,3.96l-3.96,-3.96l-3.96,3.96l3.96,3.96l-3.96,3.96l3.96,3.96Z", noFill: false },
+  { value: "triangle-up", path: "M-8.08,3.5H8.08L0,-7Z", noFill: false },
+  { value: "triangle-down", path: "M-8.08,-3.5H8.08L0,7Z", noFill: false },
+  { value: "triangle-left", path: "M3.5,-8.08V8.08L-7,0Z", noFill: false },
+  { value: "triangle-right", path: "M-3.5,-8.08V8.08L7,0Z", noFill: false },
+  { value: "triangle-ne", path: "M-8.4,-4.2H4.2V8.4Z", noFill: false },
+  { value: "triangle-se", path: "M4.2,-8.4V4.2H-8.4Z", noFill: false },
+  { value: "triangle-sw", path: "M8.4,4.2H-4.2V-8.4Z", noFill: false },
+  { value: "triangle-nw", path: "M-4.2,8.4V-4.2H8.4Z", noFill: false },
+  { value: "pentagon", path: "M6.66,-2.16L4.12,5.66H-4.12L-6.66,-2.16L0,-7Z", noFill: false },
+  { value: "hexagon", path: "M6.06,-3.5V3.5L0,7L-6.06,3.5V-3.5L0,-7Z", noFill: false },
+  { value: "hexagon2", path: "M-3.5,6.06H3.5L7,0L3.5,-6.06H-3.5L-7,0Z", noFill: false },
+  { value: "octagon", path: "M-2.68,-6.47H2.68L6.47,-2.68V2.68L2.68,6.47H-2.68L-6.47,2.68V-2.68Z", noFill: false },
+  { value: "star", path: "M2.2,-3.03H9.32L3.56,1.16L5.76,7.93L0,3.74L-5.76,7.93L-3.56,1.16L-9.32,-3.03H-2.2L0,-9.8Z", noFill: false },
+  { value: "hexagram", path: "M-5.32,0l-2.66,-4.62h5.32l2.66,-4.62l2.66,4.62h5.32l-2.66,4.62l2.66,4.62h-5.32l-2.66,4.62l-2.66,-4.62h-5.32Z", noFill: false },
+  { value: "star-triangle-up", path: "M-9.7,5.6A 28,28 0 0 1 9.7,5.6A 28,28 0 0 1 0,-11.2A 28,28 0 0 1 -9.7,5.6Z", noFill: false },
+  { value: "star-triangle-down", path: "M9.7,-5.6A 28,28 0 0 1 -9.7,-5.6A 28,28 0 0 1 0,11.2A 28,28 0 0 1 9.7,-5.6Z", noFill: false },
+  { value: "star-square", path: "M-7.7,-7.7A 14,14 0 0 1 -7.7,7.7A 14,14 0 0 1 7.7,7.7A 14,14 0 0 1 7.7,-7.7A 14,14 0 0 1 -7.7,-7.7Z", noFill: false },
+  { value: "star-diamond", path: "M-9.8,0A 13.3,13.3 0 0 1 0,9.8A 13.3,13.3 0 0 1 9.8,0A 13.3,13.3 0 0 1 0,-9.8A 13.3,13.3 0 0 1 -9.8,0Z", noFill: false },
+  { value: "diamond-tall", path: "M0,9.8L4.9,0L0,-9.8L-4.9,0Z", noFill: false },
+  { value: "diamond-wide", path: "M0,4.9L9.8,0L0,-4.9L-9.8,0Z", noFill: false },
+  { value: "hourglass", path: "M7,7H-7L7,-7H-7Z", noFill: false },
+  { value: "bowtie", path: "M7,7V-7L-7,7V-7Z", noFill: false },
+  { value: "circle-cross", path: "M0,7V-7M7,0H-7M7,0A7,7 0 1,1 0,-7A7,7 0 0,1 7,0Z", noFill: false },
+  { value: "circle-x", path: "M4.95,4.95L-4.95,-4.95M4.95,-4.95L-4.95,4.95M7,0A7,7 0 1,1 0,-7A7,7 0 0,1 7,0Z", noFill: false },
+  { value: "square-cross", path: "M0,7V-7M7,0H-7M7,7H-7V-7H7Z", noFill: false },
+  { value: "square-x", path: "M7,7L-7,-7M7,-7L-7,7M7,7H-7V-7H7Z", noFill: false },
+  { value: "diamond-cross", path: "M9.1,0L0,9.1L-9.1,0L0,-9.1ZM0,-9.1V9.1M-9.1,0H9.1", noFill: false },
+  { value: "diamond-x", path: "M9.1,0L0,9.1L-9.1,0L0,-9.1ZM-4.55,-4.55L4.55,4.55M-4.55,4.55L4.55,-4.55", noFill: false },
+  { value: "cross-thin", path: "M0,9.8V-9.8M9.8,0H-9.8", noFill: true },
+  { value: "x-thin", path: "M7,7L-7,-7M7,-7L-7,7", noFill: true }
+] as const;
+
+export type TrendMarkerSymbol = typeof Trend_Marker_Symbol_Options[number]["value"];
+
+export type MarkerSymbolOption = typeof Trend_Marker_Symbol_Options[number];

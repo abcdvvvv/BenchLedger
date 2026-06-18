@@ -1,13 +1,12 @@
-import type { RefObject } from "react";
 import type { IconType } from "react-icons";
 import { FiFolder } from "react-icons/fi";
 import { BenchmarkKeyCascadeFilter, type BenchmarkKeyFilterOption } from "./BenchmarkKeyCascadeFilter";
+import { TimeRangePopover } from "./TimeRangePopover";
 import { GroupCascadeMenu, type GroupMenuOption } from "./GroupCascadeMenu";
 import Plot from "./Plot";
 import { RunSelectMenu } from "./RunSelectMenu";
 import {
   deltaColorKey,
-  openNativeDatePicker,
   runHeadline,
   runPairTableColumns,
   type DisplayStrategy,
@@ -60,8 +59,6 @@ type OverviewPageProps = {
   branch: string;
   branchOptions: string[];
   onBranchChange: (branch: string) => void;
-  timeRangePickerRef: RefObject<HTMLDetailsElement | null>;
-  timeStartInputRef: RefObject<HTMLInputElement | null>;
   timeRangeLabel: string;
   timeStart: string;
   timeEnd: string;
@@ -117,8 +114,6 @@ export function OverviewPage(props: OverviewPageProps) {
     branch,
     branchOptions,
     onBranchChange,
-    timeRangePickerRef,
-    timeStartInputRef,
     timeRangeLabel,
     timeStart,
     timeEnd,
@@ -225,44 +220,16 @@ export function OverviewPage(props: OverviewPageProps) {
           </label>
           <div className="field time-range-field">
             <span className="field-label">Time Range</span>
-            <details className="date-range-picker" ref={timeRangePickerRef}>
-              <summary
-                className={`date-range-summary${hasDataset ? "" : " date-range-summary-disabled"}`}
-                onClick={(event) => {
-                  if (!hasDataset) event.preventDefault();
-                  const picker = event.currentTarget.parentElement as HTMLDetailsElement | null;
-                  if (hasDataset && !picker?.open) {
-                    window.requestAnimationFrame(() => openNativeDatePicker(timeStartInputRef.current));
-                  }
-                }}
-              >
-                <strong>{timeRangeLabel}</strong>
-                <em aria-hidden="true">▾</em>
-              </summary>
-              <div className="date-range-popover">
-                <label className="date-range-input">
-                  <span className="field-label">Start</span>
-                  <input
-                    ref={timeStartInputRef}
-                    type="date"
-                    value={timeStart}
-                    min={datasetTimeStart}
-                    max={timeEnd || datasetTimeEnd}
-                    onChange={(event) => onTimeStartChange(event.target.value)}
-                  />
-                </label>
-                <label className="date-range-input">
-                  <span className="field-label">End</span>
-                  <input
-                    type="date"
-                    value={timeEnd}
-                    min={timeStart || datasetTimeStart}
-                    max={datasetTimeEnd}
-                    onChange={(event) => onTimeEndChange(event.target.value)}
-                  />
-                </label>
-              </div>
-            </details>
+            <TimeRangePopover
+              disabled={!hasDataset}
+              label={timeRangeLabel}
+              timeStart={timeStart}
+              timeEnd={timeEnd}
+              datasetTimeStart={datasetTimeStart}
+              datasetTimeEnd={datasetTimeEnd}
+              onTimeStartChange={onTimeStartChange}
+              onTimeEndChange={onTimeEndChange}
+            />
           </div>
           <label className="field filter-strategy-field">
             <span className="field-label">Display Strategy</span>
@@ -310,7 +277,7 @@ export function OverviewPage(props: OverviewPageProps) {
                 disabled={!hasDataset}
               />
             </div>
-            <button type="button" className="button button-secondary button-compact" onClick={onToggleTrendAxisMode}>
+            <button type="button" className="button button-secondary button-compact axis-mode-button" onClick={onToggleTrendAxisMode}>
               X-Axis: {trendAxisMode === "commit" ? "Commit" : "Time"}
             </button>
           </div>
@@ -334,6 +301,11 @@ export function OverviewPage(props: OverviewPageProps) {
                     color: plotTheme.axis,
                     tickfont: { size: 14 }
                   },
+                  modebar: {
+                    bgcolor: "rgba(0, 0, 0, 0)",
+                    color: plotTheme.axis,
+                    activecolor: plotTheme.line
+                  },
                   showlegend: selectedBenchmarkIds.length > 1,
                   legend: selectedBenchmarkIds.length > 1 ? {
                     orientation: "h",
@@ -347,7 +319,6 @@ export function OverviewPage(props: OverviewPageProps) {
             ) : (
               <div className="plot-empty-state">
                 <strong>No benchmark key selected</strong>
-                <p>Choose at least one benchmark key to render a trend chart.</p>
               </div>
             )}
           </div>

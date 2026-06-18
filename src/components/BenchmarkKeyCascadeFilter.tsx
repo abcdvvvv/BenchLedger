@@ -356,6 +356,7 @@ export function BenchmarkKeyCascadeFilter(props: BenchmarkKeyCascadeFilterProps)
     () => summarizeSelection(selectedValues.length, options.length ? placeholder : "No benchmark keys available"),
     [options.length, placeholder, selectedValues.length]
   );
+  const inputPlaceholder = open ? "Search keys..." : summaryLabel;
 
   function commitSelectedValues(nextSelectedValueSet: Set<string>) {
     const nextValues = orderedValues.filter((value) => nextSelectedValueSet.has(value));
@@ -436,7 +437,7 @@ export function BenchmarkKeyCascadeFilter(props: BenchmarkKeyCascadeFilterProps)
           disabled={isDisabled}
           readOnly={!open}
           className="benchmark-key-filter-input"
-          placeholder={summaryLabel}
+          placeholder={inputPlaceholder}
           autoComplete="off"
           aria-label="Search benchmark keys"
           onClick={() => {

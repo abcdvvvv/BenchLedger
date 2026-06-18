@@ -142,6 +142,10 @@ a:focus-visible {
   padding: 0 0.9rem;
 }
 
+.axis-mode-button {
+  font-weight: 400;
+}
+
 #root {
   min-height: 100vh;
 }
@@ -284,6 +288,7 @@ a:focus-visible {
   border-radius: 999px;
   background: var(--panel);
   overflow: hidden;
+  min-width: 8rem;
 }
 
 .segmented-toggle::before {
@@ -317,6 +322,10 @@ a:focus-visible {
 }
 
 .segment-button-active {
+  color: #18181b;
+}
+
+:root[data-theme="dark"] .segment-button-active {
   color: #18181b;
 }
 
@@ -476,11 +485,6 @@ a:focus-visible {
   color: currentColor;
 }
 
-.date-range-picker {
-  position: relative;
-  min-width: 0;
-}
-
 .date-range-summary {
   display: flex;
   align-items: center;
@@ -495,11 +499,8 @@ a:focus-visible {
   background: var(--surface);
   color: var(--text);
   cursor: pointer;
-  list-style: none;
-}
-
-.date-range-summary::-webkit-details-marker {
-  display: none;
+  font: inherit;
+  text-align: left;
 }
 
 .date-range-summary strong {
@@ -521,14 +522,12 @@ a:focus-visible {
 }
 
 .date-range-popover {
-  position: absolute;
   z-index: 20;
-  top: calc(100% + 0.45rem);
-  left: 0;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.5rem;
   width: min(30rem, calc(100vw - 3.2rem));
+  max-width: min(30rem, var(--popover-available-width, calc(100vw - 3.2rem)));
   padding: 0.5rem;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -702,6 +701,7 @@ a:focus-visible {
   display: flex;
   gap: 0.9rem;
   padding: 1.1rem;
+  container-type: inline-size;
 }
 
 .stat-icon {
@@ -722,13 +722,16 @@ a:focus-visible {
 .stat-value-row {
   display: flex;
   align-items: baseline;
+  min-width: 0;
   gap: 0.9rem;
   margin-top: 0.22rem;
 }
 
 .stat-value-row strong {
-  font-size: 2rem;
+  min-width: 0;
+  font-size: clamp(1.35rem, 12cqi, 2rem);
   line-height: 1;
+  white-space: nowrap;
 }
 
 .stat-delta {
@@ -766,8 +769,29 @@ a:focus-visible {
 
 .settings-grid {
   display: grid;
+  gap: 1.5rem;
+  width: 100%;
+}
+
+.settings-section {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.settings-section h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.settings-section-grid {
+  --settings-column-min: 400px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--settings-column-min)), 1fr));
   gap: 1rem;
-  max-width: 760px;
+}
+
+.setting-item {
+  min-width: 0;
 }
 
 .catalog-grid {
@@ -782,20 +806,94 @@ a:focus-visible {
   overflow: hidden;
 }
 
-.setting-card {
-  display: grid;
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 1rem;
 }
 
-.setting-card h2 {
-  margin: 0;
-  font-size: 1.02rem;
+.setting-copy {
+  min-width: 0;
 }
 
-.setting-card p {
-  margin: 0.3rem 0 0;
+.setting-label-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.setting-item h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.setting-help {
+  display: inline-grid;
+  place-items: center;
+  align-self: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--panel-soft);
   color: var(--text-muted);
-  line-height: 1.55;
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1;
+  cursor: help;
+}
+
+.setting-help:hover {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+.marker-symbol-trigger {
+  position: relative;
+  justify-content: center;
+  width: auto;
+  min-width: 5rem;
+  padding-right: 1.9rem;
+}
+
+.marker-symbol-trigger-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.marker-symbol-trigger > svg:last-child {
+  position: absolute;
+  right: 0.65rem;
+}
+
+.marker-symbol-item {
+  justify-content: center;
+}
+
+.marker-symbol-icon {
+  width: 1.15rem;
+  height: 1.15rem;
+  overflow: visible;
+}
+
+.marker-symbol-path {
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.marker-symbol-path-stroke {
+  fill: none;
+  stroke-width: 1.8;
 }
 
 .catalog-card {
@@ -1104,8 +1202,7 @@ a:focus-visible {
   gap: 1rem;
 }
 
-.trend-board-card,
-.trend-board-empty {
+.trend-board-card {
   min-width: 0;
 }
 
@@ -1115,22 +1212,16 @@ a:focus-visible {
   background: color-mix(in srgb, var(--panel) 50%, transparent);
 }
 
-.trend-board-empty {
+.trend-board-empty-state {
   display: grid;
-  gap: 0.45rem;
-}
-
-.trend-board-empty p {
-  margin: 0;
-  color: var(--text-muted);
+  place-items: center;
+  min-height: 100%;
+  padding: 1rem;
+  text-align: center;
 }
 
 .trend-board-plot-shell {
   height: 280px;
-}
-
-.benchmark-keys-panel {
-  padding: 1rem;
 }
 
 .benchmark-keys-plot-shell {
@@ -1153,7 +1244,7 @@ a:focus-visible {
   align-items: center;
   gap: 0.6rem;
   width: 100%;
-  min-height: 2.35rem;
+  min-height: 2.5rem;
   padding: 0 0.65rem;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
@@ -1162,10 +1253,6 @@ a:focus-visible {
   font: inherit;
   text-align: left;
   cursor: pointer;
-}
-
-.trend-board-topbar-actions .benchmark-key-filter-trigger-shell {
-  min-height: 2.5rem;
 }
 
 .benchmark-key-filter-trigger-shell:disabled {
@@ -1192,7 +1279,8 @@ a:focus-visible {
 }
 
 .benchmark-key-filter-input::placeholder {
-  color: var(--text-muted);
+  color: var(--text);
+  opacity: 1;
 }
 
 .benchmark-key-filter-input:read-only {
@@ -1321,11 +1409,6 @@ a:focus-visible {
 
 .plot-empty-state strong {
   font-size: 1rem;
-}
-
-.plot-empty-state p {
-  margin: 0.45rem 0 0;
-  color: var(--text-muted);
 }
 
 .panel-head p {
@@ -1527,6 +1610,7 @@ a:focus-visible {
   .date-range-popover {
     grid-template-columns: 1fr;
     width: min(100%, calc(100vw - 2rem));
+    max-width: min(100%, var(--popover-available-width, calc(100vw - 2rem)));
   }
 
   .stats-grid {

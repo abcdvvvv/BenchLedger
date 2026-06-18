@@ -1,5 +1,6 @@
 import { schemeTableau10 } from "d3-scale-chromatic";
-import { formatDate, formatMetricValue, parseDate, shortCommit } from "./format";
+import { formatDate, formatMetricValue, parseDate, shortCommit, unique } from "./format";
+import { Trend_Marker_Symbol_Options, type TrendMarkerSymbol } from "./trend-marker-symbols";
 import type {
   BenchmarkRow,
   BenchmarkRun,
@@ -11,9 +12,10 @@ import type {
 
 export type ThemeMode = "light" | "dark";
 export type TrendLineShape = "line" | "curve";
+export type TrendMarkerFillMode = "hollow" | "filled";
 export type TrendAxisMode = "commit" | "time";
 export type DisplayStrategy = "all" | "tagged-only" | "tagged-main";
-export type ActivePage = "overview" | "trend-board" | "benchmark-keys" | "chart-tuning" | "database-catalog";
+export type ActivePage = "overview" | "trend-board" | "benchmark-keys" | "settings" | "database-catalog";
 export type AppPhase = "booting" | "select-source" | "loading-database" | "ready";
 export type RunPairSortKey = "benchmark" | "focus" | "baseline" | "delta" | "unit";
 export type SortDirection = "asc" | "desc";
@@ -70,6 +72,8 @@ export type UISettings = {
   overviewSelectedBenchmarkIds: string[];
   trendBoardSelectedBenchmarkIds: string[];
   trendLineShape: TrendLineShape;
+  trendMarkerSymbol: TrendMarkerSymbol;
+  trendMarkerFillMode: TrendMarkerFillMode;
   trendAxisMode: TrendAxisMode;
   trendBoardColumns: number;
 };
@@ -104,6 +108,13 @@ export type PlotTheme = {
   deltaNeutral: string;
 };
 
+export type TrendDisplayUnitContext = {
+  unit: string;
+  scaleValue: (value: number) => number;
+  formatValue: (value: number, unit: string) => string;
+  formatMetricLabel: (label: string) => string;
+};
+
 export const UI_SETTINGS_STORAGE_KEY = "benchledger-ui-settings";
 export const Trend_Y_Padding_Ratio = 0.08;
 export const Trend_Board_Default_Columns = 3;
@@ -133,6 +144,29 @@ export const runPairTableColumns: { key: RunPairSortKey; label: string }[] = [
 ];
 
 const _Trend_Categorical_Colors = schemeTableau10;
+const _Trend_Time_Units = [
+  { unit: "ns", ns: 1 },
+  { unit: "μs", ns: 1_000 },
+  { unit: "us", ns: 1_000 },
+  { unit: "ms", ns: 1_000_000 },
+  { unit: "s", ns: 1_000_000_000 },
+  { unit: "min", ns: 60 * 1_000_000_000 },
+  { unit: "h", ns: 60 * 60 * 1_000_000_000 }
+] as const;
+const _Trend_Time_Display_Units = [
+  { unit: "ns", ns: 1 },
+  { unit: "μs", ns: 1_000 },
+  { unit: "ms", ns: 1_000_000 },
+  { unit: "s", ns: 1_000_000_000 },
+  { unit: "min", ns: 60 * 1_000_000_000 },
+  { unit: "h", ns: 60 * 60 * 1_000_000_000 }
+] as const;
+const _Trend_Default_Display_Context: TrendDisplayUnitContext = {
+  unit: "",
+  scaleValue: (value) => value,
+  formatValue: (value, unit) => formatMetricValue(value, unit),
+  formatMetricLabel: (label) => label || "Metric value"
+};
 
 function systemTheme(): ThemeMode {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
@@ -198,11 +232,76 @@ export function metricLabel(row: Pick<BenchmarkRow, "metric_name" | "statistic" 
   return `${row.metric_name} ${row.statistic} ${row.unit}`;
 }
 
+function _timeUnitNs(unit: string): number | null {
+  const match = _Trend_Time_Units.find((entry) => entry.unit === unit);
+  return match ? match.ns : null;
+}
+
+function _formatScaledNumber(value: number): string {
+  if (!Number.isFinite(value)) return "n/a";
+  if (Math.abs(value) >= 100) {
+    return value.toLocaleString(undefined, { maximumFractionDigits: 1 });
+  }
+  if (Math.abs(value) >= 10) {
+    return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  }
+  return value.toLocaleString(undefined, { maximumFractionDigits: 3 });
+}
+
+function _replaceMetricLabelUnit(label: string, sourceUnit: string, displayUnit: string): string {
+  if (!label) return "Metric value";
+  if (sourceUnit && label.endsWith(` ${sourceUnit}`)) {
+    return `${label.slice(0, -sourceUnit.length)}${displayUnit}`;
+  }
+  return label;
+}
+
+export function trendDisplayUnitContext(
+  rows: Array<Pick<BenchmarkRow, "value" | "unit">>
+): TrendDisplayUnitContext {
+  const sourceUnits = unique(
+    rows
+      .map((row) => row.unit)
+      .filter((unit): unit is string => typeof unit === "string" && unit.length > 0)
+  );
+  if (!sourceUnits.length) return _Trend_Default_Display_Context;
+
+  const sourceUnit = sourceUnits[0];
+  const sourceUnitNs = _timeUnitNs(sourceUnit);
+  if (sourceUnits.length !== 1 || sourceUnitNs === null) {
+    return {
+      unit: sourceUnit,
+      scaleValue: (value) => value,
+      formatValue: (value, unit) => formatMetricValue(value, unit),
+      formatMetricLabel: (label) => label || "Metric value"
+    };
+  }
+
+  const maxNs = rows.reduce((maxValue, row) => {
+    if (!Number.isFinite(row.value)) return maxValue;
+    return Math.max(maxValue, Math.abs(row.value) * sourceUnitNs);
+  }, 0);
+  const displayUnit = _Trend_Time_Display_Units.reduce((currentUnit, candidateUnit) => {
+    if (maxNs / candidateUnit.ns >= 1) return candidateUnit;
+    return currentUnit;
+  }, _Trend_Time_Display_Units[0]);
+
+  return {
+    unit: displayUnit.unit,
+    scaleValue: (value) => value * sourceUnitNs / displayUnit.ns,
+    formatValue: (value) => `${_formatScaledNumber(value * sourceUnitNs / displayUnit.ns)} ${displayUnit.unit}`,
+    formatMetricLabel: (label) => _replaceMetricLabelUnit(label, sourceUnit, displayUnit.unit)
+  };
+}
+
 export function buildTrendTrace(
   rows: TrendPlotRow[],
   options: {
     axisMode: TrendAxisMode;
     lineShape: TrendLineShape;
+    markerSymbol: TrendMarkerSymbol;
+    markerFillMode: TrendMarkerFillMode;
+    displayUnitContext: TrendDisplayUnitContext;
     color: string;
     label: string;
     plotTheme: PlotTheme;
@@ -217,6 +316,9 @@ export function buildTrendTrace(
   const {
     axisMode,
     lineShape,
+    markerSymbol,
+    markerFillMode,
+    displayUnitContext,
     color,
     label,
     plotTheme,
@@ -227,8 +329,8 @@ export function buildTrendTrace(
     fillGradientScale
   } = options;
   const x = rows.map((row) => axisMode === "commit" ? row.run_axis_label : row.code_date);
-  const y = rows.map((row) => row.value);
-  const unit = rows[0]?.unit ?? "";
+  const y = rows.map((row) => displayUnitContext.scaleValue(row.value));
+  const unit = displayUnitContext.unit || (rows[0]?.unit ?? "");
   const gradientStart = colorWithAlpha(color, 0);
   const gradientEnd = colorWithAlpha(color, theme === "dark" ? 0.2 : 0.2);
   const colorscale = fillGradientScale ?? [
@@ -242,7 +344,7 @@ export function buildTrendTrace(
       type: "scatter",
       mode: "lines",
       x,
-      y: rows.map(() => yMin - yPadding),
+      y: rows.map(() => displayUnitContext.scaleValue(yMin - yPadding)),
       line: { color: "rgba(0, 0, 0, 0)", width: 0 },
       hoverinfo: "skip",
       showlegend: false
@@ -253,7 +355,11 @@ export function buildTrendTrace(
       name: label,
       x,
       y,
-      customdata: rows.map((row) => [row.code_date, row.measured_at, formatMetricValue(row.value, row.unit)]),
+      customdata: rows.map((row) => [
+        row.code_date,
+        row.measured_at,
+        displayUnitContext.formatValue(row.value, row.unit)
+      ]),
       line: {
         color,
         width: 2.5,
@@ -262,7 +368,8 @@ export function buildTrendTrace(
       },
       marker: {
         size: 8,
-        color: plotTheme.plot,
+        color: markerFillMode === "filled" ? color : plotTheme.plot,
+        symbol: markerSymbol,
         line: { color, width: 2.5 }
       },
       fill: "tonexty",
@@ -300,6 +407,8 @@ export function readUISettings(): UISettings {
     overviewSelectedBenchmarkIds: [],
     trendBoardSelectedBenchmarkIds: [],
     trendLineShape: "curve",
+    trendMarkerSymbol: "circle",
+    trendMarkerFillMode: "hollow",
     trendAxisMode: "commit",
     trendBoardColumns: Trend_Board_Default_Columns
   };
@@ -320,7 +429,7 @@ export function readUISettings(): UISettings {
         parsedSettings.activePage === "overview" ||
         parsedSettings.activePage === "trend-board" ||
         parsedSettings.activePage === "benchmark-keys" ||
-        parsedSettings.activePage === "chart-tuning" ||
+        parsedSettings.activePage === "settings" ||
         parsedSettings.activePage === "database-catalog"
           ? parsedSettings.activePage
           : defaults.activePage,
@@ -358,6 +467,14 @@ export function readUISettings(): UISettings {
         parsedSettings.trendLineShape === "line" || parsedSettings.trendLineShape === "curve"
           ? parsedSettings.trendLineShape
           : defaults.trendLineShape,
+      trendMarkerSymbol:
+        Trend_Marker_Symbol_Options.some((option) => option.value === parsedSettings.trendMarkerSymbol)
+          ? parsedSettings.trendMarkerSymbol as TrendMarkerSymbol
+          : defaults.trendMarkerSymbol,
+      trendMarkerFillMode:
+        parsedSettings.trendMarkerFillMode === "hollow" || parsedSettings.trendMarkerFillMode === "filled"
+          ? parsedSettings.trendMarkerFillMode
+          : defaults.trendMarkerFillMode,
       trendAxisMode:
         parsedSettings.trendAxisMode === "commit" || parsedSettings.trendAxisMode === "time"
           ? parsedSettings.trendAxisMode

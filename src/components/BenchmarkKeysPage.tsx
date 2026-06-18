@@ -136,7 +136,7 @@ export function BenchmarkKeysPage(props: BenchmarkKeysPageProps) {
         </div>
         <p>Explore the benchmark key hierarchy as an icicle chart built from the loaded dataset.</p>
       </header>
-      <section className="surface-card panel benchmark-keys-panel">
+      <section>
         {hasKeys ? (
           <div className="plot-shell benchmark-keys-plot-shell">
             <Plot
@@ -161,7 +161,7 @@ export function BenchmarkKeysPage(props: BenchmarkKeysPageProps) {
               }]}
               layout={{
                 autosize: true,
-                margin: { t: 10, r: 10, b: 10, l: 10 },
+                margin: { t: 0, r: 0, b: 0, l: 0 },
                 paper_bgcolor: plotTheme.paper,
                 plot_bgcolor: plotTheme.plot,
                 font: { color: plotTheme.axis }

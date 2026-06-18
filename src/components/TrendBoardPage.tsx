@@ -1,4 +1,5 @@
 import { BenchmarkKeyCascadeFilter, type BenchmarkKeyFilterOption } from "./BenchmarkKeyCascadeFilter";
+import { TimeRangePopover } from "./TimeRangePopover";
 import { GroupCascadeMenu, type GroupMenuOption } from "./GroupCascadeMenu";
 import Plot from "./Plot";
 import {
@@ -6,17 +7,16 @@ import {
   Trend_Board_Min_Columns,
   Trend_Board_Plot_Height,
   clampTrendBoardColumns,
-  openNativeDatePicker,
   type DisplayStrategy,
   type PlotTheme,
   type TrendAxisMode
 } from "../lib/dashboard";
-import type { RefObject } from "react";
 
 export type TrendBoardCard = {
   benchmarkId: string;
   label: string;
   path: string[];
+  metricLabel: string;
   traces: Array<Record<string, unknown>>;
 };
 
@@ -40,8 +40,6 @@ type TrendBoardPageProps = {
   branch: string;
   branchOptions: string[];
   onBranchChange: (branch: string) => void;
-  timeRangePickerRef: RefObject<HTMLDetailsElement | null>;
-  timeStartInputRef: RefObject<HTMLInputElement | null>;
   timeRangeLabel: string;
   timeStart: string;
   timeEnd: string;
@@ -80,8 +78,6 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
     branch,
     branchOptions,
     onBranchChange,
-    timeRangePickerRef,
-    timeStartInputRef,
     timeRangeLabel,
     timeStart,
     timeEnd,
@@ -133,7 +129,7 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
             </label>
             <button
               type="button"
-              className="button button-secondary button-compact topbar-axis-button"
+              className="button button-secondary button-compact topbar-axis-button axis-mode-button"
               onClick={onToggleTrendAxisMode}
             >
               X-Axis: {trendAxisMode === "commit" ? "Commit" : "Time"}
@@ -174,44 +170,16 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
           </label>
           <div className="field time-range-field">
             <span className="field-label">Time Range</span>
-            <details className="date-range-picker" ref={timeRangePickerRef}>
-              <summary
-                className={`date-range-summary${hasDataset ? "" : " date-range-summary-disabled"}`}
-                onClick={(event) => {
-                  if (!hasDataset) event.preventDefault();
-                  const picker = event.currentTarget.parentElement as HTMLDetailsElement | null;
-                  if (hasDataset && !picker?.open) {
-                    window.requestAnimationFrame(() => openNativeDatePicker(timeStartInputRef.current));
-                  }
-                }}
-              >
-                <strong>{timeRangeLabel}</strong>
-                <em aria-hidden="true">▾</em>
-              </summary>
-              <div className="date-range-popover">
-                <label className="date-range-input">
-                  <span className="field-label">Start</span>
-                  <input
-                    ref={timeStartInputRef}
-                    type="date"
-                    value={timeStart}
-                    min={datasetTimeStart}
-                    max={timeEnd || datasetTimeEnd}
-                    onChange={(event) => onTimeStartChange(event.target.value)}
-                  />
-                </label>
-                <label className="date-range-input">
-                  <span className="field-label">End</span>
-                  <input
-                    type="date"
-                    value={timeEnd}
-                    min={timeStart || datasetTimeStart}
-                    max={datasetTimeEnd}
-                    onChange={(event) => onTimeEndChange(event.target.value)}
-                  />
-                </label>
-              </div>
-            </details>
+            <TimeRangePopover
+              disabled={!hasDataset}
+              label={timeRangeLabel}
+              timeStart={timeStart}
+              timeEnd={timeEnd}
+              datasetTimeStart={datasetTimeStart}
+              datasetTimeEnd={datasetTimeEnd}
+              onTimeStartChange={onTimeStartChange}
+              onTimeEndChange={onTimeEndChange}
+            />
           </div>
           <label className="field filter-strategy-field">
             <span className="field-label">Display Strategy</span>
@@ -227,50 +195,56 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
           </label>
         </div>
       </section>
-      <section
-        className="trend-board-grid"
-        style={{ gridTemplateColumns: `repeat(${trendBoardColumns}, minmax(0, 1fr))` }}
-      >
-        {trendBoardCards.length ? trendBoardCards.map((card) => (
-          <article className="surface-card trend-board-panel trend-board-card" key={card.benchmarkId}>
-            <div className="panel-head">
-              <div className="panel-title-stack">
-                <h2>{card.label}</h2>
-                <p>{card.path[card.path.length - 1] ?? card.label}</p>
+      {trendBoardCards.length ? (
+        <section
+          className="trend-board-grid"
+          style={{ gridTemplateColumns: `repeat(${trendBoardColumns}, minmax(0, 1fr))` }}
+        >
+          {trendBoardCards.map((card) => (
+            <article className="surface-card trend-board-panel trend-board-card" key={card.benchmarkId}>
+              <div className="panel-head">
+                <div className="panel-title-stack">
+                  <h2>{card.label}</h2>
+                  <p>{card.path[card.path.length - 1] ?? card.label}</p>
+                </div>
               </div>
-            </div>
-            <div className="plot-shell trend-board-plot-shell" style={{ height: `${Trend_Board_Plot_Height}px` }}>
-              <Plot
-                useResizeHandler
-                style={{ width: "100%", height: "100%" }}
-                data={card.traces}
-                layout={{
-                  autosize: true,
-                  margin: trendPlotMargin,
-                  paper_bgcolor: plotTheme.paper,
-                  plot_bgcolor: plotTheme.plot,
-                  font: { color: plotTheme.axis },
-                  xaxis: { showgrid: false, color: plotTheme.axis, tickfont: { size: 14 } },
-                  yaxis: {
-                    title: { text: selectedMetricLabel || "Metric value" },
-                    gridcolor: plotTheme.grid,
-                    zeroline: false,
-                    color: plotTheme.axis,
-                    tickfont: { size: 14 }
-                  },
-                  showlegend: false
-                }}
-                config={{ displayModeBar: false, responsive: true }}
-              />
-            </div>
-          </article>
-        )) : (
-          <article className="surface-card trend-board-panel trend-board-empty">
-            <strong>No benchmark key selected</strong>
-            <p>Choose at least one benchmark key to render independent trend charts.</p>
-          </article>
-        )}
-      </section>
+              <div className="plot-shell trend-board-plot-shell" style={{ height: `${Trend_Board_Plot_Height}px` }}>
+                <Plot
+                  useResizeHandler
+                  style={{ width: "100%", height: "100%" }}
+                  data={card.traces}
+                  layout={{
+                    autosize: true,
+                    margin: trendPlotMargin,
+                    paper_bgcolor: plotTheme.paper,
+                    plot_bgcolor: plotTheme.plot,
+                    font: { color: plotTheme.axis },
+                    xaxis: { showgrid: false, color: plotTheme.axis, tickfont: { size: 14 } },
+                    yaxis: {
+                      title: { text: card.metricLabel || selectedMetricLabel || "Metric value" },
+                      gridcolor: plotTheme.grid,
+                      zeroline: false,
+                      color: plotTheme.axis,
+                      tickfont: { size: 14 }
+                    },
+                    modebar: {
+                      bgcolor: "rgba(0, 0, 0, 0)",
+                      color: plotTheme.axis,
+                      activecolor: plotTheme.line
+                    },
+                    showlegend: false
+                  }}
+                  config={{ displayModeBar: "hover", responsive: true }}
+                />
+              </div>
+            </article>
+          ))}
+        </section>
+      ) : (
+        <section className="trend-board-empty-state">
+          <strong>No benchmark key selected</strong>
+        </section>
+      )}
     </>
   );
 }

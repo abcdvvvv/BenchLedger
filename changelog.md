@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Improved Time Range popovers in both Dashboard and Trend Board so they now stay within the viewport near the right edge instead of overflowing off-screen.
+- Refined empty states for Benchmark Trend and Trend Board with shorter copy, cleaner centered presentation, and more consistent no-selection behavior.
+- Updated benchmark-key pickers so the closed control reads more naturally, switches to a search-oriented placeholder when opened, and better matches the rest of the control styling.
+- Smoothed out topbar control styling and KPI card typography, including more consistent X-Axis button text weight and responsive metric-value sizing to reduce unwanted line wrapping.
+
 ## [0.3.3] - 2026-06-18
 
 ### Changed

@@ -34,8 +34,8 @@ const navigationItems: Array<{ page: ActivePage; label: string }> = [
   { page: "overview", label: "Dashboard" },
   { page: "trend-board", label: "Trend Board" },
   { page: "benchmark-keys", label: "Benchmark Keys" },
-  { page: "chart-tuning", label: "Chart Tuning" },
-  { page: "database-catalog", label: "Databases" }
+  { page: "database-catalog", label: "Databases" },
+  { page: "settings", label: "Settings" }
 ];
 
 function resolveLogoUrl(value: string): string | null {
