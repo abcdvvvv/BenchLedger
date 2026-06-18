@@ -7,9 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-06-18
+
 ### Changed
 
 - BenchLedger benchmark databases now refresh project metadata like names, links, and logos on every run while preserving the original `created_at` timestamp.
+- Reworked the dashboard focus and baseline run selectors into scrollable Ariakit menus and added an `All machines` default filter option for both dashboard views.
+- Refined Trend Board presentation with split path titles, transparent Plotly backgrounds, dedicated card spacing controls, and more consistent topbar control styling.
 
 ## [0.3.2] - 2026-06-17
 
@@ -39,7 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial usable release of BenchLedger.
 
-[Unreleased]: https://github.com/abcdvvvv/BenchLedger/compare/v0.3.3...HEAD
+[Unreleased]: https://github.com/abcdvvvv/BenchLedger/compare/v0.3.4...HEAD
 [0.3.3]: https://github.com/abcdvvvv/BenchLedger/releases/tag/v0.3.3
 [0.3.2]: https://github.com/abcdvvvv/BenchLedger/releases/tag/v0.3.2
 [0.3.1]: https://github.com/abcdvvvv/BenchLedger/releases/tag/v0.3.1

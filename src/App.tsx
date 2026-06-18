@@ -282,13 +282,15 @@ function App() {
 
   const allRuns = useMemo(() => buildRuns(rows), [rows]);
   const latestDatabaseRun = allRuns[0] ?? null;
-  const machineOptions = useMemo(() => unique(allRuns.map((run) => run.machine_id)).sort(), [allRuns]);
+  const machineOptions = useMemo(() => ["all", ...unique(allRuns.map((run) => run.machine_id)).sort()], [allRuns]);
   const metricOptions = useMemo(() => {
-    const metricRows = machine ? rows.filter((row) => row.machine_id === machine) : rows;
+    const metricRows = machine && machine !== "all" ? rows.filter((row) => row.machine_id === machine) : rows;
     return unique(metricRows.map((row) => metricLabel(row))).sort();
   }, [machine, rows]);
   const trendBoardMetricOptions = useMemo(() => {
-    const metricRows = trendBoardMachine ? rows.filter((row) => row.machine_id === trendBoardMachine) : rows;
+    const metricRows = trendBoardMachine && trendBoardMachine !== "all"
+      ? rows.filter((row) => row.machine_id === trendBoardMachine)
+      : rows;
     return unique(metricRows.map((row) => metricLabel(row))).sort();
   }, [rows, trendBoardMachine]);
   const branchOptions = useMemo(() => ["all", ...unique(rows.map((row) => row.branch).filter(Boolean)).sort()], [rows]);
@@ -309,8 +311,7 @@ function App() {
   }, "")), [rows]);
 
   useEffect(() => {
-    if (!machineOptions.length) return;
-    setMachine((current) => (current && machineOptions.includes(current) ? current : machineOptions[0]));
+    setMachine((current) => (current && machineOptions.includes(current) ? current : "all"));
   }, [machineOptions]);
 
   useEffect(() => {
@@ -322,8 +323,7 @@ function App() {
   }, [metricOptions]);
 
   useEffect(() => {
-    if (!machineOptions.length) return;
-    setTrendBoardMachine((current) => (current && machineOptions.includes(current) ? current : machineOptions[0]));
+    setTrendBoardMachine((current) => (current && machineOptions.includes(current) ? current : "all"));
   }, [machineOptions]);
 
   useEffect(() => {
@@ -345,7 +345,8 @@ function App() {
   }, [trendBoardBranchOptions]);
 
   const filteredRows = useMemo(() => rows.filter((row) => {
-    if (row.machine_id !== machine || metricLabel(row) !== metricKind) return false;
+    if (machine !== "all" && row.machine_id !== machine) return false;
+    if (metricLabel(row) !== metricKind) return false;
     if (branch !== "all" && row.branch !== branch) return false;
     if (!rowMatchesDisplayStrategy(row, displayStrategy)) return false;
     const rowDate = parseDate(row.code_date)?.valueOf() ?? null;
@@ -367,7 +368,8 @@ function App() {
     return Array.from(optionsByValue.values()).sort((left, right) => comparePath(left.path, right.path));
   }, [filteredRows]);
   const trendBoardFilteredRows = useMemo(() => rows.filter((row) => {
-    if (row.machine_id !== trendBoardMachine || metricLabel(row) !== trendBoardMetricKind) return false;
+    if (trendBoardMachine !== "all" && row.machine_id !== trendBoardMachine) return false;
+    if (metricLabel(row) !== trendBoardMetricKind) return false;
     if (trendBoardBranch !== "all" && row.branch !== trendBoardBranch) return false;
     if (!rowMatchesDisplayStrategy(row, trendBoardDisplayStrategy)) return false;
     const rowDate = parseDate(row.code_date)?.valueOf() ?? null;
@@ -652,8 +654,8 @@ function App() {
   const plotTheme = useMemo<PlotTheme>(() => {
     if (theme === "dark") {
       return {
-        paper: "#1F1F23",
-        plot: "#1F1F23",
+        paper: "transparent",
+        plot: "transparent",
         grid: "#2F2F33",
         axis: "#A8A29E",
         zero: "#44403C",
@@ -669,8 +671,8 @@ function App() {
       };
     }
     return {
-      paper: "#FFFFFF",
-      plot: "#FFFFFF",
+      paper: "transparent",
+      plot: "transparent",
       grid: "#E7E5E4",
       axis: "#78716C",
       zero: "#D6D3D1",
@@ -795,7 +797,7 @@ function App() {
     () => trendBoardBenchmarkOptions.flatMap((option) => trendBoardRowsByBenchmark.get(option.value) ?? []),
     [trendBoardBenchmarkOptions, trendBoardRowsByBenchmark]
   );
-  const trendBoardPlotMargin = trendBoardRows.length ? { t: 10, r: 16, b: 40, l: 60 } : { t: 10, r: 16, b: 40, l: 20 };
+  const trendBoardPlotMargin = trendBoardRows.length ? { t: 2, r: 12, b: 50, l: 52 } : { t: 2, r: 12, b: 50, l: 20 };
   const trendBoardTimeRangeLabel = trendBoardTimeStart || trendBoardTimeEnd
     ? `${formatDateRangePart(trendBoardTimeStart, "Any start")} - ${formatDateRangePart(trendBoardTimeEnd, "Any end")}`
     : "All time";
@@ -806,7 +808,8 @@ function App() {
       if (!cardRows.length) return [];
       const color = colorForBenchmark(index);
       const option = trendBoardBenchmarkOptions.find((entry) => entry.value === benchmarkKey);
-      const label = option?.label ?? benchmarkKey;
+      const path = option?.path?.length ? option.path : [option?.label ?? benchmarkKey];
+      const label = path.length > 1 ? path.slice(0, -1).join(" | ") : path[0] ?? benchmarkKey;
       const yValues = cardRows.map((row) => row.value);
       const yMin = Math.min(...yValues);
       const yMax = Math.max(...yValues);
@@ -817,7 +820,7 @@ function App() {
       return [{
         benchmarkId: benchmarkKey,
         label,
-        path: option?.path ?? [label],
+        path,
         traces: buildTrendTrace(cardRows, {
           axisMode: trendAxisMode,
           lineShape: trendLineShape,

@@ -146,8 +146,8 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
         <div className="filter-grid">
           <label className="field">
             <span className="field-label">Machine</span>
-            <select value={machine} onChange={(event) => onMachineChange(event.target.value)} disabled={!machineOptions.length}>
-              {machineOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+            <select value={machine} onChange={(event) => onMachineChange(event.target.value)} disabled={!hasDataset}>
+              {machineOptions.map((option) => <option key={option} value={option}>{option === "all" ? "All machines" : option}</option>)}
             </select>
           </label>
           <label className="field">
@@ -232,11 +232,11 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
         style={{ gridTemplateColumns: `repeat(${trendBoardColumns}, minmax(0, 1fr))` }}
       >
         {trendBoardCards.length ? trendBoardCards.map((card) => (
-          <article className="surface-card panel trend-board-card" key={card.benchmarkId}>
+          <article className="surface-card trend-board-panel trend-board-card" key={card.benchmarkId}>
             <div className="panel-head">
-              <div>
+              <div className="panel-title-stack">
                 <h2>{card.label}</h2>
-                <p>{card.path.join(" / ")}</p>
+                <p>{card.path[card.path.length - 1] ?? card.label}</p>
               </div>
             </div>
             <div className="plot-shell trend-board-plot-shell" style={{ height: `${Trend_Board_Plot_Height}px` }}>
@@ -265,7 +265,7 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
             </div>
           </article>
         )) : (
-          <article className="surface-card panel trend-board-empty">
+          <article className="surface-card trend-board-panel trend-board-empty">
             <strong>No benchmark key selected</strong>
             <p>Choose at least one benchmark key to render independent trend charts.</p>
           </article>

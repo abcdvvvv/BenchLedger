@@ -34,7 +34,7 @@
   color-scheme: dark;
   --bg: #09090b;
   --surface: #18181b;
-  --panel: #1f1f23;
+  --panel: #1a1a1e;
   --panel-soft: #27272a;
   --panel-raised: #303034;
   --text: #f5f5f4;
@@ -72,7 +72,8 @@ a {
 }
 
 button,
-select {
+select,
+input {
   font: inherit;
 }
 
@@ -359,6 +360,10 @@ a:focus-visible {
   color: var(--text);
 }
 
+.topbar-floating-field input[type="number"] {
+  text-align: center;
+}
+
 .filter-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
@@ -620,8 +625,8 @@ a:focus-visible {
 .main {
   display: grid;
   align-content: start;
-  gap: 1.2rem;
-  padding: 1.6rem;
+  gap: 1.1rem;
+  padding: 1.4rem;
 }
 
 .topbar {
@@ -932,17 +937,18 @@ a:focus-visible {
   align-items: start;
   justify-content: space-between;
   gap: 1rem;
-  margin-bottom: 0.85rem;
+  margin-bottom: 0.5rem;
 }
 
 .panel-head h2 {
-  margin: 0;
+  margin: 0 0 0.15em 0;
   font-size: 1.02rem;
+  line-height: 1;
 }
 
 .panel-title-stack {
   display: grid;
-  gap: 0.45rem;
+  gap: 0rem;
   min-width: 0;
 }
 
@@ -983,8 +989,33 @@ a:focus-visible {
   width: auto;
 }
 
-.dashboard-run-field select {
+.dashboard-run-field .group-cascade-trigger {
   min-width: 15rem;
+}
+
+.dashboard-run-field .group-cascade-trigger-label {
+  color: var(--text);
+}
+
+.run-select-menu {
+  max-height: 30rem;
+  overflow-y: auto;
+}
+
+.run-select-item {
+  justify-content: flex-start;
+}
+
+.run-select-item-selected {
+  font-weight: 600;
+}
+
+.run-select-item-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  flex: 0 0 auto;
 }
 
 .page-topbar {
@@ -1076,6 +1107,12 @@ a:focus-visible {
 .trend-board-card,
 .trend-board-empty {
   min-width: 0;
+}
+
+.trend-board-panel {
+  padding: 0.6rem 0.6rem 0.0rem 0.6rem;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--panel) 50%, transparent);
 }
 
 .trend-board-empty {
@@ -1292,10 +1329,10 @@ a:focus-visible {
 }
 
 .panel-head p {
-  margin: 0.3rem 0 0;
+  margin: 0.3rem 0 0.1rem 0;
   color: var(--text-muted);
   font-size: 0.9rem;
-  line-height: 1.5;
+  line-height: 1;
 }
 
 .plot-shell {

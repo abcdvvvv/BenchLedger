@@ -1,8 +1,10 @@
 import type { RefObject } from "react";
 import type { IconType } from "react-icons";
+import { FiFolder } from "react-icons/fi";
 import { BenchmarkKeyCascadeFilter, type BenchmarkKeyFilterOption } from "./BenchmarkKeyCascadeFilter";
 import { GroupCascadeMenu, type GroupMenuOption } from "./GroupCascadeMenu";
 import Plot from "./Plot";
+import { RunSelectMenu } from "./RunSelectMenu";
 import {
   deltaColorKey,
   openNativeDatePicker,
@@ -16,7 +18,6 @@ import {
 } from "../lib/dashboard";
 import {
   formatDate,
-  formatDateOnly,
   formatMetricValue,
   metricDeltaClass,
   formatPercent,
@@ -154,19 +155,28 @@ export function OverviewPage(props: OverviewPageProps) {
             <h1>{siteTitle}</h1>
           </div>
           <div className="topbar-actions">
-            <label className="field topbar-floating-field dashboard-run-field">
+            <div className="field topbar-floating-field dashboard-run-field">
               <span className="field-label">Focus run</span>
-              <select value={focusRunId} onChange={(event) => onFocusRunChange(event.target.value)} disabled={!filteredRuns.length}>
-                {filteredRuns.map((run) => <option key={run.run_id} value={run.run_id} title={formatDate(run.measured_at)}>{runHeadline(run)} · {formatDateOnly(run.measured_at)}</option>)}
-              </select>
-            </label>
-            <label className="field topbar-floating-field dashboard-run-field">
+              <RunSelectMenu
+                disabled={!filteredRuns.length}
+                runs={filteredRuns}
+                selectedRunId={focusRunId}
+                onSelect={onFocusRunChange}
+              />
+            </div>
+            <div className="field topbar-floating-field dashboard-run-field">
               <span className="field-label">Baseline run</span>
-              <select value={baselineRunId} onChange={(event) => onBaselineRunChange(event.target.value)} disabled={!filteredRuns.length}>
-                {filteredRuns.map((run) => <option key={run.run_id} value={run.run_id} title={formatDate(run.measured_at)}>{runHeadline(run)} · {formatDateOnly(run.measured_at)}</option>)}
-              </select>
-            </label>
-            <button type="button" className="button button-secondary button-compact" onClick={onOpenLocalFilePicker}>Choose SQLite</button>
+              <RunSelectMenu
+                disabled={!filteredRuns.length}
+                runs={filteredRuns}
+                selectedRunId={baselineRunId}
+                onSelect={onBaselineRunChange}
+              />
+            </div>
+            <button type="button" className="button button-secondary button-compact" onClick={onOpenLocalFilePicker} style={{ gap: "0.4rem" }}>
+              <FiFolder aria-hidden="true" />
+              <span>SQLite</span>
+            </button>
             {downloadUrl ? (
               <a className="button button-secondary button-compact" href={downloadUrl} download={downloadLabel}>Download</a>
             ) : null}
@@ -187,8 +197,8 @@ export function OverviewPage(props: OverviewPageProps) {
         <div className="filter-grid">
           <label className="field">
             <span className="field-label">Machine</span>
-            <select value={machine} onChange={(event) => onMachineChange(event.target.value)} disabled={!machineOptions.length}>
-              {machineOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+            <select value={machine} onChange={(event) => onMachineChange(event.target.value)} disabled={!hasDataset}>
+              {machineOptions.map((option) => <option key={option} value={option}>{option === "all" ? "All machines" : option}</option>)}
             </select>
           </label>
           <label className="field">
