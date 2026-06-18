@@ -12,6 +12,7 @@ import { formatMetricValue, formatPercent, metricDeltaClass, parseDate, percenta
 import {
   loadBenchmarkRowsFromFile,
   loadBenchmarkRowsFromManifestDatabase,
+  loadBenchmarkRowsFromUrl,
   loadManifest
 } from "./lib/sqlite";
 import type {
@@ -229,6 +230,49 @@ function App() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!dataset?.source_url) return;
+    if (phase !== "ready") return;
+
+    const hostname = window.location.hostname;
+    const isLocalHost = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+    if (!isLocalHost) return;
+
+    let cancelled = false;
+
+    function datasetSignature(sourceDataset: LoadedBenchmarkDataset): string {
+      const lastRow = sourceDataset.rows[sourceDataset.rows.length - 1];
+      return [
+        sourceDataset.metadata.updated_at,
+        sourceDataset.rows.length,
+        lastRow?.run_id ?? "",
+        lastRow?.measured_at ?? "",
+        lastRow?.benchmark_id ?? "",
+        lastRow?.value ?? ""
+      ].join("|");
+    }
+
+    const refreshInterval = window.setInterval(() => {
+      void (async () => {
+        try {
+          const loadedDataset = await loadBenchmarkRowsFromUrl(dataset.source_url!, dataset.source_label);
+          if (cancelled) return;
+          if (datasetSignature(loadedDataset) === datasetSignature(dataset)) return;
+          setDataset(loadedDataset);
+          setRows(loadedDataset.rows);
+          setError("");
+        } catch (refreshError) {
+          if (!cancelled) console.warn("BenchLedger auto-refresh failed:", refreshError);
+        }
+      })();
+    }, 10000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(refreshInterval);
+    };
+  }, [dataset, phase]);
 
   async function selectManifestDatabase(
     database: BenchLedgerManifestDatabase,

@@ -85,7 +85,6 @@ export type BenchLedgerMetadata = {
   description: string;
   project_url: string;
   logo_url: string;
-  logo_url_light: string;
   logo_url_dark: string;
   created_at: string;
   updated_at: string;

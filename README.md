@@ -12,6 +12,38 @@ Store, query, and visualize benchmark history.
 
 It is designed for library performance tracking: run benchmarks elsewhere, write the results to SQLite, and use BenchLedger to inspect trends, run context, and benchmark deltas directly in the browser.
 
+See [changelog.md](./changelog.md) for release history.
+
+## Why BenchLedger
+
+Benchmark history dashboards already exist. Tools such as Conbench, Bencher,
+Airspeed Velocity, Horreum, and github-action-benchmark all cover parts of this
+space. BenchLedger's difference is not the general idea of storing benchmark
+history. The difference is that all data is stored and handled in open, portable formats.
+
+BenchLedger is built around a simple combination:
+
+- a static frontend artifact
+- a project-owned SQLite database
+- a language-agnostic schema and viewer
+
+That gives it a different role from platform-style systems:
+
+- It is not a benchmark runner. Benchmarks can be produced by Julia, Python,
+  Rust, C++, or any other language as long as they write the agreed schema.
+- It is not a hosted service. Projects keep their own benchmark data instead of
+  pushing it into a central backend.
+- It is not platform-bound. GitHub Pages is a convenient deployment target, but
+  the viewer itself is just static web output plus a SQLite file. You can run
+  benchmarks on your own machine, in any other CI system that can produce the same artifacts.
+- It is not ecosystem-specific. The same viewer can be reused across projects
+  and languages without rewriting the frontend.
+- It is embeddable. Package authors can ship the built frontend together with
+  their own benchmark database and immediately get a usable history dashboard.
+
+In short: BenchLedger is a schema-first, language-agnostic benchmark ledger
+that can be deployed as a static viewer with project-owned SQLite data.
+
 ## Example Projects
 
 - [ComponentLogging.jl](https://github.com/JuliaLogging/ComponentLogging.jl): [benchmark dashboard](https://julialogging.github.io/ComponentLogging.jl/benchmarks/)
@@ -43,257 +75,54 @@ Then edit:
 
 After that, commit the two files, push to your default branch, and let GitHub Actions generate and publish your benchmark database to `gh-pages`.
 
-## Development
+## Local Preview
+
+If your package already uses [`templates/Benchmarks.yml`](./templates/Benchmarks.yml) to
+build and publish BenchLedger into `gh-pages`, the easiest local setup is:
+
+1. Check out your package's `gh-pages` branch as a local git worktree.
+2. Serve the generated `benchmarks/` directory from that worktree with a local static server.
+3. Keep running `benchmark/runbench.jl` locally to update the same SQLite file that the static site is already serving.
 
 ```bash
-npm install
-npm run dev
+git worktree add ../yourpkg-gh-pages gh-pages
+cd ../yourpkg-gh-pages/benchmarks
+npx serve . # or python3 -m http.server 8000
 ```
 
-## Build
+Then, in a separate terminal from your package repository:
 
 ```bash
-npm run build
+BENCH_DB_PATH="$(pwd)/../yourpkg-gh-pages/benchmarks/data/benchledger.sqlite" julia --project=benchmark benchmark/runbench.jl
 ```
+
+In this setup, BenchLedger on `localhost` will automatically poll the current SQLite URL
+and refresh the UI when the database changes.
+
+If you instead load a database through `Choose SQLite`, the browser treats it as a one-off
+local file selection and automatic refresh is not available.
+
+## Backfill Old Versions
+
+Sometimes BenchLedger is added after a project already has released versions.
+In that case, the provided workflow can backfill historical releases by running
+the current benchmark harness against older tags and appending the results into
+the same SQLite database.
+
+To run a backfill:
+
+1. Open your repository on GitHub.
+2. Go to the `Actions` tab.
+3. Select the `Benchmarks` workflow.
+4. Click `Run workflow`.
+5. Set the `backfill` input to `true`.
+6. Start the workflow and wait for it to finish.
+
+The workflow will iterate through the repository's tags, benchmark each
+historical version, update the shared SQLite database, and publish the refreshed
+BenchLedger page back to `gh-pages`.
 
 ## License
 
 This repository is MIT-licensed by default.
 Files under [`templates/`](./templates) are separately marked as `MIT-0` with file-level SPDX headers so Julia users can copy them into their own packages with minimal friction.
-
-See [changelog.md](./changelog.md) for release history.
-
-## Release
-
-Versioned frontend distributions are published from Git tags. For a new release,
-commit the changes, create a `v*` tag, and push the tag:
-
-```bash
-git tag v0.3.2
-git push origin main
-git push origin v0.3.2
-```
-
-The release workflow builds the Vite app and uploads a static dist archive named
-`BenchLedger-0.3.2-dist.tar.gz` to the matching GitHub Release.
-
-### Recommended `benchledger.json`
-
-```json
-{
-  "manifest_version": 1,
-  "benchledger_web_version": "0.3.2",
-  "generated_at": "2026-06-15T06:30:00.000Z",
-  "site": {
-    "title": "BenchLedger",
-    "description": "Benchmark history dashboard"
-  },
-  "databases": [
-    {
-      "id": "core",
-      "name": "Core benchmarks",
-      "description": "Main benchmark suite",
-      "url": "./benchledger-data/core-a1b2c3.db",
-      "sha256": "a1b2c3...",
-      "size_bytes": 12345678,
-      "packed_at": "2026-06-15T06:30:00.000Z",
-      "schema_version": 3,
-      "metadata_preview": {
-        "name": "MyPkg",
-        "project_url": "https://example.com",
-        "logo_url": null,
-        "logo_url_light": null,
-        "logo_url_dark": null
-      }
-    }
-  ]
-}
-```
-
-Database metadata remains the source of truth. Manifest fields such as `name`,
-`description`, `schema_version`, and `metadata_preview` are preview/cache fields
-used before the SQLite file is downloaded. After opening a database, the viewer
-uses metadata stored in the SQLite file itself.
-
-## SQLite Metadata
-
-BenchLedger databases should include a key-value metadata table:
-
-```sql
-CREATE TABLE IF NOT EXISTS benchledger_metadata (
-  key TEXT PRIMARY KEY,
-  value TEXT NOT NULL
-);
-```
-
-The metadata key set is intentionally small and generic:
-
-```text
-schema_version
-name
-description
-project_url
-logo_url
-logo_url_light
-logo_url_dark
-created_at
-updated_at
-notes
-```
-
-These are the metadata keys used by the current BenchLedger schema.
-
-## SQLite Schema v3
-
-BenchLedger v3 separates benchmark execution metadata from benchmark result rows.
-
-```sql
-CREATE TABLE benchmark_runs (
-  run_id TEXT PRIMARY KEY,
-  code_state_id TEXT NOT NULL,
-  branch TEXT NOT NULL,
-  tag TEXT NOT NULL,
-  label TEXT NOT NULL,
-  "commit" TEXT NOT NULL,
-  code_date TEXT NOT NULL,
-  measured_at TEXT NOT NULL,
-  machine_id TEXT NOT NULL,
-  cpu_model TEXT NOT NULL,
-  cpu_threads INTEGER NOT NULL,
-  arch TEXT NOT NULL,
-  os TEXT NOT NULL,
-  julia_version TEXT NOT NULL,
-  is_dirty INTEGER NOT NULL,
-  notes TEXT NOT NULL
-);
-
-CREATE TABLE benchmark_results (
-  run_id TEXT NOT NULL,
-  benchmark_id TEXT NOT NULL,
-  benchmark_path TEXT NOT NULL,
-  benchmark_label TEXT NOT NULL,
-  metric_name TEXT NOT NULL,
-  statistic TEXT NOT NULL,
-  unit TEXT NOT NULL,
-  value REAL NOT NULL,
-  better TEXT NOT NULL,
-  PRIMARY KEY (run_id, benchmark_id, metric_name, statistic)
-);
-
-CREATE VIEW benchmark_results_latest AS
-SELECT
-  run_id,
-  branch,
-  tag,
-  code_state_id,
-  label,
-  "commit",
-  code_date,
-  measured_at,
-  machine_id,
-  cpu_model,
-  cpu_threads,
-  arch,
-  os,
-  julia_version,
-  is_dirty,
-  notes,
-  benchmark_path,
-  benchmark_id,
-  benchmark_label,
-  metric_name,
-  statistic,
-  unit,
-  value,
-  better
-FROM (
-  SELECT
-    runs.*,
-    results.benchmark_path,
-    results.benchmark_id,
-    results.benchmark_label,
-    results.metric_name,
-    results.statistic,
-    results.unit,
-    results.value,
-    results.better,
-    ROW_NUMBER() OVER (
-      PARTITION BY runs.code_state_id, runs.machine_id, results.benchmark_id, results.metric_name, results.statistic
-      ORDER BY runs.measured_at DESC, results.run_id DESC
-    ) AS rn
-  FROM benchmark_results AS results
-  JOIN benchmark_runs AS runs USING (run_id)
-)
-WHERE rn = 1;
-```
-
-The frontend currently reads `benchmark_results_latest` by default. Raw facts
-exist only once in `benchmark_runs` and `benchmark_results`, while the view
-provides the latest deduplicated row for each
-`(code_state_id, machine_id, benchmark_id, metric_name, statistic)` slice.
-
-## Backfill Old Versions
-
-Sometimes BenchLedger is added after a project already has released versions.
-In that case, old versions do not have BenchLedger scripts yet. The recommended
-approach is to run the current benchmark suite against each historical tag and
-write every result into the same SQLite database.
-
-The benchmark runner should support these environment variables:
-
-```text
-BENCH_TARGET_PATH  Package source tree to benchmark.
-BENCH_DB_PATH      SQLite database path to write.
-BENCH_DATE         Historical code timestamp for the version being measured.
-BENCH_NOTES        Per-run note.
-```
-
-Example backfill script:
-
-```bash
-REPO=/path/to/MyPackage
-WT=/tmp/mypackage-version-worktree
-HARNESS=/tmp/mypackage-current-benchmark
-DB="$REPO/benchmark/results.sqlite"
-
-rm -rf "$WT" "$HARNESS"
-rm -f "$DB" "$DB-wal" "$DB-shm"
-
-cp -a "$REPO/benchmark" "$HARNESS"
-git -C "$REPO" worktree add --detach "$WT" "$(git -C "$REPO" tag --sort=v:refname | head -n 1)"
-
-for tag in $(git -C "$REPO" tag --sort=v:refname); do
-  echo "Running current benchmark suite against $tag"
-  git -C "$WT" checkout --detach "$tag"
-
-  commit=$(git -C "$WT" rev-parse HEAD)
-  date=$(git -C "$WT" show -s --format=%cI HEAD)
-
-  GITHUB_REF_TYPE=tag \
-  GITHUB_REF_NAME="$tag" \
-  GITHUB_SHA="$commit" \
-  BENCH_DATE="$date" \
-  BENCH_TARGET_PATH="$WT" \
-  BENCH_DB_PATH="$DB" \
-  BENCH_NOTES="current benchmark suite against $tag" \
-  julia --project="$HARNESS" "$HARNESS/runbench.jl"
-done
-
-git -C "$REPO" worktree remove "$WT"
-rm -rf "$HARNESS"
-```
-
-This keeps the user's main checkout untouched. The temporary worktree supplies
-the historical package source, while `HARNESS` supplies the current benchmark
-runner and benchmark definitions. `BENCH_DATE` keeps trend charts ordered by the
-version history, while the runner records the actual execution time at insert
-time. That means the same historical tag can be measured multiple times without
-overwriting earlier runs.
-
-## Colors
-
-Graphite black #18181B  
-Amber          #F59E0B  
-Copper         #B45309  
-Sand           #FFFBEB  
-Stone gray     #78716C

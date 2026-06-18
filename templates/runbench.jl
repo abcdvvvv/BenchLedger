@@ -27,8 +27,7 @@ const Benchledger_Metadata_Defaults = (
     description="Benchmark history for bar.jl",
     project_url="https://...",
     logo_url="https://...",
-    logo_url_light="",
-    logo_url_dark="",
+    logo_url_dark="https://...",
     notes="",
 )
 # ⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃⌃
@@ -280,7 +279,6 @@ function make_metadata!(db, context)
         description=Benchledger_Metadata_Defaults.description,
         project_url=Benchledger_Metadata_Defaults.project_url,
         logo_url=Benchledger_Metadata_Defaults.logo_url,
-        logo_url_light=Benchledger_Metadata_Defaults.logo_url_light,
         logo_url_dark=Benchledger_Metadata_Defaults.logo_url_dark,
         updated_at=context.measured_at,
         notes=Benchledger_Metadata_Defaults.notes,

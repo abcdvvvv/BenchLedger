@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Added theme-aware custom project logos with `logo_url_light` and `logo_url_dark`, while keeping `logo_url` as the fallback.
+- Added theme-aware custom project logos with `logo_url` for light mode and `logo_url_dark` for dark mode.
 - Hardened the benchmark runner templates for mixed first-call and `BenchmarkGroup` result collection in external benchmark repositories.
 - Fixed SQLite metadata schema validation to avoid materializing `schema_version` as `missing` on repeated runs.
 
