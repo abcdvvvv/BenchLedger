@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Refined empty states for Benchmark Trend and Trend Board with shorter copy, cleaner centered presentation, and more consistent no-selection behavior.
 - Updated benchmark-key pickers so the closed control reads more naturally, switches to a search-oriented placeholder when opened, and better matches the rest of the control styling.
 - Smoothed out topbar control styling and KPI card typography, including more consistent X-Axis button text weight and responsive metric-value sizing to reduce unwanted line wrapping.
+- Improved trend-building performance on larger datasets, making Overview and Trend Board interactions more responsive when many runs are loaded.
+- Unified more of the shared filtering and benchmark-selection pipeline so Overview and Trend Board now behave more consistently across machine, branch, group, and time-range filters.
+- Reduced duplicated internal sorting and trend-building logic.
+- Added a small automated test layer for core data and dashboard helpers, plus a lightweight lint workflow to make future refactors safer.
 
 ## [0.3.3] - 2026-06-18
 

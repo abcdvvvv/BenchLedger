@@ -32,7 +32,7 @@ async function loadSqlJs() {
   return sqlPromise;
 }
 
-function normalizeBenchmarkPath(value: unknown): string[] {
+export function normalizeBenchmarkPath(value: unknown): string[] {
   if (typeof value !== "string" || !value) return [];
   let parsed: unknown;
   try {
@@ -91,7 +91,7 @@ function singleResultRows(result: QueryExecResult | undefined): Record<string, u
   });
 }
 
-function normalizeManifestDatabase(entry: Record<string, unknown>): BenchLedgerManifestDatabase | null {
+export function normalizeManifestDatabase(entry: Record<string, unknown>): BenchLedgerManifestDatabase | null {
   if (typeof entry.url !== "string" || !entry.url) return null;
   const id = typeof entry.id === "string" && entry.id ? entry.id : entry.url;
   return {
@@ -112,7 +112,7 @@ function isStringRecord(value: unknown): value is Record<string, string | null> 
   return Object.values(value).every((entry) => typeof entry === "string" || entry === null);
 }
 
-function normalizeManifest(json: unknown): BenchLedgerManifest | null {
+export function normalizeManifest(json: unknown): BenchLedgerManifest | null {
   if (!json || typeof json !== "object" || Array.isArray(json)) return null;
   const entry = json as Record<string, unknown>;
   if (!Array.isArray(entry.databases)) return null;
@@ -221,17 +221,7 @@ function selectMeasurementsQuery(db: Database): string {
   `;
 }
 
-function readMetadata(db: Database): BenchLedgerMetadata {
-  const raw: Record<string, string> = {};
-  if (relationExists(db, "benchledger_metadata")) {
-    const metadataResult = db.exec("SELECT key, value FROM benchledger_metadata")[0];
-    for (const row of singleResultRows(metadataResult)) {
-      const key = String(row.key ?? "");
-      if (!key) continue;
-      raw[key] = String(row.value ?? "");
-    }
-  }
-
+export function metadataFromRaw(raw: Record<string, string>): BenchLedgerMetadata {
   const schemaValue = raw.schema_version ?? "";
   const schemaVersion = schemaValue ? Number(schemaValue) : null;
   return {
@@ -248,7 +238,21 @@ function readMetadata(db: Database): BenchLedgerMetadata {
   };
 }
 
-function validateSchemaVersion(metadata: BenchLedgerMetadata) {
+function readMetadata(db: Database): BenchLedgerMetadata {
+  const raw: Record<string, string> = {};
+  if (relationExists(db, "benchledger_metadata")) {
+    const metadataResult = db.exec("SELECT key, value FROM benchledger_metadata")[0];
+    for (const row of singleResultRows(metadataResult)) {
+      const key = String(row.key ?? "");
+      if (!key) continue;
+      raw[key] = String(row.value ?? "");
+    }
+  }
+
+  return metadataFromRaw(raw);
+}
+
+export function validateSchemaVersion(metadata: BenchLedgerMetadata) {
   if (metadata.schema_version === null) return;
   if (_Compatible_Schema_Versions.has(metadata.schema_version)) return;
   throw new Error(`Unsupported BenchLedger schema version: ${metadata.schema_version}`);
@@ -273,7 +277,7 @@ async function loadDataset(bytes: Uint8Array, sourceLabel: string, sourceUrl: st
   }
 }
 
-function joinRelativeUrl(basePath: string, target: string): string {
+export function joinRelativeUrl(basePath: string, target: string): string {
   try {
     return new URL(target, basePath).toString();
   } catch {

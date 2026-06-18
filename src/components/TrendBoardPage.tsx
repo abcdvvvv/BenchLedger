@@ -21,78 +21,53 @@ export type TrendBoardCard = {
 };
 
 type TrendBoardPageProps = {
-  benchmarkOptions: BenchmarkKeyFilterOption[];
-  selectedBenchmarkIds: string[];
-  onSelectedBenchmarkIdsChange: (values: string[]) => void;
-  hasDataset: boolean;
-  machine: string;
-  machineOptions: string[];
-  onMachineChange: (machine: string) => void;
-  metricKind: string;
-  metricOptions: string[];
-  onMetricKindChange: (metricKind: string) => void;
-  displayStrategy: DisplayStrategy;
-  onDisplayStrategyChange: (strategy: DisplayStrategy) => void;
-  group: string;
-  groupOptions: GroupMenuOption[];
-  selectedGroupLabel: string;
-  onGroupChange: (group: string) => void;
-  branch: string;
-  branchOptions: string[];
-  onBranchChange: (branch: string) => void;
-  timeRangeLabel: string;
-  timeStart: string;
-  timeEnd: string;
-  datasetTimeStart: string;
-  datasetTimeEnd: string;
-  onTimeStartChange: (value: string) => void;
-  onTimeEndChange: (value: string) => void;
-  trendBoardColumns: number;
-  onTrendBoardColumnsChange: (value: number) => void;
-  selectedMetricLabel: string;
-  trendAxisMode: TrendAxisMode;
-  onToggleTrendAxisMode: () => void;
-  trendBoardCards: TrendBoardCard[];
-  trendPlotMargin: { t: number; r: number; b: number; l: number };
-  plotTheme: PlotTheme;
+  topbar: {
+    benchmarkOptions: BenchmarkKeyFilterOption[];
+    selectedBenchmarkIds: string[];
+    onSelectedBenchmarkIdsChange: (values: string[]) => void;
+    hasDataset: boolean;
+    trendBoardColumns: number;
+    onTrendBoardColumnsChange: (value: number) => void;
+    trendAxisMode: TrendAxisMode;
+    onToggleTrendAxisMode: () => void;
+  };
+  filters: {
+    machine: string;
+    machineOptions: string[];
+    onMachineChange: (machine: string) => void;
+    metricKind: string;
+    metricOptions: string[];
+    onMetricKindChange: (metricKind: string) => void;
+    displayStrategy: DisplayStrategy;
+    onDisplayStrategyChange: (strategy: DisplayStrategy) => void;
+    group: string;
+    groupOptions: GroupMenuOption[];
+    selectedGroupLabel: string;
+    onGroupChange: (group: string) => void;
+    branch: string;
+    branchOptions: string[];
+    onBranchChange: (branch: string) => void;
+    timeRangeLabel: string;
+    timeStart: string;
+    timeEnd: string;
+    datasetTimeStart: string;
+    datasetTimeEnd: string;
+    onTimeStartChange: (value: string) => void;
+    onTimeEndChange: (value: string) => void;
+  };
+  trend: {
+    selectedMetricLabel: string;
+    trendBoardCards: TrendBoardCard[];
+    trendPlotMargin: { t: number; r: number; b: number; l: number };
+    plotTheme: PlotTheme;
+  };
 };
 
 export function TrendBoardPage(props: TrendBoardPageProps) {
   const {
-    benchmarkOptions,
-    selectedBenchmarkIds,
-    onSelectedBenchmarkIdsChange,
-    hasDataset,
-    machine,
-    machineOptions,
-    onMachineChange,
-    metricKind,
-    metricOptions,
-    onMetricKindChange,
-    displayStrategy,
-    onDisplayStrategyChange,
-    group,
-    groupOptions,
-    selectedGroupLabel,
-    onGroupChange,
-    branch,
-    branchOptions,
-    onBranchChange,
-    timeRangeLabel,
-    timeStart,
-    timeEnd,
-    datasetTimeStart,
-    datasetTimeEnd,
-    onTimeStartChange,
-    onTimeEndChange,
-    trendBoardColumns,
-    onTrendBoardColumnsChange,
-    selectedMetricLabel,
-    trendAxisMode,
-    onToggleTrendAxisMode,
-    trendBoardCards,
-    trendPlotMargin,
-    plotTheme
+    topbar,
+    filters,
+    trend
   } = props;
 
   return (
@@ -106,10 +81,10 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
           <div className="topbar-actions page-topbar-actions">
             <div className="topbar-benchmark-field">
               <BenchmarkKeyCascadeFilter
-                options={benchmarkOptions}
-                selectedValues={selectedBenchmarkIds}
-                setSelectedValues={onSelectedBenchmarkIdsChange}
-                disabled={!hasDataset}
+                options={topbar.benchmarkOptions}
+                selectedValues={topbar.selectedBenchmarkIds}
+                setSelectedValues={topbar.onSelectedBenchmarkIdsChange}
+                disabled={!topbar.hasDataset}
                 stretchWidth
               />
             </div>
@@ -119,20 +94,20 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
                 type="number"
                 min={Trend_Board_Min_Columns}
                 max={Trend_Board_Max_Columns}
-                value={trendBoardColumns}
+                value={topbar.trendBoardColumns}
                 onChange={(event) => {
                   const nextValue = Number(event.target.value);
-                  onTrendBoardColumnsChange(clampTrendBoardColumns(nextValue));
+                  topbar.onTrendBoardColumnsChange(clampTrendBoardColumns(nextValue));
                 }}
-                disabled={!hasDataset}
+                disabled={!topbar.hasDataset}
               />
             </label>
             <button
               type="button"
               className="button button-secondary button-compact topbar-axis-button axis-mode-button"
-              onClick={onToggleTrendAxisMode}
+              onClick={topbar.onToggleTrendAxisMode}
             >
-              X-Axis: {trendAxisMode === "commit" ? "Commit" : "Time"}
+              X-Axis: {topbar.trendAxisMode === "commit" ? "Commit" : "Time"}
             </button>
           </div>
         </div>
@@ -142,51 +117,51 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
         <div className="filter-grid">
           <label className="field">
             <span className="field-label">Machine</span>
-            <select value={machine} onChange={(event) => onMachineChange(event.target.value)} disabled={!hasDataset}>
-              {machineOptions.map((option) => <option key={option} value={option}>{option === "all" ? "All machines" : option}</option>)}
+            <select value={filters.machine} onChange={(event) => filters.onMachineChange(event.target.value)} disabled={!topbar.hasDataset}>
+              {filters.machineOptions.map((option) => <option key={option} value={option}>{option === "all" ? "All machines" : option}</option>)}
             </select>
           </label>
           <label className="field">
             <span className="field-label">Metric</span>
-            <select value={metricKind} onChange={(event) => onMetricKindChange(event.target.value)} disabled={!metricOptions.length}>
-              {metricOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+            <select value={filters.metricKind} onChange={(event) => filters.onMetricKindChange(event.target.value)} disabled={!filters.metricOptions.length}>
+              {filters.metricOptions.map((option) => <option key={option} value={option}>{option}</option>)}
             </select>
           </label>
           <div className="field">
             <span className="field-label">Group</span>
             <GroupCascadeMenu
-              disabled={!hasDataset}
-              options={groupOptions}
-              selectedValue={group}
-              selectedLabel={selectedGroupLabel}
-              onSelect={onGroupChange}
+              disabled={!topbar.hasDataset}
+              options={filters.groupOptions}
+              selectedValue={filters.group}
+              selectedLabel={filters.selectedGroupLabel}
+              onSelect={filters.onGroupChange}
             />
           </div>
           <label className="field">
             <span className="field-label">Branch</span>
-            <select value={branch} onChange={(event) => onBranchChange(event.target.value)} disabled={!branchOptions.length}>
-              {branchOptions.map((option) => <option key={option} value={option}>{option === "all" ? "All branches" : option}</option>)}
+            <select value={filters.branch} onChange={(event) => filters.onBranchChange(event.target.value)} disabled={!filters.branchOptions.length}>
+              {filters.branchOptions.map((option) => <option key={option} value={option}>{option === "all" ? "All branches" : option}</option>)}
             </select>
           </label>
           <div className="field time-range-field">
             <span className="field-label">Time Range</span>
             <TimeRangePopover
-              disabled={!hasDataset}
-              label={timeRangeLabel}
-              timeStart={timeStart}
-              timeEnd={timeEnd}
-              datasetTimeStart={datasetTimeStart}
-              datasetTimeEnd={datasetTimeEnd}
-              onTimeStartChange={onTimeStartChange}
-              onTimeEndChange={onTimeEndChange}
+              disabled={!topbar.hasDataset}
+              label={filters.timeRangeLabel}
+              timeStart={filters.timeStart}
+              timeEnd={filters.timeEnd}
+              datasetTimeStart={filters.datasetTimeStart}
+              datasetTimeEnd={filters.datasetTimeEnd}
+              onTimeStartChange={filters.onTimeStartChange}
+              onTimeEndChange={filters.onTimeEndChange}
             />
           </div>
           <label className="field filter-strategy-field">
             <span className="field-label">Display Strategy</span>
             <select
-              value={displayStrategy}
-              onChange={(event) => onDisplayStrategyChange(event.target.value as DisplayStrategy)}
-              disabled={!hasDataset}
+              value={filters.displayStrategy}
+              onChange={(event) => filters.onDisplayStrategyChange(event.target.value as DisplayStrategy)}
+              disabled={!topbar.hasDataset}
             >
               <option value="all">All records</option>
               <option value="tagged-only">Tagged only</option>
@@ -195,12 +170,12 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
           </label>
         </div>
       </section>
-      {trendBoardCards.length ? (
+      {trend.trendBoardCards.length ? (
         <section
           className="trend-board-grid"
-          style={{ gridTemplateColumns: `repeat(${trendBoardColumns}, minmax(0, 1fr))` }}
+          style={{ gridTemplateColumns: `repeat(${topbar.trendBoardColumns}, minmax(0, 1fr))` }}
         >
-          {trendBoardCards.map((card) => (
+          {trend.trendBoardCards.map((card) => (
             <article className="surface-card trend-board-panel trend-board-card" key={card.benchmarkId}>
               <div className="panel-head">
                 <div className="panel-title-stack">
@@ -215,22 +190,22 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
                   data={card.traces}
                   layout={{
                     autosize: true,
-                    margin: trendPlotMargin,
-                    paper_bgcolor: plotTheme.paper,
-                    plot_bgcolor: plotTheme.plot,
-                    font: { color: plotTheme.axis },
-                    xaxis: { showgrid: false, color: plotTheme.axis, tickfont: { size: 14 } },
+                    margin: trend.trendPlotMargin,
+                    paper_bgcolor: trend.plotTheme.paper,
+                    plot_bgcolor: trend.plotTheme.plot,
+                    font: { color: trend.plotTheme.axis },
+                    xaxis: { showgrid: false, color: trend.plotTheme.axis, tickfont: { size: 14 } },
                     yaxis: {
-                      title: { text: card.metricLabel || selectedMetricLabel || "Metric value" },
-                      gridcolor: plotTheme.grid,
+                      title: { text: card.metricLabel || trend.selectedMetricLabel || "Metric value" },
+                      gridcolor: trend.plotTheme.grid,
                       zeroline: false,
-                      color: plotTheme.axis,
+                      color: trend.plotTheme.axis,
                       tickfont: { size: 14 }
                     },
                     modebar: {
                       bgcolor: "rgba(0, 0, 0, 0)",
-                      color: plotTheme.axis,
-                      activecolor: plotTheme.line
+                      color: trend.plotTheme.axis,
+                      activecolor: trend.plotTheme.line
                     },
                     showlegend: false
                   }}

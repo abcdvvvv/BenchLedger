@@ -10,6 +10,7 @@ import {
   useMenuStore
 } from "@ariakit/react";
 import { FiCheck, FiChevronDown, FiChevronRight, FiMinus, FiSearch } from "react-icons/fi";
+import { comparePath } from "../lib/dashboard";
 
 export type BenchmarkKeyFilterOption = {
   value: string;
@@ -60,15 +61,6 @@ type BenchmarkKeyNodeItemProps = {
   selectedValueSet: Set<string>;
   toggleValues: (values: string[]) => void;
 };
-
-function comparePath(left: string[], right: string[]): number {
-  const length = Math.min(left.length, right.length);
-  for (let index = 0; index < length; index += 1) {
-    const order = left[index].localeCompare(right[index]);
-    if (order !== 0) return order;
-  }
-  return left.length - right.length;
-}
 
 function normalizeText(value: string): string {
   return value.trim().toLocaleLowerCase();

@@ -6,6 +6,7 @@ import {
   MenuProvider
 } from "@ariakit/react";
 import { useMenuStore } from "@ariakit/react";
+import { comparePath } from "../lib/dashboard";
 
 export type GroupMenuOption = {
   value: string;
@@ -18,15 +19,6 @@ type GroupMenuNode = {
   path: string[];
   children: GroupMenuNode[];
 };
-
-function comparePath(left: string[], right: string[]): number {
-  const length = Math.min(left.length, right.length);
-  for (let index = 0; index < length; index += 1) {
-    const order = left[index].localeCompare(right[index]);
-    if (order !== 0) return order;
-  }
-  return left.length - right.length;
-}
 
 function buildGroupMenuTree(options: GroupMenuOption[]): GroupMenuNode[] {
   const roots: GroupMenuNode[] = [];

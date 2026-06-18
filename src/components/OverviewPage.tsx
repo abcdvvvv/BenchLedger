@@ -33,112 +33,77 @@ export type OverviewStat = {
 };
 
 type OverviewPageProps = {
-  siteTitle: string;
-  siteDescription: string;
-  focusRunId: string;
-  baselineRunId: string;
-  filteredRuns: BenchmarkRun[];
-  onFocusRunChange: (runId: string) => void;
-  onBaselineRunChange: (runId: string) => void;
-  onOpenLocalFilePicker: () => void;
-  downloadUrl: string | null;
-  downloadLabel: string;
-  hasLoadedDatabase: boolean;
-  hasDataset: boolean;
-  error: string;
-  machine: string;
-  machineOptions: string[];
-  onMachineChange: (machine: string) => void;
-  metricKind: string;
-  metricOptions: string[];
-  onMetricKindChange: (metricKind: string) => void;
-  group: string;
-  groupOptions: GroupMenuOption[];
-  selectedGroupLabel: string;
-  onGroupChange: (group: string) => void;
-  branch: string;
-  branchOptions: string[];
-  onBranchChange: (branch: string) => void;
-  timeRangeLabel: string;
-  timeStart: string;
-  timeEnd: string;
-  datasetTimeStart: string;
-  datasetTimeEnd: string;
-  onTimeStartChange: (value: string) => void;
-  onTimeEndChange: (value: string) => void;
-  displayStrategy: DisplayStrategy;
-  onDisplayStrategyChange: (strategy: DisplayStrategy) => void;
+  header: {
+    siteTitle: string;
+    siteDescription: string;
+    focusRunId: string;
+    baselineRunId: string;
+    filteredRuns: BenchmarkRun[];
+    onFocusRunChange: (runId: string) => void;
+    onBaselineRunChange: (runId: string) => void;
+    onOpenLocalFilePicker: () => void;
+    downloadUrl: string | null;
+    downloadLabel: string;
+  };
+  datasetState: {
+    hasLoadedDatabase: boolean;
+    hasDataset: boolean;
+    error: string;
+  };
+  filters: {
+    machine: string;
+    machineOptions: string[];
+    onMachineChange: (machine: string) => void;
+    metricKind: string;
+    metricOptions: string[];
+    onMetricKindChange: (metricKind: string) => void;
+    group: string;
+    groupOptions: GroupMenuOption[];
+    selectedGroupLabel: string;
+    onGroupChange: (group: string) => void;
+    branch: string;
+    branchOptions: string[];
+    onBranchChange: (branch: string) => void;
+    timeRangeLabel: string;
+    timeStart: string;
+    timeEnd: string;
+    datasetTimeStart: string;
+    datasetTimeEnd: string;
+    onTimeStartChange: (value: string) => void;
+    onTimeEndChange: (value: string) => void;
+    displayStrategy: DisplayStrategy;
+    onDisplayStrategyChange: (strategy: DisplayStrategy) => void;
+  };
   stats: OverviewStat[];
-  benchmarkOptions: BenchmarkKeyFilterOption[];
-  selectedBenchmarkIds: string[];
-  onSelectedBenchmarkIdsChange: (values: string[]) => void;
-  selectedMetricLabel: string;
-  trendAxisMode: TrendAxisMode;
-  onToggleTrendAxisMode: () => void;
-  trendTraces: Array<Record<string, unknown>>;
-  trendPlotMargin: { t: number; r: number; b: number; l: number };
-  plotTheme: PlotTheme;
-  focusRun: BenchmarkRun | null;
-  comparisonRows: PairComparison[];
-  deltaPlotMargin: { t: number; r: number; b: number; l: number };
-  sortedComparisonRows: PairComparison[];
-  runPairSort: RunPairSort | null;
-  onToggleRunPairSort: (key: RunPairSortKey) => void;
+  trend: {
+    benchmarkOptions: BenchmarkKeyFilterOption[];
+    selectedBenchmarkIds: string[];
+    onSelectedBenchmarkIdsChange: (values: string[]) => void;
+    selectedMetricLabel: string;
+    trendAxisMode: TrendAxisMode;
+    onToggleTrendAxisMode: () => void;
+    trendTraces: Array<Record<string, unknown>>;
+    trendPlotMargin: { t: number; r: number; b: number; l: number };
+    plotTheme: PlotTheme;
+  };
+  comparison: {
+    focusRun: BenchmarkRun | null;
+    comparisonRows: PairComparison[];
+    deltaPlotMargin: { t: number; r: number; b: number; l: number };
+    sortedComparisonRows: PairComparison[];
+    runPairSort: RunPairSort | null;
+    onToggleRunPairSort: (key: RunPairSortKey) => void;
+  };
 };
 
 export function OverviewPage(props: OverviewPageProps) {
   const {
-    siteTitle,
-    siteDescription,
-    focusRunId,
-    baselineRunId,
-    filteredRuns,
-    onFocusRunChange,
-    onBaselineRunChange,
-    onOpenLocalFilePicker,
-    downloadUrl,
-    downloadLabel,
-    hasLoadedDatabase,
-    hasDataset,
-    error,
-    machine,
-    machineOptions,
-    onMachineChange,
-    metricKind,
-    metricOptions,
-    onMetricKindChange,
-    group,
-    groupOptions,
-    selectedGroupLabel,
-    onGroupChange,
-    branch,
-    branchOptions,
-    onBranchChange,
-    timeRangeLabel,
-    timeStart,
-    timeEnd,
-    datasetTimeStart,
-    datasetTimeEnd,
-    onTimeStartChange,
-    onTimeEndChange,
-    displayStrategy,
-    onDisplayStrategyChange,
+    header,
+    datasetState,
+    filters,
     stats,
-    benchmarkOptions,
-    selectedBenchmarkIds,
-    onSelectedBenchmarkIdsChange,
-    selectedMetricLabel,
-    trendAxisMode,
-    onToggleTrendAxisMode,
-    trendTraces,
-    trendPlotMargin,
-    plotTheme,
-    focusRun,
-    comparisonRows,
-    deltaPlotMargin,
-    sortedComparisonRows,
-    runPairSort,
-    onToggleRunPairSort
+    trend,
+    comparison
   } = props;
 
   return (
@@ -147,96 +112,96 @@ export function OverviewPage(props: OverviewPageProps) {
         <div className="breadcrumb">Benchmarking <span>›</span> Dashboard</div>
         <div className="page-topbar-row dashboard-topbar-row">
           <div className="page-topbar-title">
-            <h1>{siteTitle}</h1>
+            <h1>{header.siteTitle}</h1>
           </div>
           <div className="topbar-actions">
             <div className="field topbar-floating-field dashboard-run-field">
               <span className="field-label">Focus run</span>
               <RunSelectMenu
-                disabled={!filteredRuns.length}
-                runs={filteredRuns}
-                selectedRunId={focusRunId}
-                onSelect={onFocusRunChange}
+                disabled={!header.filteredRuns.length}
+                runs={header.filteredRuns}
+                selectedRunId={header.focusRunId}
+                onSelect={header.onFocusRunChange}
               />
             </div>
             <div className="field topbar-floating-field dashboard-run-field">
               <span className="field-label">Baseline run</span>
               <RunSelectMenu
-                disabled={!filteredRuns.length}
-                runs={filteredRuns}
-                selectedRunId={baselineRunId}
-                onSelect={onBaselineRunChange}
+                disabled={!header.filteredRuns.length}
+                runs={header.filteredRuns}
+                selectedRunId={header.baselineRunId}
+                onSelect={header.onBaselineRunChange}
               />
             </div>
-            <button type="button" className="button button-secondary button-compact" onClick={onOpenLocalFilePicker} style={{ gap: "0.4rem" }}>
+            <button type="button" className="button button-secondary button-compact" onClick={header.onOpenLocalFilePicker} style={{ gap: "0.4rem" }}>
               <FiFolder aria-hidden="true" />
               <span>SQLite</span>
             </button>
-            {downloadUrl ? (
-              <a className="button button-secondary button-compact" href={downloadUrl} download={downloadLabel}>Download</a>
+            {header.downloadUrl ? (
+              <a className="button button-secondary button-compact" href={header.downloadUrl} download={header.downloadLabel}>Download</a>
             ) : null}
           </div>
         </div>
-        <p>{siteDescription}</p>
+        <p>{header.siteDescription}</p>
       </header>
-      {!hasDataset || error ? (
+      {!datasetState.hasDataset || datasetState.error ? (
         <section className="data-banner surface-card">
           <div>
-            <strong>{hasLoadedDatabase ? "No benchmark rows found" : "No database is loaded"}</strong>
-            <p>{error || "Choose a local SQLite file to inspect benchmark history."}</p>
+            <strong>{datasetState.hasLoadedDatabase ? "No benchmark rows found" : "No database is loaded"}</strong>
+            <p>{datasetState.error || "Choose a local SQLite file to inspect benchmark history."}</p>
           </div>
-          <button type="button" className="button button-primary" onClick={onOpenLocalFilePicker}>Choose Local SQLite</button>
+          <button type="button" className="button button-primary" onClick={header.onOpenLocalFilePicker}>Choose Local SQLite</button>
         </section>
       ) : null}
       <section className="trend-board-toolbar">
         <div className="filter-grid">
           <label className="field">
             <span className="field-label">Machine</span>
-            <select value={machine} onChange={(event) => onMachineChange(event.target.value)} disabled={!hasDataset}>
-              {machineOptions.map((option) => <option key={option} value={option}>{option === "all" ? "All machines" : option}</option>)}
+            <select value={filters.machine} onChange={(event) => filters.onMachineChange(event.target.value)} disabled={!datasetState.hasDataset}>
+              {filters.machineOptions.map((option) => <option key={option} value={option}>{option === "all" ? "All machines" : option}</option>)}
             </select>
           </label>
           <label className="field">
             <span className="field-label">Metric</span>
-            <select value={metricKind} onChange={(event) => onMetricKindChange(event.target.value)} disabled={!metricOptions.length}>
-              {metricOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+            <select value={filters.metricKind} onChange={(event) => filters.onMetricKindChange(event.target.value)} disabled={!filters.metricOptions.length}>
+              {filters.metricOptions.map((option) => <option key={option} value={option}>{option}</option>)}
             </select>
           </label>
           <div className="field">
             <span className="field-label">Group</span>
             <GroupCascadeMenu
-              disabled={!hasDataset}
-              options={groupOptions}
-              selectedValue={group}
-              selectedLabel={selectedGroupLabel}
-              onSelect={onGroupChange}
+              disabled={!datasetState.hasDataset}
+              options={filters.groupOptions}
+              selectedValue={filters.group}
+              selectedLabel={filters.selectedGroupLabel}
+              onSelect={filters.onGroupChange}
             />
           </div>
           <label className="field">
             <span className="field-label">Branch</span>
-            <select value={branch} onChange={(event) => onBranchChange(event.target.value)} disabled={!branchOptions.length}>
-              {branchOptions.map((option) => <option key={option} value={option}>{option === "all" ? "All branches" : option}</option>)}
+            <select value={filters.branch} onChange={(event) => filters.onBranchChange(event.target.value)} disabled={!filters.branchOptions.length}>
+              {filters.branchOptions.map((option) => <option key={option} value={option}>{option === "all" ? "All branches" : option}</option>)}
             </select>
           </label>
           <div className="field time-range-field">
             <span className="field-label">Time Range</span>
             <TimeRangePopover
-              disabled={!hasDataset}
-              label={timeRangeLabel}
-              timeStart={timeStart}
-              timeEnd={timeEnd}
-              datasetTimeStart={datasetTimeStart}
-              datasetTimeEnd={datasetTimeEnd}
-              onTimeStartChange={onTimeStartChange}
-              onTimeEndChange={onTimeEndChange}
+              disabled={!datasetState.hasDataset}
+              label={filters.timeRangeLabel}
+              timeStart={filters.timeStart}
+              timeEnd={filters.timeEnd}
+              datasetTimeStart={filters.datasetTimeStart}
+              datasetTimeEnd={filters.datasetTimeEnd}
+              onTimeStartChange={filters.onTimeStartChange}
+              onTimeEndChange={filters.onTimeEndChange}
             />
           </div>
           <label className="field filter-strategy-field">
             <span className="field-label">Display Strategy</span>
             <select
-              value={displayStrategy}
-              onChange={(event) => onDisplayStrategyChange(event.target.value as DisplayStrategy)}
-              disabled={!hasDataset}
+              value={filters.displayStrategy}
+              onChange={(event) => filters.onDisplayStrategyChange(event.target.value as DisplayStrategy)}
+              disabled={!datasetState.hasDataset}
             >
               <option value="all">All records</option>
               <option value="tagged-only">Tagged only</option>
@@ -271,47 +236,47 @@ export function OverviewPage(props: OverviewPageProps) {
             </div>
             <div className="benchmark-trend-controls">
               <BenchmarkKeyCascadeFilter
-                options={benchmarkOptions}
-                selectedValues={selectedBenchmarkIds}
-                setSelectedValues={onSelectedBenchmarkIdsChange}
-                disabled={!hasDataset}
+                options={trend.benchmarkOptions}
+                selectedValues={trend.selectedBenchmarkIds}
+                setSelectedValues={trend.onSelectedBenchmarkIdsChange}
+                disabled={!datasetState.hasDataset}
               />
             </div>
-            <button type="button" className="button button-secondary button-compact axis-mode-button" onClick={onToggleTrendAxisMode}>
-              X-Axis: {trendAxisMode === "commit" ? "Commit" : "Time"}
+            <button type="button" className="button button-secondary button-compact axis-mode-button" onClick={trend.onToggleTrendAxisMode}>
+              X-Axis: {trend.trendAxisMode === "commit" ? "Commit" : "Time"}
             </button>
           </div>
           <div className="plot-shell">
-            {selectedBenchmarkIds.length ? (
+            {trend.selectedBenchmarkIds.length ? (
               <Plot
                 useResizeHandler
                 style={{ width: "100%", height: "100%" }}
-                data={trendTraces}
+                data={trend.trendTraces}
                 layout={{
                   autosize: true,
-                  margin: trendPlotMargin,
-                  paper_bgcolor: plotTheme.paper,
-                  plot_bgcolor: plotTheme.plot,
-                  font: { color: plotTheme.axis },
-                  xaxis: { showgrid: false, color: plotTheme.axis, tickfont: { size: 14 } },
+                  margin: trend.trendPlotMargin,
+                  paper_bgcolor: trend.plotTheme.paper,
+                  plot_bgcolor: trend.plotTheme.plot,
+                  font: { color: trend.plotTheme.axis },
+                  xaxis: { showgrid: false, color: trend.plotTheme.axis, tickfont: { size: 14 } },
                   yaxis: {
-                    title: { text: selectedMetricLabel || "Metric value" },
-                    gridcolor: plotTheme.grid,
+                    title: { text: trend.selectedMetricLabel || "Metric value" },
+                    gridcolor: trend.plotTheme.grid,
                     zeroline: false,
-                    color: plotTheme.axis,
+                    color: trend.plotTheme.axis,
                     tickfont: { size: 14 }
                   },
                   modebar: {
                     bgcolor: "rgba(0, 0, 0, 0)",
-                    color: plotTheme.axis,
-                    activecolor: plotTheme.line
+                    color: trend.plotTheme.axis,
+                    activecolor: trend.plotTheme.line
                   },
-                  showlegend: selectedBenchmarkIds.length > 1,
-                  legend: selectedBenchmarkIds.length > 1 ? {
+                  showlegend: trend.selectedBenchmarkIds.length > 1,
+                  legend: trend.selectedBenchmarkIds.length > 1 ? {
                     orientation: "h",
                     x: 0,
                     y: -0.2,
-                    font: { color: plotTheme.axis }
+                    font: { color: trend.plotTheme.axis }
                   } : undefined
                 }}
                 config={{ displayModeBar: "hover", responsive: true }}
@@ -338,12 +303,12 @@ export function OverviewPage(props: OverviewPageProps) {
                 {
                   type: "bar",
                   orientation: "h",
-                  x: comparisonRows.slice(0, 6).map((row) => row.delta).reverse(),
-                  y: comparisonRows.slice(0, 6).map((row) => row.benchmark_label).reverse(),
+                  x: comparison.comparisonRows.slice(0, 6).map((row) => row.delta).reverse(),
+                  y: comparison.comparisonRows.slice(0, 6).map((row) => row.benchmark_label).reverse(),
                   marker: {
-                    color: comparisonRows
+                    color: comparison.comparisonRows
                       .slice(0, 6)
-                      .map((row) => plotTheme[deltaColorKey[metricDeltaClass(row.delta, row.better)]])
+                      .map((row) => trend.plotTheme[deltaColorKey[metricDeltaClass(row.delta, row.better)]])
                       .reverse()
                   },
                   hovertemplate: "%{y}<br>%{x:.2f}%<extra></extra>"
@@ -351,12 +316,12 @@ export function OverviewPage(props: OverviewPageProps) {
               ]}
               layout={{
                 autosize: true,
-                margin: deltaPlotMargin,
-                paper_bgcolor: plotTheme.paper,
-                plot_bgcolor: plotTheme.plot,
-                font: { color: plotTheme.axis },
-                xaxis: { title: "Delta (%)", gridcolor: plotTheme.grid, zerolinecolor: plotTheme.zero, color: plotTheme.axis },
-                yaxis: { automargin: true, color: plotTheme.axis },
+                margin: comparison.deltaPlotMargin,
+                paper_bgcolor: trend.plotTheme.paper,
+                plot_bgcolor: trend.plotTheme.plot,
+                font: { color: trend.plotTheme.axis },
+                xaxis: { title: "Delta (%)", gridcolor: trend.plotTheme.grid, zerolinecolor: trend.plotTheme.zero, color: trend.plotTheme.axis },
+                yaxis: { automargin: true, color: trend.plotTheme.axis },
                 showlegend: false
               }}
               config={{ displayModeBar: false, responsive: true }}
@@ -372,16 +337,16 @@ export function OverviewPage(props: OverviewPageProps) {
           </div>
           <table className="meta-table">
             <tbody>
-              <tr><th>Run</th><td>{focusRun ? runHeadline(focusRun) : "n/a"}</td></tr>
-              <tr><th>Code Date</th><td>{focusRun ? formatDate(focusRun.code_date) : "n/a"}</td></tr>
-              <tr><th>Measured</th><td>{focusRun ? formatDate(focusRun.measured_at) : "n/a"}</td></tr>
-              <tr><th>Branch</th><td>{focusRun?.branch || "n/a"}</td></tr>
-              <tr><th>Machine</th><td>{focusRun?.machine_id || "n/a"}</td></tr>
-              <tr><th>CPU</th><td>{focusRun?.cpu_model || "n/a"}</td></tr>
-              <tr><th>Threads</th><td>{focusRun ? focusRun.cpu_threads.toLocaleString() : "n/a"}</td></tr>
-              <tr><th>Platform</th><td>{focusRun ? `${focusRun.os} · ${focusRun.arch}` : "n/a"}</td></tr>
-              <tr><th>Julia</th><td>{focusRun?.julia_version || "n/a"}</td></tr>
-              <tr><th>Dirty</th><td>{focusRun ? String(focusRun.is_dirty) : "n/a"}</td></tr>
+              <tr><th>Run</th><td>{comparison.focusRun ? runHeadline(comparison.focusRun) : "n/a"}</td></tr>
+              <tr><th>Code Date</th><td>{comparison.focusRun ? formatDate(comparison.focusRun.code_date) : "n/a"}</td></tr>
+              <tr><th>Measured</th><td>{comparison.focusRun ? formatDate(comparison.focusRun.measured_at) : "n/a"}</td></tr>
+              <tr><th>Branch</th><td>{comparison.focusRun?.branch || "n/a"}</td></tr>
+              <tr><th>Machine</th><td>{comparison.focusRun?.machine_id || "n/a"}</td></tr>
+              <tr><th>CPU</th><td>{comparison.focusRun?.cpu_model || "n/a"}</td></tr>
+              <tr><th>Threads</th><td>{comparison.focusRun ? comparison.focusRun.cpu_threads.toLocaleString() : "n/a"}</td></tr>
+              <tr><th>Platform</th><td>{comparison.focusRun ? `${comparison.focusRun.os} · ${comparison.focusRun.arch}` : "n/a"}</td></tr>
+              <tr><th>Julia</th><td>{comparison.focusRun?.julia_version || "n/a"}</td></tr>
+              <tr><th>Dirty</th><td>{comparison.focusRun ? String(comparison.focusRun.is_dirty) : "n/a"}</td></tr>
             </tbody>
           </table>
         </article>
@@ -398,16 +363,16 @@ export function OverviewPage(props: OverviewPageProps) {
                 <tr>
                   {runPairTableColumns.map((column) => (
                     <th key={column.key}>
-                      <button type="button" className="table-sort-button" onClick={() => onToggleRunPairSort(column.key)}>
+                      <button type="button" className="table-sort-button" onClick={() => comparison.onToggleRunPairSort(column.key)}>
                         {column.label}
-                        <span>{runPairSort?.key === column.key ? (runPairSort.direction === "asc" ? "↑" : "↓") : "↕"}</span>
+                        <span>{comparison.runPairSort?.key === column.key ? (comparison.runPairSort.direction === "asc" ? "↑" : "↓") : "↕"}</span>
                       </button>
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {sortedComparisonRows.map((row) => (
+                {comparison.sortedComparisonRows.map((row) => (
                   <tr key={row.benchmark_id}>
                     <td><code>{row.benchmark_label}</code></td>
                     <td>{formatMetricValue(row.focus_value, row.unit)}</td>
