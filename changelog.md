@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.0] - 2026-06-20
+
+### Changed
+
+- Reworked the frontend UI system around more consistent shared control primitives, including unified menu triggers, disclosure content, picker borders, and filter-button alignment across Overview and Trend Board.
+
 ## [0.3.4] - 2026-06-19
 
 ### Changed
@@ -49,7 +55,9 @@
 
 Initial usable release of BenchLedger.
 
-[Unreleased]: https://github.com/abcdvvvv/BenchLedger/compare/v0.3.4...HEAD
+[Unreleased]: https://github.com/abcdvvvv/BenchLedger/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/abcdvvvv/BenchLedger/releases/tag/v0.4.0
+[0.3.4]: https://github.com/abcdvvvv/BenchLedger/releases/tag/v0.3.4
 [0.3.3]: https://github.com/abcdvvvv/BenchLedger/releases/tag/v0.3.3
 [0.3.2]: https://github.com/abcdvvvv/BenchLedger/releases/tag/v0.3.2
 [0.3.1]: https://github.com/abcdvvvv/BenchLedger/releases/tag/v0.3.1

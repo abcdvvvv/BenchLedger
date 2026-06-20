@@ -1,6 +1,7 @@
 import { Menu, MenuButton, MenuItem, MenuProvider } from "@ariakit/react";
-import { FiChevronDown } from "react-icons/fi";
-import type { MarkerSymbolOption, TrendMarkerSymbol } from "../lib/trend-marker-symbols";
+import type { MarkerSymbolOption, TrendMarkerSymbol } from "../../../lib/trend-marker-symbols";
+import { cn } from "../../../components/ui/cn";
+import { DisclosureTriggerContent, menuItemRowClassName, menuSurfaceClassName, menuTriggerClassName } from "../../../components/ui/Menu";
 
 type MarkerSymbolMenuProps = {
   options: readonly MarkerSymbolOption[];
@@ -10,9 +11,8 @@ type MarkerSymbolMenuProps = {
 
 function MarkerSymbolIcon(props: { option: MarkerSymbolOption }) {
   const { option } = props;
-
   return (
-    <svg viewBox="-16 -16 32 32" aria-hidden="true" className="marker-symbol-icon">
+    <svg viewBox="-16 -16 32 32" aria-hidden="true" className="size-4">
       <path
         d={option.path}
         className={option.noFill ? "marker-symbol-path marker-symbol-path-stroke" : "marker-symbol-path"}
@@ -27,20 +27,30 @@ export function MarkerSymbolMenu(props: MarkerSymbolMenuProps) {
 
   return (
     <MenuProvider>
-      <MenuButton className="group-cascade-trigger marker-symbol-trigger" aria-label="Trend marker symbol">
-        <span className="marker-symbol-trigger-icon">
+      <MenuButton
+        className={menuTriggerClassName()}
+        aria-label="Trend marker symbol"
+      >
+        <DisclosureTriggerContent align="center" contentClassName="inline-flex items-center justify-center text-gray-700 dark:text-gray-200">
           {selectedOption ? <MarkerSymbolIcon option={selectedOption} /> : null}
-        </span>
-        <FiChevronDown aria-hidden="true" />
+        </DisclosureTriggerContent>
       </MenuButton>
-      <Menu gutter={4} sameWidth unmountOnHide className="group-cascade-menu run-select-menu">
-        <div role="presentation">
+      <Menu
+        gutter={6}
+        sameWidth
+        unmountOnHide
+        className={menuSurfaceClassName()}
+      >
+        <div role="presentation" className="grid grid-cols-4 gap-1">
           {options.map((option) => {
             const isSelected = option.value === selectedValue;
             return (
               <MenuItem
                 key={option.value}
-                className={`group-cascade-item marker-symbol-item${isSelected ? " run-select-item-selected" : ""}`}
+                className={cn(
+                  menuItemRowClassName({ state: isSelected ? "selected" : "default", align: "center" }),
+                  "aspect-square"
+                )}
                 onClick={() => onSelect(option.value)}
                 aria-label={option.value}
                 title={option.value}

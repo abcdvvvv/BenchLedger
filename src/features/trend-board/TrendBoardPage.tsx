@@ -1,7 +1,13 @@
-import { BenchmarkKeyCascadeFilter, type BenchmarkKeyFilterOption } from "./BenchmarkKeyCascadeFilter";
-import { TimeRangePopover } from "./TimeRangePopover";
-import { GroupCascadeMenu, type GroupMenuOption } from "./GroupCascadeMenu";
-import Plot from "./Plot";
+import type { CSSProperties } from "react";
+import { BenchmarkKeyCascadeFilter, type BenchmarkKeyFilterOption } from "../benchmarks/components/BenchmarkKeyCascadeFilter";
+import { TimeRangePopover } from "../benchmarks/components/TimeRangePopover";
+import { GroupCascadeMenu, type GroupMenuOption } from "../benchmarks/components/GroupCascadeMenu";
+import Plot from "../benchmarks/components/Plot";
+import { Button } from "../../components/ui/Button";
+import { EmptyState } from "../../components/common/EmptyState";
+import { Field, FieldLabel, InputField, SelectField, Toolbar, ToolbarGrid } from "../../components/ui/Field";
+import { Panel, SectionTitle } from "../../components/ui/Card";
+import { PageHeader } from "../../components/common/PageHeader";
 import {
   Trend_Board_Max_Columns,
   Trend_Board_Min_Columns,
@@ -10,18 +16,11 @@ import {
   type DisplayStrategy,
   type PlotTheme,
   type TrendAxisMode
-} from "../lib/dashboard";
+} from "../../lib/dashboard";
+import type { TrendBoardCard } from "./useTrendBoardModel";
 
-export type TrendBoardCard = {
-  benchmarkId: string;
-  label: string;
-  path: string[];
-  metricLabel: string;
-  traces: Array<Record<string, unknown>>;
-};
-
-type TrendBoardPageProps = {
-  topbar: {
+export type TrendBoardPageProps = {
+  header: {
     benchmarkOptions: BenchmarkKeyFilterOption[];
     selectedBenchmarkIds: string[];
     onSelectedBenchmarkIdsChange: (values: string[]) => void;
@@ -64,89 +63,84 @@ type TrendBoardPageProps = {
 };
 
 export function TrendBoardPage(props: TrendBoardPageProps) {
-  const {
-    topbar,
-    filters,
-    trend
-  } = props;
+  const { header, filters, trend } = props;
 
   return (
     <>
-      <header className="topbar page-topbar">
-        <div className="breadcrumb">Benchmarking <span>›</span> Trend Board</div>
-        <div className="page-topbar-row">
-          <div className="page-topbar-title">
-            <h1>Trend Board</h1>
-          </div>
-          <div className="topbar-actions page-topbar-actions">
-            <div className="topbar-benchmark-field">
+      <PageHeader
+        eyebrow="Benchmarking › Trend Board"
+        title="Trend Board"
+        description="Each selected benchmark key is rendered as its own independent trend chart."
+        actions={(
+          <>
+            <Field className="min-w-0 flex-1 xl:min-w-[22rem] xl:max-w-[34rem]">
+              <FieldLabel className="invisible">Benchmark key</FieldLabel>
               <BenchmarkKeyCascadeFilter
-                options={topbar.benchmarkOptions}
-                selectedValues={topbar.selectedBenchmarkIds}
-                setSelectedValues={topbar.onSelectedBenchmarkIdsChange}
-                disabled={!topbar.hasDataset}
+                options={header.benchmarkOptions}
+                selectedValues={header.selectedBenchmarkIds}
+                setSelectedValues={header.onSelectedBenchmarkIdsChange}
+                disabled={!header.hasDataset}
                 stretchWidth
               />
-            </div>
-            <label className="field topbar-floating-field">
-              <span className="field-label">Columns</span>
-              <input
+            </Field>
+            <Field className="min-w-[7rem]">
+              <FieldLabel>Columns</FieldLabel>
+              <InputField
                 type="number"
                 min={Trend_Board_Min_Columns}
                 max={Trend_Board_Max_Columns}
-                value={topbar.trendBoardColumns}
+                value={header.trendBoardColumns}
                 onChange={(event) => {
                   const nextValue = Number(event.target.value);
-                  topbar.onTrendBoardColumnsChange(clampTrendBoardColumns(nextValue));
+                  header.onTrendBoardColumnsChange(clampTrendBoardColumns(nextValue));
                 }}
-                disabled={!topbar.hasDataset}
+                disabled={!header.hasDataset}
               />
-            </label>
-            <button
-              type="button"
-              className="button button-secondary button-compact topbar-axis-button axis-mode-button"
-              onClick={topbar.onToggleTrendAxisMode}
-            >
-              X-Axis: {topbar.trendAxisMode === "commit" ? "Commit" : "Time"}
-            </button>
-          </div>
-        </div>
-        <p>Each selected benchmark key is rendered as its own independent trend chart.</p>
-      </header>
-      <section className="trend-board-toolbar">
-        <div className="filter-grid">
-          <label className="field">
-            <span className="field-label">Machine</span>
-            <select value={filters.machine} onChange={(event) => filters.onMachineChange(event.target.value)} disabled={!topbar.hasDataset}>
+            </Field>
+            <Field className="max-sm:w-full">
+              <FieldLabel className="invisible">Axis mode</FieldLabel>
+              <Button variant="secondary" className="w-34 max-sm:w-full" onClick={header.onToggleTrendAxisMode}>
+                X-Axis: {header.trendAxisMode === "commit" ? "Commit" : "Time"}
+              </Button>
+            </Field>
+          </>
+        )}
+      />
+
+      <Toolbar variant="plain">
+        <ToolbarGrid>
+          <Field>
+            <FieldLabel>Machine</FieldLabel>
+            <SelectField value={filters.machine} onChange={(event) => filters.onMachineChange(event.target.value)} disabled={!header.hasDataset}>
               {filters.machineOptions.map((option) => <option key={option} value={option}>{option === "all" ? "All machines" : option}</option>)}
-            </select>
-          </label>
-          <label className="field">
-            <span className="field-label">Metric</span>
-            <select value={filters.metricKind} onChange={(event) => filters.onMetricKindChange(event.target.value)} disabled={!filters.metricOptions.length}>
+            </SelectField>
+          </Field>
+          <Field>
+            <FieldLabel>Metric</FieldLabel>
+            <SelectField value={filters.metricKind} onChange={(event) => filters.onMetricKindChange(event.target.value)} disabled={!filters.metricOptions.length}>
               {filters.metricOptions.map((option) => <option key={option} value={option}>{option}</option>)}
-            </select>
-          </label>
-          <div className="field">
-            <span className="field-label">Group</span>
+            </SelectField>
+          </Field>
+          <Field>
+            <FieldLabel>Group</FieldLabel>
             <GroupCascadeMenu
-              disabled={!topbar.hasDataset}
+              disabled={!header.hasDataset}
               options={filters.groupOptions}
               selectedValue={filters.group}
               selectedLabel={filters.selectedGroupLabel}
               onSelect={filters.onGroupChange}
             />
-          </div>
-          <label className="field">
-            <span className="field-label">Branch</span>
-            <select value={filters.branch} onChange={(event) => filters.onBranchChange(event.target.value)} disabled={!filters.branchOptions.length}>
+          </Field>
+          <Field>
+            <FieldLabel>Branch</FieldLabel>
+            <SelectField value={filters.branch} onChange={(event) => filters.onBranchChange(event.target.value)} disabled={!filters.branchOptions.length}>
               {filters.branchOptions.map((option) => <option key={option} value={option}>{option === "all" ? "All branches" : option}</option>)}
-            </select>
-          </label>
-          <div className="field time-range-field">
-            <span className="field-label">Time Range</span>
+            </SelectField>
+          </Field>
+          <Field>
+            <FieldLabel>Time Range</FieldLabel>
             <TimeRangePopover
-              disabled={!topbar.hasDataset}
+              disabled={!header.hasDataset}
               label={filters.timeRangeLabel}
               timeStart={filters.timeStart}
               timeEnd={filters.timeEnd}
@@ -155,35 +149,34 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
               onTimeStartChange={filters.onTimeStartChange}
               onTimeEndChange={filters.onTimeEndChange}
             />
-          </div>
-          <label className="field filter-strategy-field">
-            <span className="field-label">Display Strategy</span>
-            <select
+          </Field>
+          <Field>
+            <FieldLabel>Display Strategy</FieldLabel>
+            <SelectField
               value={filters.displayStrategy}
               onChange={(event) => filters.onDisplayStrategyChange(event.target.value as DisplayStrategy)}
-              disabled={!topbar.hasDataset}
+              disabled={!header.hasDataset}
             >
               <option value="all">All records</option>
               <option value="tagged-only">Tagged only</option>
               <option value="tagged-main">Tagged + main/master</option>
-            </select>
-          </label>
-        </div>
-      </section>
+            </SelectField>
+          </Field>
+        </ToolbarGrid>
+      </Toolbar>
+
       {trend.trendBoardCards.length ? (
         <section
-          className="trend-board-grid"
-          style={{ gridTemplateColumns: `repeat(${topbar.trendBoardColumns}, minmax(0, 1fr))` }}
+          className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:[grid-template-columns:repeat(var(--trend-board-columns),minmax(0,1fr))]"
+          style={{ "--trend-board-columns": String(header.trendBoardColumns) } as CSSProperties}
         >
           {trend.trendBoardCards.map((card) => (
-            <article className="surface-card trend-board-panel trend-board-card" key={card.benchmarkId}>
-              <div className="panel-head">
-                <div className="panel-title-stack">
-                  <h2>{card.label}</h2>
-                  <p>{card.path[card.path.length - 1] ?? card.label}</p>
-                </div>
-              </div>
-              <div className="plot-shell trend-board-plot-shell" style={{ height: `${Trend_Board_Plot_Height}px` }}>
+            <Panel key={card.benchmarkId} className="surface-card-trend-board pad-trend-board-card min-w-0">
+              <SectionTitle
+                title={card.label}
+                description={card.path[card.path.length - 1] ?? card.label}
+              />
+              <div className="mt-5" style={{ height: `${Trend_Board_Plot_Height}px` }}>
                 <Plot
                   useResizeHandler
                   style={{ width: "100%", height: "100%" }}
@@ -191,8 +184,8 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
                   layout={{
                     autosize: true,
                     margin: trend.trendPlotMargin,
-                    paper_bgcolor: trend.plotTheme.paper,
-                    plot_bgcolor: trend.plotTheme.plot,
+                    paper_bgcolor: "rgba(0, 0, 0, 0)",
+                    plot_bgcolor: "rgba(0, 0, 0, 0)",
                     font: { color: trend.plotTheme.axis },
                     xaxis: { showgrid: false, color: trend.plotTheme.axis, tickfont: { size: 14 } },
                     yaxis: {
@@ -212,13 +205,11 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
                   config={{ displayModeBar: "hover", responsive: true }}
                 />
               </div>
-            </article>
+            </Panel>
           ))}
         </section>
       ) : (
-        <section className="trend-board-empty-state">
-          <strong>No benchmark key selected</strong>
-        </section>
+        <EmptyState className="pad-empty flex min-h-60 flex-col items-center justify-center text-center" title="No benchmark key selected" />
       )}
     </>
   );

@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
-import { unique } from "./format";
-import { dateRangeEnd, dateRangeStart, formatDateRangePart, metricLabel, type DisplayStrategy } from "./dashboard";
+import { unique } from "../../lib/format";
+import { dateRangeEnd, dateRangeStart, formatDateRangePart, metricLabel, type DisplayStrategy } from "../../lib/dashboard";
 import {
   buildBenchmarkOptions,
   buildGroupOptions,
@@ -9,8 +9,8 @@ import {
   scopeRowsToGroup,
   type BenchmarkViewBenchmarkOption,
   type BenchmarkViewGroupOption
-} from "./benchmark-view";
-import type { BenchmarkRow } from "./types";
+} from "../../lib/benchmark-view";
+import type { BenchmarkRow } from "../../lib/types";
 
 type UseBenchmarkViewSliceOptions = {
   rows: BenchmarkRow[];

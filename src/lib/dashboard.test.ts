@@ -9,7 +9,9 @@ import {
   metadataDescription,
   metadataTitle,
   rowMatchesDisplayStrategy,
-  trendDisplayUnitContext
+  splitTrendRowsByMachine,
+  trendDisplayUnitContext,
+  type TrendPlotRow
 } from "./dashboard";
 import type { BenchmarkRow } from "./types";
 
@@ -40,6 +42,23 @@ const Base_Row: BenchmarkRow = {
   notes: "",
   group: "suite"
 };
+
+function makeTrendRow(overrides: Partial<TrendPlotRow>): TrendPlotRow {
+  const row: TrendPlotRow = {
+    ...Base_Row,
+    date_value: new Date("2026-01-01T00:00:00Z"),
+    run_axis_label: "2026-01-01",
+    run_headline: "Run 1",
+    run_tone: "branch",
+    ...overrides
+  };
+
+  if (overrides.code_date && !overrides.date_value) {
+    row.date_value = new Date(overrides.code_date);
+  }
+
+  return row;
+}
 
 describe("dashboard helpers", () => {
   it("clamps trend board columns", () => {
@@ -86,6 +105,34 @@ describe("dashboard helpers", () => {
     const unknown = trendDisplayUnitContext([{ value: 5, unit: "widgets" }]);
     expect(unknown.unit).toBe("widgets");
     expect(unknown.formatMetricLabel("")).toBe("Metric value");
+  });
+
+  it("splits trend rows into independent machine series", () => {
+    const series = splitTrendRowsByMachine([
+      makeTrendRow({ machine_id: "machine-b", value: 2 }),
+      makeTrendRow({
+        run_id: "run-2",
+        code_date: "2026-01-02T00:00:00Z",
+        measured_at: "2026-01-02T00:00:00Z",
+        machine_id: "machine-a",
+        value: 3,
+        run_axis_label: "2026-01-02",
+        run_headline: "Run 2"
+      }),
+      makeTrendRow({
+        run_id: "run-3",
+        code_date: "2026-01-03T00:00:00Z",
+        measured_at: "2026-01-03T00:00:00Z",
+        machine_id: "machine-b",
+        value: 4,
+        run_axis_label: "2026-01-03",
+        run_headline: "Run 3"
+      })
+    ]);
+
+    expect(series.map((entry) => entry.machineId)).toEqual(["machine-a", "machine-b"]);
+    expect(series[0].rows).toHaveLength(1);
+    expect(series[1].rows).toHaveLength(2);
   });
 
   it("formats catalog metadata helpers", () => {

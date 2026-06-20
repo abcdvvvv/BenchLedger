@@ -3,10 +3,12 @@ import {
   MenuButton,
   MenuButtonArrow,
   MenuItem,
-  MenuProvider
+  MenuProvider,
+  useMenuStore
 } from "@ariakit/react";
-import { useMenuStore } from "@ariakit/react";
-import { comparePath } from "../lib/dashboard";
+import { comparePath } from "../../../lib/dashboard";
+import { cn } from "../../../components/ui/cn";
+import { DisclosureTriggerContent, menuItemRowClassName, menuSurfaceClassName, menuTriggerClassName } from "../../../components/ui/Menu";
 
 export type GroupMenuOption = {
   value: string;
@@ -71,18 +73,28 @@ type GroupCascadeBranchProps = {
 
 function GroupCascadeBranch(props: GroupCascadeBranchProps) {
   const { node, onSelect } = props;
-  const menu = useMenuStore();
+  const menu = useMenuStore({ placement: "right-start", showTimeout: 100 });
 
   return (
     <MenuProvider store={menu}>
       <MenuButton
-        render={<MenuItem className="group-cascade-item group-cascade-item-parent" />}
+        render={<MenuItem className={menuItemRowClassName({ align: "between" })} />}
         onClick={() => onSelect(node.value)}
       >
-        <span className="group-cascade-item-label">{node.segment}</span>
-        <MenuButtonArrow className="group-cascade-item-arrow" />
+        <span className="truncate">{node.segment}</span>
+        <MenuButtonArrow className="shrink-0 text-gray-400" />
       </MenuButton>
-      <Menu store={menu} gutter={4} shift={-8} unmountOnHide className="group-cascade-menu group-cascade-submenu">
+      <Menu
+        store={menu}
+        portal
+        overlap
+        gutter={4}
+        shift={-8}
+        fitViewport
+        overflowPadding={8}
+        unmountOnHide
+        className={menuSurfaceClassName("max-h-80 overflow-auto")}
+      >
         <GroupCascadeItems nodes={node.children} onSelect={onSelect} />
       </Menu>
     </MenuProvider>
@@ -91,25 +103,17 @@ function GroupCascadeBranch(props: GroupCascadeBranchProps) {
 
 function GroupCascadeItems(props: GroupCascadeItemsProps) {
   const { nodes, onSelect } = props;
-
   return (
     <>
       {nodes.map((node) => {
         if (!node.children.length) {
           return (
-            <MenuItem
-              key={node.value}
-              className="group-cascade-item"
-              onClick={() => onSelect(node.value)}
-            >
+            <MenuItem key={node.value} className={menuItemRowClassName()} onClick={() => onSelect(node.value)}>
               {node.segment}
             </MenuItem>
           );
         }
-
-        return (
-          <GroupCascadeBranch key={node.value} node={node} onSelect={onSelect} />
-        );
+        return <GroupCascadeBranch key={node.value} node={node} onSelect={onSelect} />;
       })}
     </>
   );
@@ -120,15 +124,12 @@ export function GroupCascadeMenu(props: GroupCascadeMenuProps) {
   const roots = buildGroupMenuTree(options);
 
   return (
-    <MenuProvider>
-      <MenuButton className="group-cascade-trigger" disabled={disabled}>
-        <strong className="group-cascade-trigger-label">{selectedLabel}</strong>
-        <span aria-hidden="true">▾</span>
+      <MenuProvider>
+      <MenuButton className={cn(menuTriggerClassName({ disabled }))} disabled={disabled}>
+        <DisclosureTriggerContent>{selectedLabel}</DisclosureTriggerContent>
       </MenuButton>
-      <Menu gutter={-1} sameWidth unmountOnHide className="group-cascade-menu group-cascade-root-menu">
-        <MenuItem className="group-cascade-item" onClick={() => onSelect("all")}>
-          All groups
-        </MenuItem>
+      <Menu gutter={0} sameWidth unmountOnHide className={menuSurfaceClassName("max-h-80 overflow-auto")}>
+        <MenuItem className={menuItemRowClassName()} onClick={() => onSelect("all")}>All groups</MenuItem>
         <GroupCascadeItems nodes={roots} onSelect={onSelect} />
       </Menu>
     </MenuProvider>

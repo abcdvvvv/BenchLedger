@@ -1,8 +1,10 @@
 import { Menu, MenuButton, MenuItem, MenuProvider } from "@ariakit/react";
-import { FiCheck, FiChevronDown } from "react-icons/fi";
-import { runHeadline } from "../lib/dashboard";
-import { formatDate, formatDateOnly } from "../lib/format";
-import type { BenchmarkRun } from "../lib/types";
+import { FiCheck } from "react-icons/fi";
+import { runHeadline } from "../../../lib/dashboard";
+import { formatDate, formatDateOnly } from "../../../lib/format";
+import type { BenchmarkRun } from "../../../lib/types";
+import { cn } from "../../../components/ui/cn";
+import { DisclosureTriggerContent, menuItemRowClassName, menuSurfaceClassName, menuTriggerClassName } from "../../../components/ui/Menu";
 
 type RunSelectMenuProps = {
   disabled: boolean;
@@ -19,29 +21,34 @@ export function RunSelectMenu(props: RunSelectMenuProps) {
   return (
     <MenuProvider>
       <MenuButton
-        className="group-cascade-trigger"
+        className={cn(menuTriggerClassName({ disabled }))}
         disabled={disabled}
         title={selectedRun ? formatDate(selectedRun.measured_at) : undefined}
       >
-        <span className="group-cascade-trigger-label">{selectedLabel}</span>
-        <FiChevronDown aria-hidden="true" />
+        <DisclosureTriggerContent contentClassName="font-mono">{selectedLabel}</DisclosureTriggerContent>
       </MenuButton>
-      <Menu gutter={4} sameWidth unmountOnHide className="group-cascade-menu run-select-menu">
+      <Menu
+        gutter={0}
+        sameWidth
+        unmountOnHide
+        className={menuSurfaceClassName("max-h-80 overflow-auto")}
+      >
         {runs.map((run) => {
           const label = `${runHeadline(run)} · ${formatDateOnly(run.measured_at)}`;
           const isSelected = run.run_id === selectedRunId;
-
           return (
             <MenuItem
               key={run.run_id}
-              className={`group-cascade-item run-select-item${isSelected ? " run-select-item-selected" : ""}`}
+              className={cn(
+                menuItemRowClassName({ state: isSelected ? "selected" : "default" })
+              )}
               onClick={() => onSelect(run.run_id)}
               title={formatDate(run.measured_at)}
             >
-              <span className="run-select-item-indicator" aria-hidden="true">
-                {isSelected ? <FiCheck /> : null}
+              <span className="flex size-4 items-center justify-center" aria-hidden="true">
+                {isSelected ? <FiCheck className="size-4" /> : null}
               </span>
-              <span className="group-cascade-item-label">{label}</span>
+              <span className="min-w-0 truncate font-mono">{label}</span>
             </MenuItem>
           );
         })}
