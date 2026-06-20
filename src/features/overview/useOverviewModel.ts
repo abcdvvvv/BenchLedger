@@ -1,12 +1,12 @@
-import { useEffect, useMemo } from "react";
+import { createElement, useEffect, useMemo, type ReactNode } from "react";
 import { FiActivity, FiClock, FiDatabase, FiGitBranch } from "react-icons/fi";
 import type { IconType } from "react-icons";
-import { formatMetricValue, formatPercent, metricDeltaClass, percentageChange, unique } from "./format";
+import { formatMetricValue, formatPercent, percentageChange, unique } from "../../lib/format";
 import {
   buildTrendRowsByBenchmark,
   normalizeSelectedBenchmarkIds,
   type BenchmarkViewBenchmarkOption
-} from "./benchmark-view";
+} from "../../lib/benchmark-view";
 import {
   Trend_Y_Padding_Ratio,
   buildRuns,
@@ -15,18 +15,20 @@ import {
   defaultRunPairSortDirection,
   runId,
   runPairSortValue,
-  statDeltaTone,
+  splitTrendRowsByMachine,
   trendDisplayUnitContext,
   type PlotTheme,
   type RunPairSort,
   type RunPairSortKey,
+  type DisplayStrategy,
   type ThemeMode,
   type TrendAxisMode,
   type TrendLineShape,
   type TrendMarkerFillMode
-} from "./dashboard";
-import type { TrendMarkerSymbol } from "./trend-marker-symbols";
-import type { BenchmarkRow, PairComparison } from "./types";
+} from "../../lib/dashboard";
+import type { TrendMarkerSymbol } from "../../lib/trend-marker-symbols";
+import type { BenchmarkRow, PairComparison } from "../../lib/types";
+import { benchmarkDeltaTone } from "../benchmarks/benchmarkDeltaPresentation";
 
 export type OverviewStat = {
   Icon: IconType;
@@ -34,7 +36,8 @@ export type OverviewStat = {
   value: string;
   delta: string;
   deltaTone: "positive" | "negative" | "neutral";
-  detail: string;
+  detail: ReactNode;
+  detailFullWidth?: boolean;
 };
 
 type UseOverviewModelOptions = {
@@ -50,6 +53,11 @@ type UseOverviewModelOptions = {
   onRunPairSortChange: (sort: RunPairSort | null) => void;
   machine: string;
   metricKind: string;
+  group: string;
+  branch: string;
+  timeStart: string;
+  timeEnd: string;
+  displayStrategy: DisplayStrategy;
   trendAxisMode: TrendAxisMode;
   trendLineShape: TrendLineShape;
   trendMarkerSymbol: TrendMarkerSymbol;
@@ -87,6 +95,10 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
     onRunPairSortChange,
     machine,
     metricKind,
+    group,
+    branch,
+    timeStart,
+    timeEnd,
     trendAxisMode,
     trendLineShape,
     trendMarkerSymbol,
@@ -213,21 +225,29 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
     if (!selectedBenchmarkIds.length) return [];
     return selectedBenchmarkIds.flatMap((benchmarkKey, index) => {
       const traceRows = overviewTrendRowsByBenchmark.get(benchmarkKey) ?? [];
-      const color = colorForBenchmark(index);
-      const label = benchmarkOptionsById.get(benchmarkKey)?.label ?? benchmarkKey;
-      return buildTrendTrace(traceRows, {
-        axisMode: trendAxisMode,
-        lineShape: trendLineShape,
-        markerSymbol: trendMarkerSymbol,
-        markerFillMode: trendMarkerFillMode,
-        displayUnitContext: trendDisplayContext,
-        color,
-        label,
-        plotTheme,
-        theme,
-        yMin: trendYMin,
-        yPadding: trendYPadding,
-        showLegend: selectedBenchmarkIds.length > 1
+      const benchmarkLabel = benchmarkOptionsById.get(benchmarkKey)?.label ?? benchmarkKey;
+      const machineSeries = splitTrendRowsByMachine(traceRows);
+
+      return machineSeries.flatMap((series, machineIndex) => {
+        const label = machineSeries.length > 1
+          ? `${benchmarkLabel} · ${series.machineId}`
+          : benchmarkLabel;
+        const color = colorForBenchmark(index * Math.max(machineSeries.length, 1) + machineIndex);
+
+        return buildTrendTrace(series.rows, {
+          axisMode: trendAxisMode,
+          lineShape: trendLineShape,
+          markerSymbol: trendMarkerSymbol,
+          markerFillMode: trendMarkerFillMode,
+          displayUnitContext: trendDisplayContext,
+          color,
+          label,
+          plotTheme,
+          theme,
+          yMin: trendYMin,
+          yPadding: trendYPadding,
+          showLegend: selectedBenchmarkIds.length > 1 || machineSeries.length > 1
+        });
       });
     });
   }, [
@@ -249,6 +269,33 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
     ? percentageChange(focusBenchmark.value, baselineBenchmark.value)
     : null;
 
+  const capturedRunsDetail = useMemo(() => {
+    const filterStates = [
+      { label: "Machine", enabled: machine !== "all" },
+      { label: "Metric", enabled: Boolean(metricKind) },
+      { label: "Group", enabled: group !== "all" },
+      { label: "Branch", enabled: branch !== "all" },
+      { label: "Time", enabled: Boolean(timeStart || timeEnd) }
+    ];
+
+    return createElement(
+      "span",
+      { className: "text-[12px] leading-4" },
+      ...filterStates.map((filterState, index) => createElement(
+        "span",
+        { key: filterState.label },
+        createElement(
+          "span",
+          { className: filterState.enabled ? "text-theme-brand" : "text-stone-500 dark:text-stone-400" },
+          filterState.label
+        ),
+        index < filterStates.length - 1
+          ? createElement("span", { className: "text-stone-400 dark:text-stone-500" }, " · ")
+          : null
+      ))
+    );
+  }, [branch, group, machine, metricKind, timeEnd, timeStart]);
+
   const stats = useMemo<OverviewStat[]>(() => [
     {
       Icon: FiDatabase,
@@ -264,7 +311,8 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
       value: filteredRuns.length.toLocaleString(),
       delta: "",
       deltaTone: "neutral",
-      detail: machine && metricKind ? `filtered on ${machine} · ${metricKind}` : "Waiting for a machine slice"
+      detail: capturedRunsDetail,
+      detailFullWidth: true
     },
     {
       Icon: FiClock,
@@ -273,8 +321,8 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
       delta: selectedMetricDelta === null ? "" : formatPercent(selectedMetricDelta),
       deltaTone: selectedMetricDelta === null || !focusBenchmark
         ? "neutral"
-        : statDeltaTone[metricDeltaClass(selectedMetricDelta, focusBenchmark.better)],
-      detail: focusBenchmark && baselineBenchmark ? "vs baseline" : "Pick a comparable baseline run"
+        : benchmarkDeltaTone(selectedMetricDelta, focusBenchmark.better),
+      detail: focusBenchmark && baselineBenchmark ? "vs baseline" : ""
     },
     {
       Icon: FiGitBranch,
@@ -284,7 +332,7 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
       deltaTone: "neutral",
       detail: latestRun?.is_dirty ? "Latest run was recorded from a dirty worktree" : "Latest run is clean"
     }
-  ], [baselineBenchmark, filteredRuns, focusBenchmark, latestRun, machine, metricKind, rows, selectedMetricDelta]);
+  ], [baselineBenchmark, capturedRunsDetail, filteredRuns, focusBenchmark, latestRun, rows, selectedMetricDelta]);
 
   return {
     runs,

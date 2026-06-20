@@ -115,12 +115,18 @@ export type TrendDisplayUnitContext = {
   formatMetricLabel: (label: string) => string;
 };
 
+export type TrendMachineSeries = {
+  machineId: string;
+  rows: TrendPlotRow[];
+};
+
 export const UI_SETTINGS_STORAGE_KEY = "benchledger-ui-settings";
 export const Trend_Y_Padding_Ratio = 0.08;
 export const Trend_Board_Default_Columns = 3;
 export const Trend_Board_Min_Columns = 1;
 export const Trend_Board_Max_Columns = 10;
 export const Trend_Board_Plot_Height = 280;
+export const Largest_Deltas_Bar_Width = 0.5;
 export const Asset_Base_URL = import.meta.env.BASE_URL;
 
 export const deltaColorKey = {
@@ -214,6 +220,43 @@ export function colorWithAlpha(color: string, alpha: number): string {
   return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 }
 
+export function plotThemeFor(theme: ThemeMode): PlotTheme {
+  if (theme === "dark") {
+    return {
+      paper: "transparent",
+      plot: "transparent",
+      grid: "#2F2F33",
+      axis: "#A8A29E",
+      zero: "#44403C",
+      line: "#F59E0B",
+      areaGradientStart: "rgba(245, 158, 11, 0)",
+      areaGradientEnd: "rgba(245, 158, 11, 0.35)",
+      markerStrong: "#FBBF24",
+      marker: "#F59E0B",
+      markerMuted: "#78716C",
+      deltaUp: "#DC2626",
+      deltaDown: "#059669",
+      deltaNeutral: "#78716C"
+    };
+  }
+  return {
+    paper: "transparent",
+    plot: "transparent",
+    grid: "#E7E5E4",
+    axis: "#78716C",
+    zero: "#D6D3D1",
+    line: "#B45309",
+    areaGradientStart: "rgba(180, 83, 9, 0)",
+    areaGradientEnd: "rgba(180, 83, 9, 0.28)",
+    markerStrong: "#18181B",
+    marker: "#B45309",
+    markerMuted: "#A8A29E",
+    deltaUp: "#DC2626",
+    deltaDown: "#059669",
+    deltaNeutral: "#78716C"
+  };
+}
+
 export function colorForBenchmark(index: number): string {
   return _Trend_Categorical_Colors[index % _Trend_Categorical_Colors.length];
 }
@@ -294,6 +337,24 @@ export function trendDisplayUnitContext(
   };
 }
 
+export function splitTrendRowsByMachine(rows: TrendPlotRow[]): TrendMachineSeries[] {
+  const rowsByMachine = new Map<string, TrendPlotRow[]>();
+
+  for (const row of rows) {
+    const machineId = row.machine_id || "unknown";
+    const bucket = rowsByMachine.get(machineId);
+    if (bucket) {
+      bucket.push(row);
+      continue;
+    }
+    rowsByMachine.set(machineId, [row]);
+  }
+
+  return Array.from(rowsByMachine.entries())
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([machineId, machineRows]) => ({ machineId, rows: machineRows }));
+}
+
 export function buildTrendTrace(
   rows: TrendPlotRow[],
   options: {
@@ -356,6 +417,7 @@ export function buildTrendTrace(
       x,
       y,
       customdata: rows.map((row) => [
+        row.machine_id,
         row.code_date,
         row.measured_at,
         displayUnitContext.formatValue(row.value, row.unit)
@@ -377,7 +439,7 @@ export function buildTrendTrace(
         type: "vertical",
         colorscale
       },
-      hovertemplate: `%{x}<br>Code date: %{customdata[0]}<br>Measured: %{customdata[1]}<br>Value: %{customdata[2]}<br>Unit: ${unit || "n/a"}<extra></extra>`,
+      hovertemplate: `%{x}<br>Machine: %{customdata[0]}<br>Code date: %{customdata[1]}<br>Measured: %{customdata[2]}<br>Value: %{customdata[3]}<br>Unit: ${unit || "n/a"}<extra></extra>`,
       showlegend: showLegend
     }
   ];

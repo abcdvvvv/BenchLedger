@@ -3,22 +3,23 @@ import {
   buildTrendRowsByBenchmark,
   normalizeSelectedBenchmarkIds,
   type BenchmarkViewBenchmarkOption
-} from "./benchmark-view";
+} from "../../lib/benchmark-view";
 import {
   Trend_Y_Padding_Ratio,
   buildRuns,
   buildTrendTrace,
   colorForBenchmark,
   colorWithAlpha,
+  splitTrendRowsByMachine,
   trendDisplayUnitContext,
   type PlotTheme,
   type ThemeMode,
   type TrendAxisMode,
   type TrendLineShape,
   type TrendMarkerFillMode
-} from "./dashboard";
-import type { TrendMarkerSymbol } from "./trend-marker-symbols";
-import type { BenchmarkRow } from "./types";
+} from "../../lib/dashboard";
+import type { TrendMarkerSymbol } from "../../lib/trend-marker-symbols";
+import type { BenchmarkRow } from "../../lib/types";
 
 export type TrendBoardCard = {
   benchmarkId: string;
@@ -88,7 +89,6 @@ export function useTrendBoardModel(options: UseTrendBoardModelOptions): UseTrend
       const cardRows = trendBoardRowsByBenchmark.get(benchmarkKey) ?? [];
       if (!cardRows.length) return [];
       const displayUnitContext = trendDisplayUnitContext(cardRows);
-      const color = colorForBenchmark(index);
       const option = benchmarkOptionsById.get(benchmarkKey);
       const path = option?.path?.length ? option.path : [option?.label ?? benchmarkKey];
       const label = path.length > 1 ? path.slice(0, -1).join(" | ") : path[0] ?? benchmarkKey;
@@ -105,23 +105,28 @@ export function useTrendBoardModel(options: UseTrendBoardModelOptions): UseTrend
         label,
         path,
         metricLabel: displayUnitContext.formatMetricLabel(metricKind),
-        traces: buildTrendTrace(cardRows, {
-          axisMode: trendAxisMode,
-          lineShape: trendLineShape,
-          markerSymbol: trendMarkerSymbol,
-          markerFillMode: trendMarkerFillMode,
-          displayUnitContext,
-          color,
-          label,
-          plotTheme,
-          theme,
-          yMin,
-          yPadding,
-          showLegend: false,
-          fillGradientScale: [
-            [0, colorWithAlpha(color, 0)],
-            [1, colorWithAlpha(color, 0.2)]
-          ]
+        traces: splitTrendRowsByMachine(cardRows).flatMap((series, machineIndex, machineSeries) => {
+          const color = colorForBenchmark(index * Math.max(machineSeries.length, 1) + machineIndex);
+          const seriesLabel = machineSeries.length > 1 ? series.machineId : label;
+
+          return buildTrendTrace(series.rows, {
+            axisMode: trendAxisMode,
+            lineShape: trendLineShape,
+            markerSymbol: trendMarkerSymbol,
+            markerFillMode: trendMarkerFillMode,
+            displayUnitContext,
+            color,
+            label: seriesLabel,
+            plotTheme,
+            theme,
+            yMin,
+            yPadding,
+            showLegend: machineSeries.length > 1,
+            fillGradientScale: [
+              [0, colorWithAlpha(color, 0)],
+              [1, colorWithAlpha(color, 0.2)]
+            ]
+          });
         })
       }];
     });

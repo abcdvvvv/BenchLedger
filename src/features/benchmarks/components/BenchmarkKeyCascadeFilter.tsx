@@ -10,7 +10,16 @@ import {
   useMenuStore
 } from "@ariakit/react";
 import { FiCheck, FiChevronDown, FiChevronRight, FiMinus, FiSearch } from "react-icons/fi";
-import { comparePath } from "../lib/dashboard";
+import { comparePath } from "../../../lib/dashboard";
+import { cn } from "../../../components/ui/cn";
+import {
+  Disclosure_Trigger_Icon_Class_Name,
+  MenuEmptyState,
+  menuItemRowClassName,
+  menuSurfaceClassName,
+  menuTriggerClassName,
+  selectionIndicatorClassName
+} from "../../../components/ui/Menu";
 
 export type BenchmarkKeyFilterOption = {
   value: string;
@@ -61,6 +70,8 @@ type BenchmarkKeyNodeItemProps = {
   selectedValueSet: Set<string>;
   toggleValues: (values: string[]) => void;
 };
+
+const Root_Menu_Classes = menuSurfaceClassName("max-h-[26rem] overflow-auto");
 
 function normalizeText(value: string): string {
   return value.trim().toLocaleLowerCase();
@@ -120,7 +131,6 @@ function buildTree(options: BenchmarkKeyFilterOption[]): BenchmarkKeyTreeNode[] 
   for (const option of sortOptions(options)) {
     const path = option.path.length ? option.path : [option.label || option.value];
     let parent = root;
-
     for (let depth = 0; depth < path.length - 1; depth += 1) {
       const branchPath = path.slice(0, depth + 1);
       const branchId = JSON.stringify(branchPath);
@@ -140,7 +150,6 @@ function buildTree(options: BenchmarkKeyFilterOption[]): BenchmarkKeyTreeNode[] 
       }
       parent = branch;
     }
-
     parent.children.push({
       kind: "leaf",
       id: option.value,
@@ -160,10 +169,7 @@ function buildTree(options: BenchmarkKeyFilterOption[]): BenchmarkKeyTreeNode[] 
     return node.allLeafValues;
   }
 
-  for (const child of root.children) {
-    attachLeafValues(child);
-  }
-
+  for (const child of root.children) attachLeafValues(child);
   return root.children;
 }
 
@@ -181,15 +187,9 @@ function filterTree(nodes: BenchmarkKeyTreeNode[], query: string): BenchmarkKeyT
   function visit(node: BenchmarkKeyTreeNode): BenchmarkKeyTreeNode | null {
     if (node.kind === "leaf") {
       if (!matchesLeaf(node)) return null;
-      return {
-        ...node,
-        visibleLeafValues: [node.value]
-      };
+      return { ...node, visibleLeafValues: [node.value] };
     }
-
-    const children = node.children
-      .map((child) => visit(child))
-      .filter((child): child is BenchmarkKeyTreeNode => child !== null);
+    const children = node.children.map((child) => visit(child)).filter((child): child is BenchmarkKeyTreeNode => child !== null);
     if (!children.length) return null;
     return {
       ...node,
@@ -198,17 +198,16 @@ function filterTree(nodes: BenchmarkKeyTreeNode[], query: string): BenchmarkKeyT
     };
   }
 
-  return nodes
-    .map((node) => visit(node))
-    .filter((node): node is BenchmarkKeyTreeNode => node !== null);
+  return nodes.map((node) => visit(node)).filter((node): node is BenchmarkKeyTreeNode => node !== null);
 }
 
 function SelectionIndicator(props: { state: SelectionState }) {
-  const { state } = props;
-
   return (
-    <span className={`benchmark-key-filter-indicator benchmark-key-filter-indicator-${state}`} aria-hidden="true">
-      {state === "checked" ? <FiCheck /> : state === "mixed" ? <FiMinus /> : null}
+    <span
+      className={selectionIndicatorClassName(props.state)}
+      aria-hidden="true"
+    >
+      {props.state === "checked" ? <FiCheck /> : props.state === "mixed" ? <FiMinus /> : null}
     </span>
   );
 }
@@ -216,7 +215,6 @@ function SelectionIndicator(props: { state: SelectionState }) {
 function BenchmarkKeyLeafItem(props: BenchmarkKeyNodeItemProps & { node: BenchmarkKeyLeafNode }) {
   const { node, parentMenu, selectedValueSet, toggleValues } = props;
   const state = selectionState(node.visibleLeafValues, selectedValueSet);
-
   return (
     <MenuItemCheckbox
       store={parentMenu}
@@ -224,11 +222,11 @@ function BenchmarkKeyLeafItem(props: BenchmarkKeyNodeItemProps & { node: Benchma
       value={node.value}
       checked={state === "checked"}
       hideOnClick={false}
-      className={`benchmark-key-filter-item benchmark-key-filter-item-leaf${state === "checked" ? " benchmark-key-filter-item-selected" : ""}`}
+      className={menuItemRowClassName()}
       onClick={() => toggleValues(node.visibleLeafValues)}
     >
       <SelectionIndicator state={state} />
-      <span className="benchmark-key-filter-item-label">{node.segment}</span>
+      <span className="truncate">{node.segment}</span>
     </MenuItemCheckbox>
   );
 }
@@ -248,34 +246,17 @@ function BenchmarkKeyBranchItem(props: BenchmarkKeyNodeItemProps & { node: Bench
       <MenuButton
         store={submenu}
         showOnHover
-        render={
-          <MenuItem
-            store={parentMenu}
-            hideOnClick={false}
-            focusOnHover
-            blurOnHoverEnd={false}
-            className={`benchmark-key-filter-item benchmark-key-filter-item-branch benchmark-key-filter-item-${state}`}
-          />
-        }
+        render={<MenuItem store={parentMenu} hideOnClick={false} focusOnHover blurOnHoverEnd={false} className={menuItemRowClassName({ align: "between" })} />}
         onClick={(event: MouseEvent<HTMLElement>) => {
           event.preventDefault();
           toggleValues(node.visibleLeafValues);
         }}
       >
         <SelectionIndicator state={state} />
-        <span className="benchmark-key-filter-item-label">{node.segment}</span>
-        <FiChevronRight className="benchmark-key-filter-item-arrow" aria-hidden="true" />
+        <span className="min-w-0 flex-1 truncate text-left">{node.segment}</span>
+        <FiChevronRight className="shrink-0 text-gray-400" aria-hidden="true" />
       </MenuButton>
-      <Menu
-        store={submenu}
-        portal
-        overlap
-        gutter={4}
-        overflowPadding={8}
-        fitViewport
-        unmountOnHide
-        className="benchmark-key-filter-menu benchmark-key-filter-submenu"
-      >
+      <Menu store={submenu} portal overlap gutter={4} overflowPadding={8} fitViewport unmountOnHide className={Root_Menu_Classes}>
         {node.children.map((child) => (
           <BenchmarkKeyNodeItem
             key={child.id}
@@ -291,13 +272,9 @@ function BenchmarkKeyBranchItem(props: BenchmarkKeyNodeItemProps & { node: Bench
 }
 
 function BenchmarkKeyNodeItem(props: BenchmarkKeyNodeItemProps) {
-  const { node } = props;
-
-  if (node.kind === "leaf") {
-    return <BenchmarkKeyLeafItem {...props} node={node} />;
-  }
-
-  return <BenchmarkKeyBranchItem {...props} node={node} />;
+  return props.node.kind === "leaf"
+    ? <BenchmarkKeyLeafItem {...props} node={props.node} />
+    : <BenchmarkKeyBranchItem {...props} node={props.node} />;
 }
 
 export function BenchmarkKeyCascadeFilter(props: BenchmarkKeyCascadeFilterProps) {
@@ -321,16 +298,8 @@ export function BenchmarkKeyCascadeFilter(props: BenchmarkKeyCascadeFilterProps)
     if (!nextOpen) setSearchValue("");
   }
 
-  const combobox = useComboboxStore({
-    value: searchValue,
-    setValue: setSearchValue
-  });
-  const menu = useMenuStore({
-    open,
-    setOpen: setMenuOpen,
-    placement: "bottom-start"
-  });
-
+  const combobox = useComboboxStore({ value: searchValue, setValue: setSearchValue });
+  const menu = useMenuStore({ open, setOpen: setMenuOpen, placement: "bottom-start" });
   const tree = useMemo(() => buildTree(options), [options]);
   const filteredTree = useMemo(() => filterTree(tree, searchValue), [searchValue, tree]);
   const selectedValueSet = useMemo(() => new Set(selectedValues), [selectedValues]);
@@ -351,8 +320,7 @@ export function BenchmarkKeyCascadeFilter(props: BenchmarkKeyCascadeFilterProps)
   const inputPlaceholder = open ? "Search keys..." : summaryLabel;
 
   function commitSelectedValues(nextSelectedValueSet: Set<string>) {
-    const nextValues = orderedValues.filter((value) => nextSelectedValueSet.has(value));
-    setSelectedValues(nextValues);
+    setSelectedValues(orderedValues.filter((value) => nextSelectedValueSet.has(value)));
   }
 
   function toggleValues(values: string[]) {
@@ -360,11 +328,8 @@ export function BenchmarkKeyCascadeFilter(props: BenchmarkKeyCascadeFilterProps)
     const nextSelectedValueSet = new Set(selectedValues);
     const allSelected = values.every((value) => nextSelectedValueSet.has(value));
     for (const value of values) {
-      if (allSelected) {
-        nextSelectedValueSet.delete(value);
-      } else {
-        nextSelectedValueSet.add(value);
-      }
+      if (allSelected) nextSelectedValueSet.delete(value);
+      else nextSelectedValueSet.add(value);
     }
     commitSelectedValues(nextSelectedValueSet);
   }
@@ -397,9 +362,7 @@ export function BenchmarkKeyCascadeFilter(props: BenchmarkKeyCascadeFilterProps)
   useEffect(() => {
     const anchorElement = wrapperRef.current;
     if (!anchorElement) return;
-    const disclosureElement = open
-      ? inputRef.current ?? anchorElement
-      : inputRef.current ?? anchorElement;
+    const disclosureElement = inputRef.current ?? anchorElement;
     menu.setAnchorElement(anchorElement);
     menu.setDisclosureElement(disclosureElement);
   }, [menu, open]);
@@ -416,10 +379,10 @@ export function BenchmarkKeyCascadeFilter(props: BenchmarkKeyCascadeFilterProps)
     <div
       ref={wrapperRef}
       style={benchmarkKeyFilterStyle}
-      className={`benchmark-key-filter${className ? ` ${className}` : ""}${isDisabled ? " benchmark-key-filter-disabled" : ""}`}
+      className={cn("min-w-0", className)}
     >
       <label
-        className={`benchmark-key-filter-trigger-shell${open ? " benchmark-key-filter-trigger-shell-open" : ""}`}
+        className={menuTriggerClassName({ disabled: isDisabled })}
         aria-haspopup="menu"
         aria-expanded={open}
       >
@@ -428,7 +391,7 @@ export function BenchmarkKeyCascadeFilter(props: BenchmarkKeyCascadeFilterProps)
           store={combobox}
           disabled={isDisabled}
           readOnly={!open}
-          className="benchmark-key-filter-input"
+          className="type-menu min-w-0 flex-1 border-0 bg-transparent outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500"
           placeholder={inputPlaceholder}
           autoComplete="off"
           aria-label="Search benchmark keys"
@@ -450,12 +413,7 @@ export function BenchmarkKeyCascadeFilter(props: BenchmarkKeyCascadeFilterProps)
                 openMenu();
                 return;
               }
-              if (
-                event.key.length === 1 &&
-                !event.altKey &&
-                !event.ctrlKey &&
-                !event.metaKey
-              ) {
+              if (event.key.length === 1 && !event.altKey && !event.ctrlKey && !event.metaKey) {
                 event.preventDefault();
                 setMenuOpen(true);
                 setSearchValue(event.key);
@@ -471,8 +429,8 @@ export function BenchmarkKeyCascadeFilter(props: BenchmarkKeyCascadeFilterProps)
             }
           }}
         />
-        <span className="benchmark-key-filter-trigger-icon" aria-hidden="true">
-          {open ? <FiSearch /> : <FiChevronDown />}
+        <span className="shrink-0" aria-hidden="true">
+          {open ? <FiSearch className={Disclosure_Trigger_Icon_Class_Name} /> : <FiChevronDown className={Disclosure_Trigger_Icon_Class_Name} />}
         </span>
       </label>
 
@@ -481,10 +439,10 @@ export function BenchmarkKeyCascadeFilter(props: BenchmarkKeyCascadeFilterProps)
         portal
         sameWidth
         fitViewport
-        gutter={-1}
+        gutter={0}
         overflowPadding={8}
         unmountOnHide
-        className="benchmark-key-filter-menu benchmark-key-filter-root-menu"
+        className={Root_Menu_Classes}
         aria-label="Benchmark keys"
       >
         {filteredTree.length ? (
@@ -498,7 +456,7 @@ export function BenchmarkKeyCascadeFilter(props: BenchmarkKeyCascadeFilterProps)
             />
           ))
         ) : (
-          <div className="benchmark-key-filter-empty">No benchmark keys match your search.</div>
+          <MenuEmptyState>No benchmark keys match your search.</MenuEmptyState>
         )}
       </Menu>
     </div>
