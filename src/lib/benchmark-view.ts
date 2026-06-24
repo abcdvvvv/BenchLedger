@@ -2,7 +2,7 @@ import { parseDate } from "./format";
 import {
   comparePath,
   dateInputValue,
-  metricLabel,
+  metricFamilyLabel,
   rowMatchesDisplayStrategy,
   runAxisLabel,
   runHeadline,
@@ -102,7 +102,7 @@ export function filterRowsByViewState(
 
   return rows.filter((row) => {
     if (machine !== "all" && row.machine_id !== machine) return false;
-    if (metricLabel(row) !== metricKind) return false;
+    if (metricFamilyLabel(row) !== metricKind) return false;
     if (branch !== "all" && row.branch !== branch) return false;
     if (!rowMatchesDisplayStrategy(row, displayStrategy)) return false;
     const rowDate = parseDate(row.code_date)?.valueOf() ?? null;

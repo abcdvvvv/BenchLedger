@@ -83,6 +83,7 @@ export type OverviewPageProps = {
     trendAxisMode: TrendAxisMode;
     onToggleTrendAxisMode: () => void;
     trendTraces: Array<Record<string, unknown>>;
+    trendCommitAxisOrder?: { categoryorder: "array"; categoryarray: string[] };
     trendPlotMargin: { t: number; r: number; b: number; l: number };
     plotTheme: PlotTheme;
   };
@@ -318,7 +319,12 @@ export function OverviewPage(props: OverviewPageProps) {
                     paper_bgcolor: "rgba(0, 0, 0, 0)",
                     plot_bgcolor: "rgba(0, 0, 0, 0)",
                     font: { color: trend.plotTheme.axis },
-                    xaxis: { showgrid: false, color: trend.plotTheme.axis, tickfont: { size: 14 } },
+                    xaxis: {
+                      showgrid: false,
+                      color: trend.plotTheme.axis,
+                      tickfont: { size: 14 },
+                      ...(trend.trendAxisMode === "commit" ? trend.trendCommitAxisOrder : undefined)
+                    },
                     yaxis: {
                       title: { text: trend.selectedMetricLabel || "Metric value" },
                       gridcolor: trend.plotTheme.grid,

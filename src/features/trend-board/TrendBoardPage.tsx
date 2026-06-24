@@ -187,7 +187,12 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
                     paper_bgcolor: "rgba(0, 0, 0, 0)",
                     plot_bgcolor: "rgba(0, 0, 0, 0)",
                     font: { color: trend.plotTheme.axis },
-                    xaxis: { showgrid: false, color: trend.plotTheme.axis, tickfont: { size: 14 } },
+                    xaxis: {
+                      showgrid: false,
+                      color: trend.plotTheme.axis,
+                      tickfont: { size: 14 },
+                      ...(header.trendAxisMode === "commit" ? card.commitAxisOrder : undefined)
+                    },
                     yaxis: {
                       title: { text: card.metricLabel || trend.selectedMetricLabel || "Metric value" },
                       gridcolor: trend.plotTheme.grid,

@@ -11,8 +11,10 @@ import {
   Trend_Y_Padding_Ratio,
   buildRuns,
   buildTrendTrace,
+  commitAxisCategoryOrder,
   colorForBenchmark,
   defaultRunPairSortDirection,
+  metricFamilyKey,
   runId,
   runPairSortValue,
   splitTrendRowsByMachine,
@@ -78,6 +80,7 @@ type UseOverviewModelResult = {
   trendPlotMargin: { t: number; r: number; b: number; l: number };
   deltaPlotMargin: { t: number; r: number; b: number; l: number };
   trendTraces: Array<Record<string, unknown>>;
+  trendCommitAxisOrder?: { categoryorder: "array"; categoryarray: string[] };
   toggleRunPairSort: (key: RunPairSortKey) => void;
 };
 
@@ -162,13 +165,22 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
         const focus = focusByBenchmark.get(key);
         const baseline = baselineByBenchmark.get(key);
         if (!focus || !baseline) return null;
+        if (metricFamilyKey(focus) !== metricFamilyKey(baseline)) return null;
+        const displayUnitContext = trendDisplayUnitContext([
+          { value: focus.value, unit: focus.unit },
+          { value: baseline.value, unit: baseline.unit }
+        ]);
+        const scaledFocusValue = displayUnitContext.scaleValue(focus.value, focus.unit);
+        const scaledBaselineValue = displayUnitContext.scaleValue(baseline.value, baseline.unit);
         return {
           benchmark_id: key,
           benchmark_label: focus.benchmark_label,
-          focus_value: focus.value,
-          baseline_value: baseline.value,
-          delta: percentageChange(focus.value, baseline.value),
-          unit: focus.unit,
+          focus_value: scaledFocusValue,
+          baseline_value: scaledBaselineValue,
+          focus_unit: focus.unit,
+          baseline_unit: baseline.unit,
+          delta: percentageChange(scaledFocusValue, scaledBaselineValue),
+          unit: displayUnitContext.unit || focus.unit,
           better: focus.better
         };
       })
@@ -207,13 +219,17 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
     [benchmarkOptions, overviewTrendRowsByBenchmark]
   );
   const trendDisplayContext = useMemo(() => trendDisplayUnitContext(trendRows), [trendRows]);
+  const trendCommitAxisOrder = useMemo(
+    () => trendAxisMode === "commit" ? commitAxisCategoryOrder(trendRows) : undefined,
+    [trendAxisMode, trendRows]
+  );
   const trendMetricLabel = useMemo(
     () => trendDisplayContext.formatMetricLabel(metricKind),
     [metricKind, trendDisplayContext]
   );
   const trendPlotMargin = trendRows.length ? { t: 10, r: 16, b: 40, l: 55 } : { t: 10, r: 16, b: 40, l: 20 };
   const deltaPlotMargin = comparisonRows.length ? { t: 10, r: 12, b: 36, l: 170 } : { t: 10, r: 12, b: 36, l: 20 };
-  const trendY = trendRows.map((row) => row.value);
+  const trendY = trendRows.map((row) => trendDisplayContext.scaleValue(row.value, row.unit));
   const trendYMin = trendY.length ? Math.min(...trendY) : 0;
   const trendYMax = trendY.length ? Math.max(...trendY) : 0;
   const trendYSpan = trendYMax - trendYMin;
@@ -346,6 +362,7 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
     trendPlotMargin,
     deltaPlotMargin,
     trendTraces,
+    trendCommitAxisOrder,
     toggleRunPairSort
   };
 }

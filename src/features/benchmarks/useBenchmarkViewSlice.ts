@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { unique } from "../../lib/format";
-import { dateRangeEnd, dateRangeStart, formatDateRangePart, metricLabel, type DisplayStrategy } from "../../lib/dashboard";
+import { dateRangeEnd, dateRangeStart, formatDateRangePart, metricFamilyLabel, type DisplayStrategy } from "../../lib/dashboard";
 import {
   buildBenchmarkOptions,
   buildGroupOptions,
@@ -62,7 +62,7 @@ export function useBenchmarkViewSlice(
 
   const metricOptions = useMemo(() => {
     const metricRows = machine && machine !== "all" ? rows.filter((row) => row.machine_id === machine) : rows;
-    return unique(metricRows.map((row) => metricLabel(row))).sort();
+    return unique(metricRows.map((row) => metricFamilyLabel(row))).sort();
   }, [machine, rows]);
 
   const branchOptions = useMemo(

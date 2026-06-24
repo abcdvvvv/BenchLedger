@@ -110,7 +110,7 @@ export type PlotTheme = {
 
 export type TrendDisplayUnitContext = {
   unit: string;
-  scaleValue: (value: number) => number;
+  scaleValue: (value: number, unit: string) => number;
   formatValue: (value: number, unit: string) => string;
   formatMetricLabel: (label: string) => string;
 };
@@ -118,6 +118,11 @@ export type TrendDisplayUnitContext = {
 export type TrendMachineSeries = {
   machineId: string;
   rows: TrendPlotRow[];
+};
+
+export type PlotAxisCategoryOrder = {
+  categoryorder: "array";
+  categoryarray: string[];
 };
 
 export const UI_SETTINGS_STORAGE_KEY = "benchledger-ui-settings";
@@ -261,8 +266,16 @@ export function colorForBenchmark(index: number): string {
   return _Trend_Categorical_Colors[index % _Trend_Categorical_Colors.length];
 }
 
-export function metricKey(row: Pick<BenchmarkRow, "metric_name" | "statistic" | "unit">): string {
-  return `${row.metric_name}::${row.statistic}::${row.unit}`;
+function _metricUnitFamily(unit: string): string {
+  return _timeUnitNs(unit) === null ? unit : "time";
+}
+
+export function metricKey(row: Pick<BenchmarkRow, "metric_name" | "statistic">): string {
+  return `${row.metric_name}::${row.statistic}`;
+}
+
+export function metricFamilyKey(row: Pick<BenchmarkRow, "metric_name" | "statistic" | "unit">): string {
+  return `${metricKey(row)}::${_metricUnitFamily(row.unit)}`;
 }
 
 export function isPrimaryMetric(row: Pick<BenchmarkRow, "metric_name" | "statistic" | "unit">): boolean {
@@ -271,8 +284,14 @@ export function isPrimaryMetric(row: Pick<BenchmarkRow, "metric_name" | "statist
     row.unit === "ns";
 }
 
-export function metricLabel(row: Pick<BenchmarkRow, "metric_name" | "statistic" | "unit">): string {
-  return `${row.metric_name} ${row.statistic} ${row.unit}`;
+export function metricLabel(row: Pick<BenchmarkRow, "metric_name" | "statistic">): string {
+  return `${row.metric_name} ${row.statistic}`;
+}
+
+export function metricFamilyLabel(row: Pick<BenchmarkRow, "metric_name" | "statistic" | "unit">): string {
+  const label = metricLabel(row);
+  const family = _metricUnitFamily(row.unit);
+  return family === "time" || !family ? label : `${label} ${family}`;
 }
 
 function _timeUnitNs(unit: string): number | null {
@@ -291,12 +310,12 @@ function _formatScaledNumber(value: number): string {
   return value.toLocaleString(undefined, { maximumFractionDigits: 3 });
 }
 
-function _replaceMetricLabelUnit(label: string, sourceUnit: string, displayUnit: string): string {
+function _formatMetricLabelUnit(label: string, displayUnit: string, sourceUnit = ""): string {
   if (!label) return "Metric value";
-  if (sourceUnit && label.endsWith(` ${sourceUnit}`)) {
-    return `${label.slice(0, -sourceUnit.length)}${displayUnit}`;
-  }
-  return label;
+  if (!displayUnit) return label;
+  if (sourceUnit && label.endsWith(` ${sourceUnit}`)) return `${label.slice(0, -sourceUnit.length)}${displayUnit}`;
+  if (label.endsWith(` ${displayUnit}`)) return label;
+  return `${label} ${displayUnit}`;
 }
 
 export function trendDisplayUnitContext(
@@ -311,29 +330,63 @@ export function trendDisplayUnitContext(
 
   const sourceUnit = sourceUnits[0];
   const sourceUnitNs = _timeUnitNs(sourceUnit);
-  if (sourceUnits.length !== 1 || sourceUnitNs === null) {
+  const allTimeUnits = sourceUnits.every((unit) => _timeUnitNs(unit) !== null);
+
+  if (allTimeUnits) {
+    const maxNs = rows.reduce((maxValue, row) => {
+      const unitNs = _timeUnitNs(row.unit);
+      if (!Number.isFinite(row.value) || unitNs === null) return maxValue;
+      return Math.max(maxValue, Math.abs(row.value) * unitNs);
+    }, 0);
+    const displayUnit = _Trend_Time_Display_Units.reduce((currentUnit, candidateUnit) => {
+      if (maxNs / candidateUnit.ns >= 1) return candidateUnit;
+      return currentUnit;
+    }, _Trend_Time_Display_Units[0]);
+
     return {
-      unit: sourceUnit,
+      unit: displayUnit.unit,
+      scaleValue: (value, unit) => {
+        const unitNs = _timeUnitNs(unit);
+        return unitNs === null ? value : value * unitNs / displayUnit.ns;
+      },
+      formatValue: (value, unit) => {
+        const unitNs = _timeUnitNs(unit);
+        if (unitNs === null) return formatMetricValue(value, unit);
+        return `${_formatScaledNumber(value * unitNs / displayUnit.ns)} ${displayUnit.unit}`;
+      },
+      formatMetricLabel: (label) => _formatMetricLabelUnit(label, displayUnit.unit, sourceUnits.length === 1 ? sourceUnit : "")
+    };
+  }
+
+  if (sourceUnits.length !== 1 || sourceUnitNs === null) {
+    if (sourceUnits.length === 1) {
+      return {
+        unit: sourceUnit,
+        scaleValue: (value) => value,
+        formatValue: (value, unit) => formatMetricValue(value, unit),
+        formatMetricLabel: (label) => _formatMetricLabelUnit(label, sourceUnit)
+      };
+    }
+    return {
+      unit: "",
       scaleValue: (value) => value,
       formatValue: (value, unit) => formatMetricValue(value, unit),
       formatMetricLabel: (label) => label || "Metric value"
     };
   }
 
-  const maxNs = rows.reduce((maxValue, row) => {
-    if (!Number.isFinite(row.value)) return maxValue;
-    return Math.max(maxValue, Math.abs(row.value) * sourceUnitNs);
-  }, 0);
-  const displayUnit = _Trend_Time_Display_Units.reduce((currentUnit, candidateUnit) => {
-    if (maxNs / candidateUnit.ns >= 1) return candidateUnit;
-    return currentUnit;
-  }, _Trend_Time_Display_Units[0]);
-
   return {
-    unit: displayUnit.unit,
-    scaleValue: (value) => value * sourceUnitNs / displayUnit.ns,
-    formatValue: (value) => `${_formatScaledNumber(value * sourceUnitNs / displayUnit.ns)} ${displayUnit.unit}`,
-    formatMetricLabel: (label) => _replaceMetricLabelUnit(label, sourceUnit, displayUnit.unit)
+    unit: sourceUnit,
+    scaleValue: (value, unit) => {
+      const unitNs = _timeUnitNs(unit);
+      return unitNs === null ? value : value * unitNs / sourceUnitNs;
+    },
+    formatValue: (value, unit) => {
+      const unitNs = _timeUnitNs(unit);
+      if (unitNs === null) return formatMetricValue(value, unit);
+      return `${_formatScaledNumber(value * unitNs / sourceUnitNs)} ${sourceUnit}`;
+    },
+    formatMetricLabel: (label) => _formatMetricLabelUnit(label, sourceUnit, sourceUnit)
   };
 }
 
@@ -353,6 +406,12 @@ export function splitTrendRowsByMachine(rows: TrendPlotRow[]): TrendMachineSerie
   return Array.from(rowsByMachine.entries())
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([machineId, machineRows]) => ({ machineId, rows: machineRows }));
+}
+
+export function commitAxisCategoryOrder(rows: TrendPlotRow[]): PlotAxisCategoryOrder | undefined {
+  if (!rows.length) return undefined;
+  const categoryarray = unique(rows.map((row) => row.run_axis_label));
+  return categoryarray.length ? { categoryorder: "array", categoryarray } : undefined;
 }
 
 export function buildTrendTrace(
@@ -390,7 +449,7 @@ export function buildTrendTrace(
     fillGradientScale
   } = options;
   const x = rows.map((row) => axisMode === "commit" ? row.run_axis_label : row.code_date);
-  const y = rows.map((row) => displayUnitContext.scaleValue(row.value));
+  const y = rows.map((row) => displayUnitContext.scaleValue(row.value, row.unit));
   const unit = displayUnitContext.unit || (rows[0]?.unit ?? "");
   const gradientStart = colorWithAlpha(color, 0);
   const gradientEnd = colorWithAlpha(color, theme === "dark" ? 0.2 : 0.2);
@@ -405,7 +464,7 @@ export function buildTrendTrace(
       type: "scatter",
       mode: "lines",
       x,
-      y: rows.map(() => displayUnitContext.scaleValue(yMin - yPadding)),
+      y: rows.map(() => yMin - yPadding),
       line: { color: "rgba(0, 0, 0, 0)", width: 0 },
       hoverinfo: "skip",
       showlegend: false

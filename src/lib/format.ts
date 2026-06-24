@@ -38,6 +38,13 @@ export function formatRuntime(value: number): string {
   return `${(value / 1_000_000_000).toFixed(2)} s`;
 }
 
+function formatScaledTime(value: number, unit: string): string {
+  if (!Number.isFinite(value)) return "n/a";
+  const normalizedUnit = unit === "us" ? "μs" : unit;
+  if (normalizedUnit === "ns") return formatRuntime(value);
+  return `${value.toLocaleString(undefined, { maximumFractionDigits: 3 })} ${normalizedUnit}`;
+}
+
 export function formatBytes(value: number): string {
   if (!Number.isFinite(value)) return "n/a";
   if (value < 1024) return `${value.toLocaleString()} B`;
@@ -48,7 +55,9 @@ export function formatBytes(value: number): string {
 
 export function formatMetricValue(value: number, unit: string): string {
   if (!Number.isFinite(value)) return "n/a";
-  if (unit === "ns") return formatRuntime(value);
+  if (unit === "ns" || unit === "μs" || unit === "us" || unit === "ms" || unit === "s" || unit === "min" || unit === "h") {
+    return formatScaledTime(value, unit);
+  }
   if (unit === "bytes") return formatBytes(value);
   if (unit === "count") return value.toLocaleString();
   if (unit === "ops/s") return `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })} ops/s`;

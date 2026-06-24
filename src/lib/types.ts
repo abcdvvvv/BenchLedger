@@ -51,6 +51,8 @@ export type PairComparison = {
   benchmark_label: string;
   focus_value: number;
   baseline_value: number;
+  focus_unit: string;
+  baseline_unit: string;
   delta: number;
   unit: string;
   better: "lower" | "higher" | "neutral";

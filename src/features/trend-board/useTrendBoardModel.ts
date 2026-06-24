@@ -8,6 +8,7 @@ import {
   Trend_Y_Padding_Ratio,
   buildRuns,
   buildTrendTrace,
+  commitAxisCategoryOrder,
   colorForBenchmark,
   colorWithAlpha,
   splitTrendRowsByMachine,
@@ -27,6 +28,7 @@ export type TrendBoardCard = {
   path: string[];
   metricLabel: string;
   traces: Array<Record<string, unknown>>;
+  commitAxisOrder?: { categoryorder: "array"; categoryarray: string[] };
 };
 
 type UseTrendBoardModelOptions = {
@@ -92,7 +94,7 @@ export function useTrendBoardModel(options: UseTrendBoardModelOptions): UseTrend
       const option = benchmarkOptionsById.get(benchmarkKey);
       const path = option?.path?.length ? option.path : [option?.label ?? benchmarkKey];
       const label = path.length > 1 ? path.slice(0, -1).join(" | ") : path[0] ?? benchmarkKey;
-      const yValues = cardRows.map((row) => row.value);
+      const yValues = cardRows.map((row) => displayUnitContext.scaleValue(row.value, row.unit));
       const yMin = Math.min(...yValues);
       const yMax = Math.max(...yValues);
       const ySpan = yMax - yMin;
@@ -105,6 +107,7 @@ export function useTrendBoardModel(options: UseTrendBoardModelOptions): UseTrend
         label,
         path,
         metricLabel: displayUnitContext.formatMetricLabel(metricKind),
+        commitAxisOrder: trendAxisMode === "commit" ? commitAxisCategoryOrder(cardRows) : undefined,
         traces: splitTrendRowsByMachine(cardRows).flatMap((series, machineIndex, machineSeries) => {
           const color = colorForBenchmark(index * Math.max(machineSeries.length, 1) + machineIndex);
           const seriesLabel = machineSeries.length > 1 ? series.machineId : label;

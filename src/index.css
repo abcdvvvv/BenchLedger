@@ -392,7 +392,9 @@
   }
 
   .surface-card-trend-board {
-    @apply bg-white/50 dark:bg-[#1a1a1e]/50;
+    border-width: 0;
+    box-shadow: none;
+    @apply bg-white/50 dark:bg-[#1a1a1e]/25;
   }
 
   .surface-card-positive {

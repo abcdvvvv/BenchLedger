@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   clampTrendBoardColumns,
+  commitAxisCategoryOrder,
   comparePath,
   databaseDescription,
   databaseTitle,
   defaultRunPairSortDirection,
+  metricFamilyLabel,
   formatSchemaLabel,
+  metricLabel,
   metadataDescription,
   metadataTitle,
   rowMatchesDisplayStrategy,
@@ -89,22 +92,44 @@ describe("dashboard helpers", () => {
     ]);
 
     expect(context.unit).toBe("μs");
-    expect(context.scaleValue(2_500)).toBe(2.5);
-    expect(context.formatMetricLabel("time median ns")).toBe("time median μs");
+    expect(context.scaleValue(2_500, "ns")).toBe(2.5);
+    expect(context.formatMetricLabel("time median")).toBe("time median μs");
     expect(context.formatValue(2_500, "ns")).toContain("μs");
   });
 
-  it("falls back when units are mixed or unknown", () => {
+  it("normalizes mixed time units into one display unit", () => {
+    const mixedTime = trendDisplayUnitContext([
+      { value: 2_000, unit: "ns" },
+      { value: 0.000004, unit: "s" }
+    ]);
+
+    expect(mixedTime.unit).toBe("μs");
+    expect(mixedTime.scaleValue(2_000, "ns")).toBe(2);
+    expect(mixedTime.scaleValue(0.000004, "s")).toBe(4);
+    expect(mixedTime.formatMetricLabel("time median")).toBe("time median μs");
+  });
+
+  it("falls back when units are mixed across incompatible dimensions or unknown", () => {
     const mixed = trendDisplayUnitContext([
       { value: 5, unit: "ns" },
       { value: 7, unit: "bytes" }
     ]);
-    expect(mixed.unit).toBe("ns");
-    expect(mixed.scaleValue(5)).toBe(5);
+    expect(mixed.unit).toBe("");
+    expect(mixed.scaleValue(5, "ns")).toBe(5);
 
     const unknown = trendDisplayUnitContext([{ value: 5, unit: "widgets" }]);
     expect(unknown.unit).toBe("widgets");
-    expect(unknown.formatMetricLabel("")).toBe("Metric value");
+    expect(unknown.formatMetricLabel("custom median")).toBe("custom median widgets");
+  });
+
+  it("builds base metric labels without unit classification", () => {
+    expect(metricLabel(Base_Row)).toBe("time median");
+  });
+
+  it("builds metric family labels that only collapse compatible time units", () => {
+    expect(metricFamilyLabel(Base_Row)).toBe("time median");
+    expect(metricFamilyLabel({ ...Base_Row, metric_name: "memory", unit: "bytes" })).toBe("memory median bytes");
+    expect(metricFamilyLabel({ ...Base_Row, metric_name: "throughput", unit: "ops/s" })).toBe("throughput median ops/s");
   });
 
   it("splits trend rows into independent machine series", () => {
@@ -133,6 +158,36 @@ describe("dashboard helpers", () => {
     expect(series.map((entry) => entry.machineId)).toEqual(["machine-a", "machine-b"]);
     expect(series[0].rows).toHaveLength(1);
     expect(series[1].rows).toHaveLength(2);
+  });
+
+  it("builds commit axis category order from code-date-sorted trend rows", () => {
+    const rows = [
+      makeTrendRow({
+        run_id: "run-1",
+        code_date: "2026-06-02T00:00:00Z",
+        run_axis_label: "v0.6.25"
+      }),
+      makeTrendRow({
+        run_id: "run-2",
+        code_date: "2026-06-08T00:00:00Z",
+        run_axis_label: "af73b09"
+      }),
+      makeTrendRow({
+        run_id: "run-3",
+        code_date: "2026-06-17T00:00:00Z",
+        run_axis_label: "df357f6"
+      }),
+      makeTrendRow({
+        run_id: "run-4",
+        code_date: "2026-06-20T00:00:00Z",
+        run_axis_label: "00a99b7"
+      })
+    ];
+
+    expect(commitAxisCategoryOrder(rows)).toEqual({
+      categoryorder: "array",
+      categoryarray: ["v0.6.25", "af73b09", "df357f6", "00a99b7"]
+    });
   });
 
   it("formats catalog metadata helpers", () => {
