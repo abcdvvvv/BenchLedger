@@ -1,3 +1,4 @@
+import packageJson from "../../package.json";
 import { Asset_Base_URL } from "../lib/dashboard";
 import type { BenchLedgerAppPages, BenchLedgerAppModel } from "./appModelTypes";
 import type { BenchmarkDatasetState } from "./useBenchmarkDatasetState";
@@ -145,6 +146,11 @@ export function buildAppPages(state: BenchmarkDatasetState, openLocalFilePicker:
     databases: {
       databaseCatalog,
       onOpenLocalFilePicker: openLocalFilePicker
+    },
+    about: {
+      applicationName: "BenchLedger",
+      version: packageJson.version,
+      repositoryUrl: "https://github.com/abcdvvvv/BenchLedger"
     }
   };
 }

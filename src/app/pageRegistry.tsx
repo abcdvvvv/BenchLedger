@@ -2,6 +2,7 @@ import { lazy } from "react";
 import {
   FiBarChart2,
   FiDatabase,
+  FiInfo,
   FiLayers,
   FiSettings,
   FiTrendingUp
@@ -20,7 +21,8 @@ export const App_Page_Definitions: AppPageDefinition[] = [
   { id: "trend-board", navigationLabel: "Trend Board", Icon: FiTrendingUp },
   { id: "benchmark-keys", navigationLabel: "Benchmark Keys", Icon: FiLayers },
   { id: "database-catalog", navigationLabel: "Databases", Icon: FiDatabase },
-  { id: "settings", navigationLabel: "Settings", Icon: FiSettings }
+  { id: "settings", navigationLabel: "Settings", Icon: FiSettings },
+  { id: "about", navigationLabel: "About", Icon: FiInfo }
 ];
 
 export const OverviewPage = lazy(async () => {
@@ -46,4 +48,9 @@ export const SettingsPage = lazy(async () => {
 export const DatabasesPage = lazy(async () => {
   const module = await import("../features/databases/DatabasesPage");
   return { default: module.DatabasesPage };
+});
+
+export const AboutPage = lazy(async () => {
+  const module = await import("../features/about/AboutPage");
+  return { default: module.AboutPage };
 });

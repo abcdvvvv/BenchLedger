@@ -15,7 +15,7 @@ export type TrendLineShape = "line" | "curve";
 export type TrendMarkerFillMode = "hollow" | "filled";
 export type TrendAxisMode = "commit" | "time";
 export type DisplayStrategy = "all" | "tagged-only" | "tagged-main";
-export type ActivePage = "overview" | "trend-board" | "benchmark-keys" | "settings" | "database-catalog";
+export type ActivePage = "overview" | "trend-board" | "benchmark-keys" | "settings" | "database-catalog" | "about";
 export type AppPhase = "booting" | "select-source" | "loading-database" | "ready";
 export type RunPairSortKey = "benchmark" | "focus" | "baseline" | "delta" | "unit";
 export type SortDirection = "asc" | "desc";
@@ -551,7 +551,8 @@ export function readUISettings(): UISettings {
         parsedSettings.activePage === "trend-board" ||
         parsedSettings.activePage === "benchmark-keys" ||
         parsedSettings.activePage === "settings" ||
-        parsedSettings.activePage === "database-catalog"
+        parsedSettings.activePage === "database-catalog" ||
+        parsedSettings.activePage === "about"
           ? parsedSettings.activePage
           : defaults.activePage,
       theme: parsedSettings.theme === "light" || parsedSettings.theme === "dark" ? parsedSettings.theme : defaults.theme,

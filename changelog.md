@@ -2,8 +2,11 @@
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-06-25
+
 ### Changed
 
+- Added an `About` page to the sidebar navigation so the frontend can show the software name, current version, and repository URL in a dedicated basic-information view.
 - Refined metric-family filtering so time-based metrics now group by metric and statistic across compatible time units instead of splitting `ns`, `μs`, `ms`, and `s` into separate Metric options, while non-convertible unit families remain distinct.
 - Fixed commit-axis trend ordering in Overview and Trend Board by explicitly locking Plotly category order to `code_date`, preventing multi-machine commit plots from drawing Z-shaped backtracking segments when traces expose commit labels in different subsets.
 
@@ -62,7 +65,8 @@
 
 Initial usable release of BenchLedger.
 
-[Unreleased]: https://github.com/abcdvvvv/BenchLedger/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/abcdvvvv/BenchLedger/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/abcdvvvv/BenchLedger/releases/tag/v0.4.2
 [0.4.0]: https://github.com/abcdvvvv/BenchLedger/releases/tag/v0.4.0
 [0.3.4]: https://github.com/abcdvvvv/BenchLedger/releases/tag/v0.3.4
 [0.3.3]: https://github.com/abcdvvvv/BenchLedger/releases/tag/v0.3.3

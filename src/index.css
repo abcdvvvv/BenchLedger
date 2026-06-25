@@ -445,6 +445,7 @@
   }
 
   .surface-control {
+    border-radius: var(--radius-theme);
     border-width: var(--border-width-theme);
     box-shadow: var(--shadow-theme-control);
     @apply border-stone-300 bg-white dark:border-stone-600 dark:bg-[#18181b];

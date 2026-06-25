@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { DatabasesPage, BenchmarkKeysPage, OverviewPage, SettingsPage, TrendBoardPage } from "./app/pageRegistry";
+import { AboutPage, DatabasesPage, BenchmarkKeysPage, OverviewPage, SettingsPage, TrendBoardPage } from "./app/pageRegistry";
 import { useBenchLedgerAppModel } from "./app/useBenchLedgerAppModel";
 import { AppSidebar } from "./shell/AppSidebar";
 import { AppLayout } from "./shell/AppLayout";
@@ -59,6 +59,8 @@ function App() {
             <BenchmarkKeysPage {...app.pages.benchmarkKeys} />
           ) : app.activePage === "settings" ? (
             <SettingsPage {...app.pages.settings} />
+          ) : app.activePage === "about" ? (
+            <AboutPage {...app.pages.about} />
           ) : (
             <DatabasesPage {...app.pages.databases} />
           )}

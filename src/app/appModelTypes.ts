@@ -6,6 +6,7 @@ import type { TrendBoardPageProps } from "../features/trend-board/TrendBoardPage
 import type { BenchmarkKeysPageProps } from "../features/benchmark-keys/BenchmarkKeysPage";
 import type { SettingsPageProps } from "../features/settings/SettingsPage";
 import type { DatabasesPageProps } from "../features/databases/DatabasesPage";
+import type { AboutPageProps } from "../features/about/AboutPage";
 import type { useBenchmarkDataSource } from "../lib/useBenchmarkDataSource";
 
 export type BenchLedgerAppPages = {
@@ -14,6 +15,7 @@ export type BenchLedgerAppPages = {
   benchmarkKeys: BenchmarkKeysPageProps;
   settings: SettingsPageProps;
   databases: DatabasesPageProps;
+  about: AboutPageProps;
 };
 
 export type BenchLedgerAppModel = {
