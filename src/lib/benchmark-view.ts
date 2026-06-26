@@ -24,7 +24,7 @@ export type BenchmarkViewBenchmarkOption = {
 };
 
 export type BenchmarkViewFilterState = {
-  machine: string;
+  environment: string;
   metricKind: string;
   branch: string;
   timeStartValue: number | null;
@@ -92,7 +92,7 @@ export function filterRowsByViewState(
   state: BenchmarkViewFilterState
 ): BenchmarkRow[] {
   const {
-    machine,
+    environment,
     metricKind,
     branch,
     timeStartValue,
@@ -101,9 +101,10 @@ export function filterRowsByViewState(
   } = state;
 
   return rows.filter((row) => {
-    if (machine !== "all" && row.machine_id !== machine) return false;
+    if (environment !== "all" && row.environment_id !== environment) return false;
     if (metricFamilyLabel(row) !== metricKind) return false;
-    if (branch !== "all" && row.branch !== branch) return false;
+    const rowBranch = row.code_state_metadata.source?.branch || row.run_metadata.source?.branch || "";
+    if (branch !== "all" && rowBranch !== branch) return false;
     if (!rowMatchesDisplayStrategy(row, displayStrategy)) return false;
     const rowDate = parseDate(row.code_date)?.valueOf() ?? null;
     if (timeStartValue !== null && (rowDate === null || rowDate < timeStartValue)) return false;
@@ -140,7 +141,7 @@ export function buildTrendRowsByBenchmark(
       ...row,
       date_value: dateValue,
       run_axis_label: runAxisLabel(row),
-      run_headline: run ? runHeadline(run) : row.label,
+      run_headline: run ? runHeadline(run) : row.code_label,
       run_tone: run ? runTone(run) : "branch"
     };
     const bucket = rowsByBenchmark.get(row.benchmark_id);

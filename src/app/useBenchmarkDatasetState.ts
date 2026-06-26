@@ -37,7 +37,7 @@ export type BenchmarkDatasetState = {
   siteDescription: string;
   plotTheme: ReturnType<typeof plotThemeFor>;
   allRuns: BenchmarkRun[];
-  machineOptions: string[];
+  environmentOptions: string[];
   hasDataset: boolean;
   overviewSlice: ReturnType<typeof useBenchmarkViewSlice>;
   trendBoardSlice: ReturnType<typeof useBenchmarkViewSlice>;
@@ -48,8 +48,8 @@ export type BenchmarkDatasetState = {
   databaseCatalog: DatabaseCatalogEntry[];
 };
 
-function buildMachineOptions(runs: BenchmarkRun[]): string[] {
-  return ["all", ...unique(runs.map((run) => run.machine_id)).sort()];
+function buildEnvironmentOptions(runs: BenchmarkRun[]): string[] {
+  return ["all", ...unique(runs.map((run) => run.environment_id)).sort()];
 }
 
 function buildLoadedDatabaseStats(
@@ -62,10 +62,10 @@ function buildLoadedDatabaseStats(
     rowCount: rows.length,
     runCount: runs.length,
     keyCount: unique(rows.map((row) => row.benchmark_id)).length,
-    machineCount: unique(rows.map((row) => row.machine_id)).length,
+    environmentCount: unique(rows.map((row) => row.environment_id)).length,
     metrics: unique(rows.map((row) => `${row.metric_name} ${row.statistic} ${row.unit}`)).sort(),
     latestRunDate: runs[0]?.measured_at ?? "",
-    dirtyRunCount: runs.filter((run) => run.is_dirty).length
+    dirtyRunCount: runs.filter((run) => Boolean(run.code_state_metadata.source?.dirty)).length
   };
 }
 
@@ -138,13 +138,13 @@ export function useBenchmarkDatasetState(): BenchmarkDatasetState {
   });
 
   const allRuns = useMemo(() => buildRuns(rows), [rows]);
-  const machineOptions = useMemo(() => buildMachineOptions(allRuns), [allRuns]);
+  const environmentOptions = useMemo(() => buildEnvironmentOptions(allRuns), [allRuns]);
 
   const overviewSlice = useBenchmarkViewSlice({
     rows,
-    machineOptions,
-    machine: settings.machine,
-    onMachineChange: (machine) => setSetting("machine", machine),
+    environmentOptions,
+    environment: settings.environment,
+    onEnvironmentChange: (environment) => setSetting("environment", environment),
     metricKind: settings.metricKind,
     onMetricKindChange: (metricKind) => setSetting("metricKind", metricKind),
     branch: settings.branch,
@@ -158,9 +158,9 @@ export function useBenchmarkDatasetState(): BenchmarkDatasetState {
 
   const trendBoardSlice = useBenchmarkViewSlice({
     rows,
-    machineOptions,
-    machine: settings.trendBoardMachine,
-    onMachineChange: (machine) => setSetting("trendBoardMachine", machine),
+    environmentOptions,
+    environment: settings.trendBoardEnvironment,
+    onEnvironmentChange: (environment) => setSetting("trendBoardEnvironment", environment),
     metricKind: settings.trendBoardMetricKind,
     onMetricKindChange: (metricKind) => setSetting("trendBoardMetricKind", metricKind),
     branch: settings.trendBoardBranch,
@@ -191,7 +191,7 @@ export function useBenchmarkDatasetState(): BenchmarkDatasetState {
     onBaselineRunIdChange: (runId) => setSetting("baselineRunId", runId),
     runPairSort,
     onRunPairSortChange: setRunPairSort,
-    machine: settings.machine,
+    environment: settings.environment,
     metricKind: settings.metricKind,
     group: settings.group,
     branch: settings.branch,
@@ -252,7 +252,7 @@ export function useBenchmarkDatasetState(): BenchmarkDatasetState {
     siteDescription,
     plotTheme,
     allRuns,
-    machineOptions,
+    environmentOptions,
     hasDataset: Boolean(dataset && rows.length),
     overviewSlice,
     trendBoardSlice,

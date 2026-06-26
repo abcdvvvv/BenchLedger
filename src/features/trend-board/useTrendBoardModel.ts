@@ -11,7 +11,7 @@ import {
   commitAxisCategoryOrder,
   colorForBenchmark,
   colorWithAlpha,
-  splitTrendRowsByMachine,
+  splitTrendRowsByEnvironment,
   trendDisplayUnitContext,
   type PlotTheme,
   type ThemeMode,
@@ -108,9 +108,9 @@ export function useTrendBoardModel(options: UseTrendBoardModelOptions): UseTrend
         path,
         metricLabel: displayUnitContext.formatMetricLabel(metricKind),
         commitAxisOrder: trendAxisMode === "commit" ? commitAxisCategoryOrder(cardRows) : undefined,
-        traces: splitTrendRowsByMachine(cardRows).flatMap((series, machineIndex, machineSeries) => {
-          const color = colorForBenchmark(index * Math.max(machineSeries.length, 1) + machineIndex);
-          const seriesLabel = machineSeries.length > 1 ? series.machineId : label;
+        traces: splitTrendRowsByEnvironment(cardRows).flatMap((series, environmentIndex, environmentSeries) => {
+          const color = colorForBenchmark(index * Math.max(environmentSeries.length, 1) + environmentIndex);
+          const seriesLabel = environmentSeries.length > 1 ? series.environmentId : label;
 
           return buildTrendTrace(series.rows, {
             axisMode: trendAxisMode,
@@ -124,7 +124,7 @@ export function useTrendBoardModel(options: UseTrendBoardModelOptions): UseTrend
             theme,
             yMin,
             yPadding,
-            showLegend: machineSeries.length > 1,
+            showLegend: environmentSeries.length > 1,
             fillGradientScale: [
               [0, colorWithAlpha(color, 0)],
               [1, colorWithAlpha(color, 0.2)]

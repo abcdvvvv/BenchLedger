@@ -13,7 +13,7 @@ export function buildAppPages(state: BenchmarkDatasetState, openLocalFilePicker:
     siteTitle,
     siteDescription,
     plotTheme,
-    machineOptions,
+    environmentOptions,
     hasDataset,
     overviewSlice,
     trendBoardSlice,
@@ -43,9 +43,9 @@ export function buildAppPages(state: BenchmarkDatasetState, openLocalFilePicker:
         error
       },
       filters: {
-        machine: settings.machine,
-        machineOptions,
-        onMachineChange: (machine) => setSetting("machine", machine),
+        environment: settings.environment,
+        environmentOptions,
+        onEnvironmentChange: (environment) => setSetting("environment", environment),
         metricKind: settings.metricKind,
         metricOptions: overviewSlice.metricOptions,
         onMetricKindChange: (metricKind) => setSetting("metricKind", metricKind),
@@ -81,6 +81,8 @@ export function buildAppPages(state: BenchmarkDatasetState, openLocalFilePicker:
       },
       comparison: {
         focusRun: overviewModel.focusRun,
+        baselineRun: overviewModel.baselineRun,
+        environmentMismatch: overviewModel.environmentMismatch,
         comparisonRows: overviewModel.comparisonRows,
         deltaPlotMargin: overviewModel.deltaPlotMargin,
         sortedComparisonRows: overviewModel.sortedComparisonRows,
@@ -100,9 +102,9 @@ export function buildAppPages(state: BenchmarkDatasetState, openLocalFilePicker:
         onToggleTrendAxisMode: () => setSetting("trendAxisMode", settings.trendAxisMode === "commit" ? "time" : "commit")
       },
       filters: {
-        machine: settings.trendBoardMachine,
-        machineOptions,
-        onMachineChange: (machine) => setSetting("trendBoardMachine", machine),
+        environment: settings.trendBoardEnvironment,
+        environmentOptions,
+        onEnvironmentChange: (environment) => setSetting("trendBoardEnvironment", environment),
         metricKind: settings.trendBoardMetricKind,
         metricOptions: trendBoardSlice.metricOptions,
         onMetricKindChange: (metricKind) => setSetting("trendBoardMetricKind", metricKind),

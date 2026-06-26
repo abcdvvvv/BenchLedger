@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-25
+
+### Changed
+
+- Migrated the frontend and Julia template to schema v4, replacing machine-specific and Julia-specific assumptions with generalized code-state, environment, and run metadata handling.
+- Reworked the generic Julia writer to consume only public `BENCH_*` inputs plus local git and system state, and moved GitHub Actions-specific metadata mapping into `templates/Benchmarks.yml`.
+- Tightened environment identity handling by removing dependency lock digests and manual environment ID overrides, and by excluding descriptive fields such as `platform.kernel` from environment hashing.
+
+### Breaking
+
+- BenchLedger now expects schema version 4 benchmark databases.
+- Schema version 3 databases are not migrated by this release and are rejected by the frontend/template validation path.
+- The generic Julia writer no longer recognizes `GITHUB_*`, `RUNNER_NAME`, `BENCH_BRANCH`, or `BENCH_ENVIRONMENT_ID`; callers must use the public `BENCH_SOURCE_*` and metadata override inputs instead.
+
 ## [0.4.2] - 2026-06-25
 
 ### Changed

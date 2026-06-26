@@ -12,7 +12,7 @@ import {
   metadataDescription,
   metadataTitle,
   rowMatchesDisplayStrategy,
-  splitTrendRowsByMachine,
+  splitTrendRowsByEnvironment,
   trendDisplayUnitContext,
   type TrendPlotRow
 } from "./dashboard";
@@ -20,13 +20,16 @@ import type { BenchmarkRow } from "./types";
 
 const Base_Row: BenchmarkRow = {
   run_id: "run-1",
-  branch: "feature",
-  tag: "",
   code_state_id: "state-1",
-  label: "Run 1",
-  commit_sha: "abcdef123456",
+  code_label: "Run 1",
   code_date: "2026-01-01T00:00:00Z",
+  environment_id: "env-1",
+  environment_label: "Environment 1",
   measured_at: "2026-01-01T00:00:00Z",
+  notes: "",
+  code_state_metadata: { source: { branch: "feature", tags: [], revision: "abcdef123456", dirty: false } },
+  environment_metadata: { runtime: { name: "Julia", version: "1.10" } },
+  run_metadata: {},
   benchmark_path: ["suite", "case"],
   benchmark_id: "bench-1",
   benchmark_label: "bench-1",
@@ -35,19 +38,11 @@ const Base_Row: BenchmarkRow = {
   unit: "ns",
   value: 1000,
   better: "lower",
-  machine_id: "machine-1",
-  cpu_model: "cpu",
-  cpu_threads: 8,
-  arch: "x64",
-  os: "linux",
-  julia_version: "1.10",
-  is_dirty: false,
-  notes: "",
   group: "suite"
 };
 
 function makeTrendRow(overrides: Partial<TrendPlotRow>): TrendPlotRow {
-  const row: TrendPlotRow = {
+  return {
     ...Base_Row,
     date_value: new Date("2026-01-01T00:00:00Z"),
     run_axis_label: "2026-01-01",
@@ -55,12 +50,6 @@ function makeTrendRow(overrides: Partial<TrendPlotRow>): TrendPlotRow {
     run_tone: "branch",
     ...overrides
   };
-
-  if (overrides.code_date && !overrides.date_value) {
-    row.date_value = new Date(overrides.code_date);
-  }
-
-  return row;
 }
 
 describe("dashboard helpers", () => {
@@ -80,8 +69,8 @@ describe("dashboard helpers", () => {
 
   it("matches rows against display strategies", () => {
     expect(rowMatchesDisplayStrategy(Base_Row, "all")).toBe(true);
-    expect(rowMatchesDisplayStrategy({ ...Base_Row, tag: "v1.0.0" }, "tagged-only")).toBe(true);
-    expect(rowMatchesDisplayStrategy({ ...Base_Row, branch: "main" }, "tagged-main")).toBe(true);
+    expect(rowMatchesDisplayStrategy({ ...Base_Row, code_state_metadata: { source: { ...Base_Row.code_state_metadata.source, tags: ["v1.0.0"] } } }, "tagged-only")).toBe(true);
+    expect(rowMatchesDisplayStrategy({ ...Base_Row, code_state_metadata: { source: { ...Base_Row.code_state_metadata.source, branch: "main" } } }, "tagged-main")).toBe(true);
     expect(rowMatchesDisplayStrategy(Base_Row, "tagged-main")).toBe(false);
   });
 
@@ -132,14 +121,15 @@ describe("dashboard helpers", () => {
     expect(metricFamilyLabel({ ...Base_Row, metric_name: "throughput", unit: "ops/s" })).toBe("throughput median ops/s");
   });
 
-  it("splits trend rows into independent machine series", () => {
-    const series = splitTrendRowsByMachine([
-      makeTrendRow({ machine_id: "machine-b", value: 2 }),
+  it("splits trend rows into independent environment series", () => {
+    const series = splitTrendRowsByEnvironment([
+      makeTrendRow({ environment_id: "env-b", environment_label: "Env B", value: 2 }),
       makeTrendRow({
         run_id: "run-2",
         code_date: "2026-01-02T00:00:00Z",
         measured_at: "2026-01-02T00:00:00Z",
-        machine_id: "machine-a",
+        environment_id: "env-a",
+        environment_label: "Env A",
         value: 3,
         run_axis_label: "2026-01-02",
         run_headline: "Run 2"
@@ -148,14 +138,15 @@ describe("dashboard helpers", () => {
         run_id: "run-3",
         code_date: "2026-01-03T00:00:00Z",
         measured_at: "2026-01-03T00:00:00Z",
-        machine_id: "machine-b",
+        environment_id: "env-b",
+        environment_label: "Env B",
         value: 4,
         run_axis_label: "2026-01-03",
         run_headline: "Run 3"
       })
     ]);
 
-    expect(series.map((entry) => entry.machineId)).toEqual(["machine-a", "machine-b"]);
+    expect(series.map((entry) => entry.environmentId)).toEqual(["env-a", "env-b"]);
     expect(series[0].rows).toHaveLength(1);
     expect(series[1].rows).toHaveLength(2);
   });

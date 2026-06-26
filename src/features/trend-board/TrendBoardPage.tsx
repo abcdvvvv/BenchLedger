@@ -31,9 +31,9 @@ export type TrendBoardPageProps = {
     onToggleTrendAxisMode: () => void;
   };
   filters: {
-    machine: string;
-    machineOptions: string[];
-    onMachineChange: (machine: string) => void;
+    environment: string;
+    environmentOptions: string[];
+    onEnvironmentChange: (environment: string) => void;
     metricKind: string;
     metricOptions: string[];
     onMetricKindChange: (metricKind: string) => void;
@@ -110,9 +110,9 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
       <Toolbar variant="plain">
         <ToolbarGrid>
           <Field>
-            <FieldLabel>Machine</FieldLabel>
-            <SelectField value={filters.machine} onChange={(event) => filters.onMachineChange(event.target.value)} disabled={!header.hasDataset}>
-              {filters.machineOptions.map((option) => <option key={option} value={option}>{option === "all" ? "All machines" : option}</option>)}
+            <FieldLabel>Environment</FieldLabel>
+            <SelectField value={filters.environment} onChange={(event) => filters.onEnvironmentChange(event.target.value)} disabled={!header.hasDataset}>
+              {filters.environmentOptions.map((option) => <option key={option} value={option}>{option === "all" ? "All environments" : option}</option>)}
             </SelectField>
           </Field>
           <Field>

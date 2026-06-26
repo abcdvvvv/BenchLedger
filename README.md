@@ -10,7 +10,7 @@
 
 Store, query, and visualize benchmark history.
 
-It is designed for library performance tracking: run benchmarks elsewhere, write the results to SQLite, and use BenchLedger to inspect trends, run context, and benchmark deltas directly in the browser.
+It is designed for library performance tracking: run benchmarks elsewhere, write the results to SQLite, and use BenchLedger to inspect trends, environment context, code-state metadata, and benchmark deltas directly in the browser.
 
 See [changelog.md](./changelog.md) for release history.
 
@@ -74,6 +74,128 @@ Then edit:
 - [`.github/workflows/Benchmarks.yml`](./templates/Benchmarks.yml): set your main benchmark branch, BenchLedger version, package name, description, and project URL in the top-level `env:` section.
 
 After that, commit the two files, push to your default branch, and let GitHub Actions generate and publish your benchmark database to `gh-pages`.
+
+The generic `runbench.jl` writer only reads `BENCH_*` inputs plus local system and git state. Platform-specific adapters such as `Benchmarks.yml` are responsible for mapping CI provider variables into `BENCH_*` and `BENCH_RUN_METADATA`.
+
+### Common `BENCH_*` inputs
+
+The generic Julia writer currently understands these public inputs:
+
+- `BENCH_TARGET_PATH`: target project path to benchmark
+- `BENCH_DB_PATH`: SQLite database path
+- `BENCH_DB_IN_CURRENT_BRANCH`: whether to store the database in the current git branch
+- `BENCH_SOURCE_BRANCH`: explicit source branch override
+- `BENCH_SOURCE_TAGS`: explicit source tags override as a comma-separated list
+- `BENCH_SOURCE_REVISION`: explicit source revision override
+- `BENCH_DATE`: explicit code-state date override
+- `BENCH_NOTES`: free-form run notes
+- `BENCH_CODE_STATE_METADATA`: JSON object merged into `code_state_metadata`
+- `BENCH_ENVIRONMENT_METADATA`: JSON object merged into `environment_metadata`
+- `BENCH_RUN_METADATA`: JSON object merged into `run_metadata`
+
+Platform adapters such as GitHub Actions workflows should translate provider-specific variables into this `BENCH_*` surface rather than expecting the generic writer to recognize CI-vendor environment variables directly.
+
+## Schema v4
+
+BenchLedger now expects schema version 4 databases and does **not** migrate schema v3 databases.
+
+The Julia template writes five core relations:
+
+```text
+benchledger_metadata
+benchmark_code_states
+benchmark_environments
+benchmark_runs
+benchmark_results
+```
+
+and one latest-results view:
+
+```text
+benchmark_results_latest
+```
+
+The frontend reads `benchmark_results_latest`, which now exposes:
+
+```text
+run_id
+code_state_id
+code_label
+code_date
+environment_id
+environment_label
+measured_at
+notes
+code_state_metadata
+environment_metadata
+run_metadata
+benchmark_path
+benchmark_id
+benchmark_label
+metric_name
+statistic
+unit
+value
+better
+```
+
+### Metadata model
+
+Schema v4 separates three kinds of JSON metadata:
+
+- `code_state_metadata`: source revision, branch, tags, dirty state, and related code-state details
+- `environment_metadata`: runtime, OS, architecture, CPU, and execution environment details
+- `run_metadata`: writer information, one-off run annotations, and optional adapter-provided CI metadata
+
+Unknown metadata fields are preserved and shown by the frontend in raw metadata sections.
+
+The Julia template derives `environment_id` from a stable identity subset of `environment_metadata`. Descriptive fields such as `platform.kernel` are preserved in metadata but do not affect environment identity.
+
+### Example metadata: Julia
+
+```json
+{
+  "runtime": { "name": "Julia", "version": "1.12.6" },
+  "platform": {
+    "os": { "name": "ubuntu", "version": "24.04" },
+    "kernel": { "name": "linux", "version": "6.8.0" },
+    "architecture": "x86_64"
+  },
+  "hardware": {
+    "cpu": { "model": "AMD Ryzen 9", "logical_threads": 24 }
+  }
+}
+```
+
+### Example metadata: Python
+
+```json
+{
+  "runtime": { "name": "Python", "version": "3.12.4" },
+  "benchmark": {
+    "framework": { "name": "pytest-benchmark", "version": "5.1.0" }
+  },
+  "platform": {
+    "os": { "name": "ubuntu", "version": "24.04" },
+    "architecture": "x86_64"
+  }
+}
+```
+
+### Example metadata: C++ native
+
+```json
+{
+  "runtime": { "name": "native", "version": "clang++ 18" },
+  "benchmark": {
+    "framework": { "name": "google-benchmark", "version": "1.9.0" }
+  },
+  "platform": {
+    "os": { "name": "macos", "version": "15.0" },
+    "architecture": "arm64"
+  }
+}
+```
 
 ## Local Preview
 

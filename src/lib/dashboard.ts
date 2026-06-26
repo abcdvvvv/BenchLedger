@@ -28,7 +28,7 @@ export type DatabaseCatalogStats = {
   rowCount: number;
   runCount: number;
   keyCount: number;
-  machineCount: number;
+  environmentCount: number;
   metrics: string[];
   latestRunDate: string;
   dirtyRunCount: number;
@@ -53,9 +53,9 @@ export type UISettings = {
   activePage: ActivePage;
   theme: ThemeMode;
   selectedDatabaseId: string;
-  machine: string;
+  environment: string;
   metricKind: string;
-  trendBoardMachine: string;
+  trendBoardEnvironment: string;
   trendBoardMetricKind: string;
   trendBoardDisplayStrategy: DisplayStrategy;
   focusRunId: string;
@@ -115,8 +115,8 @@ export type TrendDisplayUnitContext = {
   formatMetricLabel: (label: string) => string;
 };
 
-export type TrendMachineSeries = {
-  machineId: string;
+export type TrendEnvironmentSeries = {
+  environmentId: string;
   rows: TrendPlotRow[];
 };
 
@@ -318,6 +318,42 @@ function _formatMetricLabelUnit(label: string, displayUnit: string, sourceUnit =
   return `${label} ${displayUnit}`;
 }
 
+function _metadataRecord(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function _metadataString(record: Record<string, unknown>, key: string): string {
+  const value = record[key];
+  return typeof value === "string" ? value : "";
+}
+
+function _metadataStringArray(record: Record<string, unknown>, key: string): string[] {
+  const value = record[key];
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0) : [];
+}
+
+function _codeStateSource(row: Pick<BenchmarkRow, "code_state_metadata">): Record<string, unknown> {
+  return _metadataRecord(row.code_state_metadata.source);
+}
+
+function _runSource(row: Pick<BenchmarkRow, "run_metadata">): Record<string, unknown> {
+  return _metadataRecord(row.run_metadata.source);
+}
+
+function _codeStateBranch(row: Pick<BenchmarkRow, "code_state_metadata" | "run_metadata">): string {
+  return _metadataString(_codeStateSource(row), "branch") || _metadataString(_runSource(row), "branch");
+}
+
+function _codeStateTags(row: Pick<BenchmarkRow, "code_state_metadata" | "run_metadata">): string[] {
+  return _metadataStringArray(_codeStateSource(row), "tags").length
+    ? _metadataStringArray(_codeStateSource(row), "tags")
+    : _metadataStringArray(_runSource(row), "tags");
+}
+
+function _codeStateRevision(row: Pick<BenchmarkRow, "code_state_metadata" | "run_metadata">): string {
+  return _metadataString(_codeStateSource(row), "revision");
+}
+
 export function trendDisplayUnitContext(
   rows: Array<Pick<BenchmarkRow, "value" | "unit">>
 ): TrendDisplayUnitContext {
@@ -390,22 +426,22 @@ export function trendDisplayUnitContext(
   };
 }
 
-export function splitTrendRowsByMachine(rows: TrendPlotRow[]): TrendMachineSeries[] {
-  const rowsByMachine = new Map<string, TrendPlotRow[]>();
+export function splitTrendRowsByEnvironment(rows: TrendPlotRow[]): TrendEnvironmentSeries[] {
+  const rowsByEnvironment = new Map<string, TrendPlotRow[]>();
 
   for (const row of rows) {
-    const machineId = row.machine_id || "unknown";
-    const bucket = rowsByMachine.get(machineId);
+    const environmentId = row.environment_id || "unknown";
+    const bucket = rowsByEnvironment.get(environmentId);
     if (bucket) {
       bucket.push(row);
       continue;
     }
-    rowsByMachine.set(machineId, [row]);
+    rowsByEnvironment.set(environmentId, [row]);
   }
 
-  return Array.from(rowsByMachine.entries())
+  return Array.from(rowsByEnvironment.entries())
     .sort(([left], [right]) => left.localeCompare(right))
-    .map(([machineId, machineRows]) => ({ machineId, rows: machineRows }));
+    .map(([environmentId, environmentRows]) => ({ environmentId, rows: environmentRows }));
 }
 
 export function commitAxisCategoryOrder(rows: TrendPlotRow[]): PlotAxisCategoryOrder | undefined {
@@ -476,7 +512,8 @@ export function buildTrendTrace(
       x,
       y,
       customdata: rows.map((row) => [
-        row.machine_id,
+        row.environment_id,
+        row.environment_label,
         row.code_date,
         row.measured_at,
         displayUnitContext.formatValue(row.value, row.unit)
@@ -498,7 +535,7 @@ export function buildTrendTrace(
         type: "vertical",
         colorscale
       },
-      hovertemplate: `%{x}<br>Machine: %{customdata[0]}<br>Code date: %{customdata[1]}<br>Measured: %{customdata[2]}<br>Value: %{customdata[3]}<br>Unit: ${unit || "n/a"}<extra></extra>`,
+      hovertemplate: `%{x}<br>Environment: %{customdata[1]} (%{customdata[0]})<br>Code date: %{customdata[2]}<br>Measured: %{customdata[3]}<br>Value: %{customdata[4]}<br>Unit: ${unit || "n/a"}<extra></extra>`,
       showlegend: showLegend
     }
   ];
@@ -509,9 +546,9 @@ export function readUISettings(): UISettings {
     activePage: "overview",
     theme: systemTheme(),
     selectedDatabaseId: "",
-    machine: "all",
+    environment: "all",
     metricKind: "",
-    trendBoardMachine: "all",
+    trendBoardEnvironment: "all",
     trendBoardMetricKind: "",
     trendBoardDisplayStrategy: "all",
     focusRunId: "",
@@ -557,9 +594,9 @@ export function readUISettings(): UISettings {
           : defaults.activePage,
       theme: parsedSettings.theme === "light" || parsedSettings.theme === "dark" ? parsedSettings.theme : defaults.theme,
       selectedDatabaseId: stringSetting(parsedSettings, "selectedDatabaseId"),
-      machine: stringSetting(parsedSettings, "machine"),
+      environment: stringSetting(parsedSettings, "environment"),
       metricKind: stringSetting(parsedSettings, "metricKind"),
-      trendBoardMachine: stringSetting(parsedSettings, "trendBoardMachine"),
+      trendBoardEnvironment: stringSetting(parsedSettings, "trendBoardEnvironment"),
       trendBoardMetricKind: stringSetting(parsedSettings, "trendBoardMetricKind"),
       trendBoardDisplayStrategy:
         parsedSettings.trendBoardDisplayStrategy === "all" ||
@@ -617,22 +654,30 @@ export function runId(row: Pick<BenchmarkRow, "run_id">): string {
 }
 
 export function runHeadline(run: BenchmarkRun): string {
-  if (run.tag) return run.tag;
-  if (run.label) return run.label;
-  if (run.commit_sha) return shortCommit(run.commit_sha);
-  return run.branch || "local";
+  const tags = _codeStateTags(run);
+  if (tags.length) return tags[0];
+  if (run.code_label) return run.code_label;
+  const revision = _codeStateRevision(run);
+  if (revision) return shortCommit(revision);
+  const branch = _codeStateBranch(run);
+  if (branch) return branch;
+  return run.environment_label || "local";
 }
 
 export function runTone(run: BenchmarkRun): "tag" | "master" | "branch" {
-  if (run.tag) return "tag";
-  if (run.branch === "master") return "master";
+  if (_codeStateTags(run).length) return "tag";
+  const branch = _codeStateBranch(run);
+  if (branch === "master" || branch === "main") return "master";
   return "branch";
 }
 
 export function runAxisLabel(row: BenchmarkRow): string {
-  if (row.tag) return row.tag;
-  if (row.commit_sha) return shortCommit(row.commit_sha);
-  return "local";
+  const tags = _codeStateTags(row);
+  if (tags.length) return tags[0];
+  if (row.code_label) return row.code_label;
+  const revision = _codeStateRevision(row);
+  if (revision) return shortCommit(revision);
+  return row.environment_label || "local";
 }
 
 export function dateInputValue(value: string): string {
@@ -672,8 +717,9 @@ export function dateRangeEnd(value: string): number | null {
 
 export function rowMatchesDisplayStrategy(row: BenchmarkRow, strategy: DisplayStrategy): boolean {
   if (strategy === "all") return true;
-  if (row.tag) return true;
-  return strategy === "tagged-main" && (row.branch === "main" || row.branch === "master");
+  if (_codeStateTags(row).length) return true;
+  const branch = _codeStateBranch(row);
+  return strategy === "tagged-main" && (branch === "main" || branch === "master");
 }
 
 export function runPairSortValue(row: PairComparison, key: RunPairSortKey): string | number {
@@ -716,20 +762,15 @@ export function buildRuns(rows: BenchmarkRow[]): BenchmarkRun[] {
     runsById.set(id, {
       run_id: id,
       code_state_id: row.code_state_id,
-      branch: row.branch,
-      tag: row.tag,
-      label: row.label,
-      commit_sha: row.commit_sha,
+      code_label: row.code_label,
       code_date: row.code_date,
+      environment_id: row.environment_id,
+      environment_label: row.environment_label,
       measured_at: row.measured_at,
-      machine_id: row.machine_id,
-      cpu_model: row.cpu_model,
-      cpu_threads: row.cpu_threads,
-      arch: row.arch,
-      os: row.os,
-      julia_version: row.julia_version,
-      is_dirty: row.is_dirty,
       notes: row.notes,
+      code_state_metadata: row.code_state_metadata,
+      environment_metadata: row.environment_metadata,
+      run_metadata: row.run_metadata,
       benchmark_count: 1
     });
   }

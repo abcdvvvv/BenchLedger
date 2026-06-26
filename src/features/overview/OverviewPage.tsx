@@ -51,9 +51,9 @@ export type OverviewPageProps = {
     error: string;
   };
   filters: {
-    machine: string;
-    machineOptions: string[];
-    onMachineChange: (machine: string) => void;
+    environment: string;
+    environmentOptions: string[];
+    onEnvironmentChange: (environment: string) => void;
     metricKind: string;
     metricOptions: string[];
     onMetricKindChange: (metricKind: string) => void;
@@ -89,6 +89,8 @@ export type OverviewPageProps = {
   };
   comparison: {
     focusRun: BenchmarkRun | null;
+    baselineRun: BenchmarkRun | null;
+    environmentMismatch: boolean;
     comparisonRows: PairComparison[];
     deltaPlotMargin: { t: number; r: number; b: number; l: number };
     sortedComparisonRows: PairComparison[];
@@ -117,17 +119,31 @@ function DatasetBanner(props: Pick<OverviewPageProps, "datasetState" | "header">
 
 function RunContextPanel(props: { focusRun: BenchmarkRun | null }) {
   const { focusRun } = props;
+  const runtimeName = focusRun?.environment_metadata.runtime?.name || "";
+  const runtimeVersion = focusRun?.environment_metadata.runtime?.version || "";
+  const cpuModel = focusRun?.environment_metadata.hardware?.cpu?.model || "";
+  const cpuThreads = focusRun?.environment_metadata.hardware?.cpu?.logical_threads;
+  const osName = focusRun?.environment_metadata.platform?.os?.name || "";
+  const osVersion = focusRun?.environment_metadata.platform?.os?.version || "";
+  const architecture = focusRun?.environment_metadata.platform?.architecture || "";
+  const revision = focusRun?.code_state_metadata.source?.revision || "";
+  const branch = focusRun?.code_state_metadata.source?.branch || focusRun?.run_metadata.source?.branch || "";
+  const tags = focusRun?.code_state_metadata.source?.tags || focusRun?.run_metadata.source?.tags || [];
+  const dirty = typeof focusRun?.code_state_metadata.source?.dirty === "boolean" ? String(focusRun.code_state_metadata.source.dirty) : "n/a";
   const rows = [
     ["Run", focusRun ? runHeadline(focusRun) : "n/a"],
     ["Code Date", focusRun ? formatDate(focusRun.code_date) : "n/a"],
     ["Measured", focusRun ? formatDate(focusRun.measured_at) : "n/a"],
-    ["Branch", focusRun?.branch || "n/a"],
-    ["Machine", focusRun?.machine_id || "n/a"],
-    ["CPU", focusRun?.cpu_model || "n/a"],
-    ["Threads", focusRun ? focusRun.cpu_threads.toLocaleString() : "n/a"],
-    ["Platform", focusRun ? `${focusRun.os} · ${focusRun.arch}` : "n/a"],
-    ["Julia", focusRun?.julia_version || "n/a"],
-    ["Dirty", focusRun ? String(focusRun.is_dirty) : "n/a"]
+    ["Branch", branch || "n/a"],
+    ["Tags", tags.length ? tags.join(", ") : "n/a"],
+    ["Revision", revision || "n/a"],
+    ["Environment", focusRun?.environment_label || "n/a"],
+    ["Environment ID", focusRun?.environment_id || "n/a"],
+    ["Runtime", [runtimeName, runtimeVersion].filter(Boolean).join(" ") || "n/a"],
+    ["CPU", cpuModel || "n/a"],
+    ["Threads", typeof cpuThreads === "number" ? cpuThreads.toLocaleString() : "n/a"],
+    ["Platform", [osName, osVersion, architecture].filter(Boolean).join(" · ") || "n/a"],
+    ["Dirty", dirty]
   ] as const;
 
   return (
@@ -149,6 +165,25 @@ function RunContextPanel(props: { focusRun: BenchmarkRun | null }) {
           </tbody>
         </table>
       </div>
+      {focusRun ? (
+        <details className="mt-5">
+          <summary className="type-body-strong cursor-pointer">Raw Metadata</summary>
+          <div className="mt-3 grid gap-3">
+            <div>
+              <div className="type-table-head mb-2">Code State Metadata</div>
+              <pre className="surface-inset pad-field type-table overflow-x-auto whitespace-pre-wrap break-words">{JSON.stringify(focusRun.code_state_metadata, null, 2)}</pre>
+            </div>
+            <div>
+              <div className="type-table-head mb-2">Environment Metadata</div>
+              <pre className="surface-inset pad-field type-table overflow-x-auto whitespace-pre-wrap break-words">{JSON.stringify(focusRun.environment_metadata, null, 2)}</pre>
+            </div>
+            <div>
+              <div className="type-table-head mb-2">Run Metadata</div>
+              <pre className="surface-inset pad-field type-table overflow-x-auto whitespace-pre-wrap break-words">{JSON.stringify(focusRun.run_metadata, null, 2)}</pre>
+            </div>
+          </div>
+        </details>
+      ) : null}
     </Panel>
   );
 }
@@ -215,9 +250,9 @@ export function OverviewPage(props: OverviewPageProps) {
       <Toolbar variant="plain">
         <ToolbarGrid>
           <Field>
-            <FieldLabel>Machine</FieldLabel>
-            <SelectField value={filters.machine} onChange={(event) => filters.onMachineChange(event.target.value)} disabled={!datasetState.hasDataset}>
-              {filters.machineOptions.map((option) => <option key={option} value={option}>{option === "all" ? "All machines" : option}</option>)}
+            <FieldLabel>Environment</FieldLabel>
+            <SelectField value={filters.environment} onChange={(event) => filters.onEnvironmentChange(event.target.value)} disabled={!datasetState.hasDataset}>
+              {filters.environmentOptions.map((option) => <option key={option} value={option}>{option === "all" ? "All environments" : option}</option>)}
             </SelectField>
           </Field>
           <Field>
@@ -398,6 +433,14 @@ export function OverviewPage(props: OverviewPageProps) {
 
         <Panel>
           <SectionTitle title="Run Pair Table" description="All comparable benchmark rows in the selected pair for the chosen metric." />
+          {comparison.environmentMismatch ? (
+            <Banner
+              className="mt-5"
+              tone="warning"
+              title="Comparing different environments"
+              description={`Focus run uses ${comparison.focusRun?.environment_label || "n/a"}, while baseline uses ${comparison.baselineRun?.environment_label || "n/a"}.`}
+            />
+          ) : null}
           {comparison.sortedComparisonRows.length ? (
             <DataTableShell className="mt-5">
               <DataTable>

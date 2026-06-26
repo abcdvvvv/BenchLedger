@@ -1,6 +1,9 @@
 import initSqlJs, { type Database, type QueryExecResult } from "sql.js";
 import sqlWasmUrl from "sql.js/dist/sql-wasm.wasm?url";
 import type {
+  BenchmarkCodeStateMetadata,
+  BenchmarkEnvironmentMetadata,
+  BenchmarkRunMetadata,
   BenchmarkRow,
   BenchLedgerManifest,
   BenchLedgerManifestDatabase,
@@ -9,7 +12,7 @@ import type {
 } from "./types";
 
 const _Default_Manifest_Url = "./benchledger.json";
-const _Compatible_Schema_Versions = new Set([3]);
+const _Compatible_Schema_Versions = new Set([4]);
 const _Metadata_Defaults = {
   name: "",
   description: "",
@@ -32,31 +35,56 @@ async function loadSqlJs() {
   return sqlPromise;
 }
 
-export function normalizeBenchmarkPath(value: unknown): string[] {
-  if (typeof value !== "string" || !value) return [];
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(value);
-  } catch {
-    return [];
-  }
-  if (!Array.isArray(parsed)) return [];
-  const path = parsed.filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
-  return path;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function normalizeRow(values: Record<string, unknown>): BenchmarkRow {
-  const benchmark_path = normalizeBenchmarkPath(values.benchmark_path);
+function parseJsonRecord(value: unknown, fieldName: string, context: string): Record<string, unknown> {
+  if (value === null || value === undefined || value === "") return {};
+  try {
+    const parsed: unknown = typeof value === "string" ? JSON.parse(value) : value;
+    if (!isRecord(parsed)) {
+      throw new Error(`must be a JSON object`);
+    }
+    return parsed;
+  } catch (error: unknown) {
+    const detail = error instanceof Error ? error.message : "invalid JSON";
+    throw new Error(`Invalid ${fieldName} in ${context}: ${detail}.`);
+  }
+}
+
+export function normalizeBenchmarkPath(value: unknown): string[] {
+  const parsed: unknown = typeof value === "string"
+    ? (() => {
+        try {
+          return JSON.parse(value);
+        } catch {
+          return null;
+        }
+      })()
+    : value;
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
+}
+
+export function normalizeBenchmarkRow(values: Record<string, unknown>): BenchmarkRow {
+  const runId = String(values.run_id ?? "");
+  const benchmarkPath = normalizeBenchmarkPath(values.benchmark_path);
+  const context = runId || String(values.benchmark_id ?? "benchmark row");
+
   return {
-    run_id: String(values.run_id ?? ""),
-    branch: String(values.branch ?? ""),
-    tag: String(values.tag ?? ""),
+    run_id: runId,
     code_state_id: String(values.code_state_id ?? ""),
-    label: String(values.label ?? ""),
-    commit_sha: String(values.commit_sha ?? ""),
+    code_label: String(values.code_label ?? ""),
     code_date: String(values.code_date ?? ""),
+    environment_id: String(values.environment_id ?? ""),
+    environment_label: String(values.environment_label ?? ""),
     measured_at: String(values.measured_at ?? ""),
-    benchmark_path,
+    notes: String(values.notes ?? ""),
+    code_state_metadata: parseJsonRecord(values.code_state_metadata, "code_state_metadata", context) as BenchmarkCodeStateMetadata,
+    environment_metadata: parseJsonRecord(values.environment_metadata, "environment_metadata", context) as BenchmarkEnvironmentMetadata,
+    run_metadata: parseJsonRecord(values.run_metadata, "run_metadata", context) as BenchmarkRunMetadata,
+    benchmark_path: benchmarkPath,
     benchmark_id: String(values.benchmark_id ?? ""),
     benchmark_label: String(values.benchmark_label ?? ""),
     metric_name: String(values.metric_name ?? ""),
@@ -64,15 +92,7 @@ function normalizeRow(values: Record<string, unknown>): BenchmarkRow {
     unit: String(values.unit ?? ""),
     value: Number(values.value ?? 0),
     better: values.better === "higher" || values.better === "neutral" ? values.better : "lower",
-    machine_id: String(values.machine_id ?? ""),
-    cpu_model: String(values.cpu_model ?? ""),
-    cpu_threads: Number(values.cpu_threads ?? 0),
-    arch: String(values.arch ?? ""),
-    os: String(values.os ?? ""),
-    julia_version: String(values.julia_version ?? ""),
-    is_dirty: Boolean(values.is_dirty),
-    notes: String(values.notes ?? ""),
-    group: benchmark_path[0] || "other"
+    group: benchmarkPath[0] || "other"
   };
 }
 
@@ -80,15 +100,13 @@ function rowsFromResult(result: QueryExecResult | undefined): BenchmarkRow[] {
   if (!result) return [];
   return result.values.map((row: unknown[]) => {
     const entry = Object.fromEntries(result.columns.map((column: string, index: number) => [column, row[index]]));
-    return normalizeRow(entry);
+    return normalizeBenchmarkRow(entry);
   });
 }
 
 function singleResultRows(result: QueryExecResult | undefined): Record<string, unknown>[] {
   if (!result) return [];
-  return result.values.map((row: unknown[]) => {
-    return Object.fromEntries(result.columns.map((column: string, index: number) => [column, row[index]]));
-  });
+  return result.values.map((row: unknown[]) => Object.fromEntries(result.columns.map((column: string, index: number) => [column, row[index]])));
 }
 
 export function normalizeManifestDatabase(entry: Record<string, unknown>): BenchLedgerManifestDatabase | null {
@@ -103,13 +121,10 @@ export function normalizeManifestDatabase(entry: Record<string, unknown>): Bench
     size_bytes: typeof entry.size_bytes === "number" ? entry.size_bytes : undefined,
     packed_at: typeof entry.packed_at === "string" ? entry.packed_at : undefined,
     schema_version: typeof entry.schema_version === "number" ? entry.schema_version : undefined,
-    metadata_preview: isStringRecord(entry.metadata_preview) ? entry.metadata_preview : undefined
+    metadata_preview: isRecord(entry.metadata_preview) && Object.values(entry.metadata_preview).every((item) => typeof item === "string" || item === null)
+      ? entry.metadata_preview as Record<string, string | null>
+      : undefined
   };
-}
-
-function isStringRecord(value: unknown): value is Record<string, string | null> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  return Object.values(value).every((entry) => typeof entry === "string" || entry === null);
 }
 
 export function normalizeManifest(json: unknown): BenchLedgerManifest | null {
@@ -160,13 +175,16 @@ function selectMeasurementsQuery(db: Database): string {
   const columns = relationColumns(db, "benchmark_results_latest");
   const requiredColumns = [
     "run_id",
-    "branch",
-    "tag",
     "code_state_id",
-    "label",
-    "commit",
+    "code_label",
     "code_date",
+    "environment_id",
+    "environment_label",
     "measured_at",
+    "notes",
+    "code_state_metadata",
+    "environment_metadata",
+    "run_metadata",
     "benchmark_path",
     "benchmark_id",
     "benchmark_label",
@@ -174,15 +192,7 @@ function selectMeasurementsQuery(db: Database): string {
     "statistic",
     "unit",
     "value",
-    "better",
-    "machine_id",
-    "cpu_model",
-    "cpu_threads",
-    "arch",
-    "os",
-    "julia_version",
-    "is_dirty",
-    "notes"
+    "better"
   ];
   for (const column of requiredColumns) {
     if (!columns.has(column)) {
@@ -193,13 +203,16 @@ function selectMeasurementsQuery(db: Database): string {
   return `
     SELECT
       run_id,
-      branch,
-      tag,
       code_state_id,
-      label,
-      "commit" AS commit_sha,
+      code_label,
       code_date,
+      environment_id,
+      environment_label,
       measured_at,
+      notes,
+      code_state_metadata,
+      environment_metadata,
+      run_metadata,
       benchmark_path,
       benchmark_id,
       benchmark_label,
@@ -207,15 +220,7 @@ function selectMeasurementsQuery(db: Database): string {
       statistic,
       unit,
       value,
-      better,
-      machine_id,
-      cpu_model,
-      cpu_threads,
-      arch,
-      os,
-      julia_version,
-      is_dirty,
-      notes
+      better
     FROM benchmark_results_latest
     ORDER BY code_date, measured_at, benchmark_label, metric_name, statistic
   `;
@@ -255,7 +260,7 @@ function readMetadata(db: Database): BenchLedgerMetadata {
 export function validateSchemaVersion(metadata: BenchLedgerMetadata) {
   if (metadata.schema_version === null) return;
   if (_Compatible_Schema_Versions.has(metadata.schema_version)) return;
-  throw new Error(`Unsupported BenchLedger schema version: ${metadata.schema_version}`);
+  throw new Error(`Unsupported BenchLedger schema version: ${metadata.schema_version}. Expected 4.`);
 }
 
 async function loadDataset(bytes: Uint8Array, sourceLabel: string, sourceUrl: string | null): Promise<LoadedBenchmarkDataset> {

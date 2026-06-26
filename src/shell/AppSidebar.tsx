@@ -82,7 +82,7 @@ export function AppSidebar(props: AppSidebarProps) {
 
   const iconMode = mode === "icon";
   const fullMode = mode !== "icon";
-  const latestRunLabel = latestRun ? `${latestRun.machine_id} · ${formatDate(latestRun.measured_at)}` : dataset?.source_label ?? "No database";
+  const latestRunLabel = latestRun ? `${latestRun.environment_label} · ${formatDate(latestRun.measured_at)}` : dataset?.source_label ?? "No database";
 
   useEffect(() => {
     if (!resolvedCustomLogoUrl) {
@@ -310,7 +310,7 @@ export function AppSidebar(props: AppSidebarProps) {
               <ThemeIcon className="size-4" aria-hidden="true" />
             </IconButton>
             <div className="min-w-0">
-              <strong className="type-card-title block truncate">{latestRun?.machine_id ?? dataset?.source_label ?? "No database"}</strong>
+              <strong className="type-card-title block truncate">{latestRun?.environment_label ?? dataset?.source_label ?? "No database"}</strong>
               <span className="type-meta block truncate">{latestRun ? formatDate(latestRun.measured_at) : "No benchmark run"}</span>
             </div>
           </div>

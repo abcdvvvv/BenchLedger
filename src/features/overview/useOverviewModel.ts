@@ -17,7 +17,7 @@ import {
   metricFamilyKey,
   runId,
   runPairSortValue,
-  splitTrendRowsByMachine,
+  splitTrendRowsByEnvironment,
   trendDisplayUnitContext,
   type PlotTheme,
   type RunPairSort,
@@ -53,7 +53,7 @@ type UseOverviewModelOptions = {
   onBaselineRunIdChange: (runId: string) => void;
   runPairSort: RunPairSort | null;
   onRunPairSortChange: (sort: RunPairSort | null) => void;
-  machine: string;
+  environment: string;
   metricKind: string;
   group: string;
   branch: string;
@@ -73,6 +73,8 @@ type UseOverviewModelResult = {
   latestRun: ReturnType<typeof buildRuns>[number] | null;
   filteredRuns: ReturnType<typeof buildRuns>;
   focusRun: ReturnType<typeof buildRuns>[number] | null;
+  baselineRun: ReturnType<typeof buildRuns>[number] | null;
+  environmentMismatch: boolean;
   comparisonRows: PairComparison[];
   sortedComparisonRows: PairComparison[];
   stats: OverviewStat[];
@@ -96,7 +98,7 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
     onBaselineRunIdChange,
     runPairSort,
     onRunPairSortChange,
-    machine,
+    environment,
     metricKind,
     group,
     branch,
@@ -139,6 +141,7 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
   const currentBenchmarkId = selectedBenchmarkIds[0] ?? "";
   const focusRun = filteredRunsById.get(focusRunId) ?? filteredRuns[0] ?? null;
   const baselineRun = filteredRunsById.get(baselineRunId) ?? filteredRuns[1] ?? filteredRuns[0] ?? null;
+  const environmentMismatch = Boolean(focusRun && baselineRun && focusRun.environment_id !== baselineRun.environment_id);
   const benchmarkOptionsById = useMemo(
     () => new Map(benchmarkOptions.map((option) => [option.value, option])),
     [benchmarkOptions]
@@ -242,13 +245,13 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
     return selectedBenchmarkIds.flatMap((benchmarkKey, index) => {
       const traceRows = overviewTrendRowsByBenchmark.get(benchmarkKey) ?? [];
       const benchmarkLabel = benchmarkOptionsById.get(benchmarkKey)?.label ?? benchmarkKey;
-      const machineSeries = splitTrendRowsByMachine(traceRows);
+      const environmentSeries = splitTrendRowsByEnvironment(traceRows);
 
-      return machineSeries.flatMap((series, machineIndex) => {
-        const label = machineSeries.length > 1
-          ? `${benchmarkLabel} · ${series.machineId}`
+      return environmentSeries.flatMap((series, environmentIndex) => {
+        const label = environmentSeries.length > 1
+          ? `${benchmarkLabel} · ${series.environmentId}`
           : benchmarkLabel;
-        const color = colorForBenchmark(index * Math.max(machineSeries.length, 1) + machineIndex);
+        const color = colorForBenchmark(index * Math.max(environmentSeries.length, 1) + environmentIndex);
 
         return buildTrendTrace(series.rows, {
           axisMode: trendAxisMode,
@@ -262,7 +265,7 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
           theme,
           yMin: trendYMin,
           yPadding: trendYPadding,
-          showLegend: selectedBenchmarkIds.length > 1 || machineSeries.length > 1
+          showLegend: selectedBenchmarkIds.length > 1 || environmentSeries.length > 1
         });
       });
     });
@@ -287,7 +290,7 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
 
   const capturedRunsDetail = useMemo(() => {
     const filterStates = [
-      { label: "Machine", enabled: machine !== "all" },
+      { label: "Environment", enabled: environment !== "all" },
       { label: "Metric", enabled: Boolean(metricKind) },
       { label: "Group", enabled: group !== "all" },
       { label: "Branch", enabled: branch !== "all" },
@@ -310,7 +313,7 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
           : null
       ))
     );
-  }, [branch, group, machine, metricKind, timeEnd, timeStart]);
+  }, [branch, environment, group, metricKind, timeEnd, timeStart]);
 
   const stats = useMemo<OverviewStat[]>(() => [
     {
@@ -343,10 +346,10 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
     {
       Icon: FiGitBranch,
       label: "Dirty Snapshots",
-      value: filteredRuns.filter((run) => run.is_dirty).length.toLocaleString(),
+      value: filteredRuns.filter((run) => Boolean(run.code_state_metadata.source?.dirty)).length.toLocaleString(),
       delta: "",
       deltaTone: "neutral",
-      detail: latestRun?.is_dirty ? "Latest run was recorded from a dirty worktree" : "Latest run is clean"
+      detail: latestRun?.code_state_metadata.source?.dirty ? "Latest run was recorded from a dirty worktree" : "Latest run is clean"
     }
   ], [baselineBenchmark, capturedRunsDetail, filteredRuns, focusBenchmark, latestRun, rows, selectedMetricDelta]);
 
@@ -355,6 +358,8 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
     latestRun,
     filteredRuns,
     focusRun,
+    baselineRun,
+    environmentMismatch,
     comparisonRows,
     sortedComparisonRows,
     stats,

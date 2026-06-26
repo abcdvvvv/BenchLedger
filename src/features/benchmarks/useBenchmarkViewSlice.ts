@@ -14,9 +14,9 @@ import type { BenchmarkRow } from "../../lib/types";
 
 type UseBenchmarkViewSliceOptions = {
   rows: BenchmarkRow[];
-  machineOptions: string[];
-  machine: string;
-  onMachineChange: (machine: string) => void;
+  environmentOptions: string[];
+  environment: string;
+  onEnvironmentChange: (environment: string) => void;
   metricKind: string;
   onMetricKindChange: (metricKind: string) => void;
   branch: string;
@@ -41,14 +41,18 @@ type UseBenchmarkViewSliceResult = {
   runsEmptyTimeRangeLabel: string;
 };
 
+function rowBranch(row: BenchmarkRow): string {
+  return row.code_state_metadata.source?.branch || row.run_metadata.source?.branch || "";
+}
+
 export function useBenchmarkViewSlice(
   options: UseBenchmarkViewSliceOptions
 ): UseBenchmarkViewSliceResult {
   const {
     rows,
-    machineOptions,
-    machine,
-    onMachineChange,
+    environmentOptions,
+    environment,
+    onEnvironmentChange,
     metricKind,
     onMetricKindChange,
     branch,
@@ -61,12 +65,12 @@ export function useBenchmarkViewSlice(
   } = options;
 
   const metricOptions = useMemo(() => {
-    const metricRows = machine && machine !== "all" ? rows.filter((row) => row.machine_id === machine) : rows;
+    const metricRows = environment && environment !== "all" ? rows.filter((row) => row.environment_id === environment) : rows;
     return unique(metricRows.map((row) => metricFamilyLabel(row))).sort();
-  }, [machine, rows]);
+  }, [environment, rows]);
 
   const branchOptions = useMemo(
-    () => ["all", ...unique(rows.map((row) => row.branch).filter(Boolean)).sort()],
+    () => ["all", ...unique(rows.map((row) => rowBranch(row)).filter(Boolean)).sort()],
     [rows]
   );
 
@@ -77,8 +81,8 @@ export function useBenchmarkViewSlice(
   const datasetTimeEnd = useMemo(() => datasetTimeBound(rows, "latest"), [rows]);
 
   useEffect(() => {
-    onMachineChange(machine && machineOptions.includes(machine) ? machine : "all");
-  }, [machine, machineOptions, onMachineChange]);
+    onEnvironmentChange(environment && environmentOptions.includes(environment) ? environment : "all");
+  }, [environment, environmentOptions, onEnvironmentChange]);
 
   useEffect(() => {
     if (!metricOptions.length) return;
@@ -92,14 +96,14 @@ export function useBenchmarkViewSlice(
 
   const filteredRows = useMemo(
     () => filterRowsByViewState(rows, {
-      machine,
+      environment,
       metricKind,
       branch,
       timeStartValue,
       timeEndValue,
       displayStrategy
     }),
-    [branch, displayStrategy, machine, metricKind, rows, timeEndValue, timeStartValue]
+    [branch, displayStrategy, environment, metricKind, rows, timeEndValue, timeStartValue]
   );
 
   const groupOptions = useMemo(() => buildGroupOptions(filteredRows), [filteredRows]);

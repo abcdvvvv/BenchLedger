@@ -4,13 +4,16 @@ import type { BenchmarkRow } from "./types";
 
 const Base_Row: BenchmarkRow = {
   run_id: "run-1",
-  branch: "main",
-  tag: "",
   code_state_id: "state-1",
-  label: "Run 1",
-  commit_sha: "abcdef123456",
+  code_label: "Run 1",
   code_date: "2026-01-01T00:00:00Z",
+  environment_id: "env-1",
+  environment_label: "Env 1",
   measured_at: "2026-01-01T00:00:00Z",
+  notes: "",
+  code_state_metadata: { source: { branch: "main", tags: [], revision: "abcdef123456", dirty: false } },
+  environment_metadata: { runtime: { name: "Julia", version: "1.10" } },
+  run_metadata: {},
   benchmark_path: ["suite", "case"],
   benchmark_id: "bench-1",
   benchmark_label: "bench-1",
@@ -19,14 +22,6 @@ const Base_Row: BenchmarkRow = {
   unit: "ns",
   value: 1000,
   better: "lower",
-  machine_id: "machine-1",
-  cpu_model: "cpu",
-  cpu_threads: 8,
-  arch: "x64",
-  os: "linux",
-  julia_version: "1.10",
-  is_dirty: false,
-  notes: "",
   group: "suite"
 };
 
@@ -39,7 +34,7 @@ describe("benchmark view filtering", () => {
     ];
 
     const filtered = filterRowsByViewState(rows, {
-      machine: "all",
+      environment: "all",
       metricKind: "time median",
       branch: "all",
       timeStartValue: null,
@@ -58,7 +53,7 @@ describe("benchmark view filtering", () => {
     ];
 
     const filtered = filterRowsByViewState(rows, {
-      machine: "all",
+      environment: "all",
       metricKind: "memory median bytes",
       branch: "all",
       timeStartValue: null,
