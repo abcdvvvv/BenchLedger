@@ -249,7 +249,7 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
 
       return environmentSeries.flatMap((series, environmentIndex) => {
         const label = environmentSeries.length > 1
-          ? `${benchmarkLabel} · ${series.environmentId}`
+          ? `${benchmarkLabel} · ${series.environmentLabel}`
           : benchmarkLabel;
         const color = colorForBenchmark(index * Math.max(environmentSeries.length, 1) + environmentIndex);
 

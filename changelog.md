@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-06-26
+
+### Changed
+
+- Plot hover text no longer shows environment information, making trend tooltips simpler to read.
+- `BenchmarkTools.jl` version is no longer part of environment identity, so unrelated benchmark-tool upgrades will not split one environment into multiple trend lines.
+
 ## [0.5.0] - 2026-06-25
 
 ### Changed
@@ -79,7 +86,8 @@
 
 Initial usable release of BenchLedger.
 
-[Unreleased]: https://github.com/abcdvvvv/BenchLedger/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/abcdvvvv/BenchLedger/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/abcdvvvv/BenchLedger/releases/tag/v0.5.1
 [0.4.2]: https://github.com/abcdvvvv/BenchLedger/releases/tag/v0.4.2
 [0.4.0]: https://github.com/abcdvvvv/BenchLedger/releases/tag/v0.4.0
 [0.3.4]: https://github.com/abcdvvvv/BenchLedger/releases/tag/v0.3.4

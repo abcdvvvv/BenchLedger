@@ -117,6 +117,7 @@ export type TrendDisplayUnitContext = {
 
 export type TrendEnvironmentSeries = {
   environmentId: string;
+  environmentLabel: string;
   rows: TrendPlotRow[];
 };
 
@@ -441,7 +442,11 @@ export function splitTrendRowsByEnvironment(rows: TrendPlotRow[]): TrendEnvironm
 
   return Array.from(rowsByEnvironment.entries())
     .sort(([left], [right]) => left.localeCompare(right))
-    .map(([environmentId, environmentRows]) => ({ environmentId, rows: environmentRows }));
+    .map(([environmentId, environmentRows]) => ({
+      environmentId,
+      environmentLabel: environmentRows[0]?.environment_label || environmentId,
+      rows: environmentRows
+    }));
 }
 
 export function commitAxisCategoryOrder(rows: TrendPlotRow[]): PlotAxisCategoryOrder | undefined {
@@ -512,8 +517,6 @@ export function buildTrendTrace(
       x,
       y,
       customdata: rows.map((row) => [
-        row.environment_id,
-        row.environment_label,
         row.code_date,
         row.measured_at,
         displayUnitContext.formatValue(row.value, row.unit)
@@ -535,7 +538,7 @@ export function buildTrendTrace(
         type: "vertical",
         colorscale
       },
-      hovertemplate: `%{x}<br>Environment: %{customdata[1]} (%{customdata[0]})<br>Code date: %{customdata[2]}<br>Measured: %{customdata[3]}<br>Value: %{customdata[4]}<br>Unit: ${unit || "n/a"}<extra></extra>`,
+      hovertemplate: `%{x}<br>Code date: %{customdata[0]}<br>Measured: %{customdata[1]}<br>Value: %{customdata[2]}<br>Unit: ${unit || "n/a"}<extra></extra>`,
       showlegend: showLegend
     }
   ];

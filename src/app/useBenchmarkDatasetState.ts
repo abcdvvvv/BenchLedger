@@ -37,7 +37,7 @@ export type BenchmarkDatasetState = {
   siteDescription: string;
   plotTheme: ReturnType<typeof plotThemeFor>;
   allRuns: BenchmarkRun[];
-  environmentOptions: string[];
+  environmentOptions: { value: string; label: string }[];
   hasDataset: boolean;
   overviewSlice: ReturnType<typeof useBenchmarkViewSlice>;
   trendBoardSlice: ReturnType<typeof useBenchmarkViewSlice>;
@@ -48,8 +48,20 @@ export type BenchmarkDatasetState = {
   databaseCatalog: DatabaseCatalogEntry[];
 };
 
-function buildEnvironmentOptions(runs: BenchmarkRun[]): string[] {
-  return ["all", ...unique(runs.map((run) => run.environment_id)).sort()];
+function buildEnvironmentOptions(runs: BenchmarkRun[]): { value: string; label: string }[] {
+  const labelsByEnvironmentId = new Map(runs.map((run) => [run.environment_id, run.environment_label || run.environment_id]));
+  const countsByLabel = new Map<string, number>();
+
+  for (const label of labelsByEnvironmentId.values()) {
+    countsByLabel.set(label, (countsByLabel.get(label) ?? 0) + 1);
+  }
+
+  return [{ value: "all", label: "All environments" }, ...Array.from(labelsByEnvironmentId.entries())
+    .sort((left, right) => left[1].localeCompare(right[1]) || left[0].localeCompare(right[0]))
+    .map(([value, label]) => ({
+      value,
+      label: (countsByLabel.get(label) ?? 0) > 1 ? `${label} · ${value.slice(0, 12)}` : label
+    }))];
 }
 
 function buildLoadedDatabaseStats(

@@ -14,7 +14,7 @@ import type { BenchmarkRow } from "../../lib/types";
 
 type UseBenchmarkViewSliceOptions = {
   rows: BenchmarkRow[];
-  environmentOptions: string[];
+  environmentOptions: { value: string; label: string }[];
   environment: string;
   onEnvironmentChange: (environment: string) => void;
   metricKind: string;
@@ -81,7 +81,7 @@ export function useBenchmarkViewSlice(
   const datasetTimeEnd = useMemo(() => datasetTimeBound(rows, "latest"), [rows]);
 
   useEffect(() => {
-    onEnvironmentChange(environment && environmentOptions.includes(environment) ? environment : "all");
+    onEnvironmentChange(environment && environmentOptions.some((option) => option.value === environment) ? environment : "all");
   }, [environment, environmentOptions, onEnvironmentChange]);
 
   useEffect(() => {

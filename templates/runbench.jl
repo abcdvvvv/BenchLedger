@@ -301,13 +301,12 @@ function make_environment()
         "platform" => Dict{String,Any}("os" => os_metadata, "architecture" => string(Sys.ARCH)),
         "hardware" => Dict{String,Any}("cpu" => Dict{String,Any}("model" => cpu_model, "logical_threads" => Sys.CPU_THREADS)),
         "runtime" => runtime_metadata,
-        "benchmark" => Dict{String,Any}("framework" => Dict{String,Any}("name" => "BenchmarkTools.jl", "version" => string(Base.pkgversion(BenchmarkTools)))),
         "execution" => Dict{String,Any}("processes" => 1, "threads" => Threads.nthreads()),
     )
     identity_json = canonical_json(identity_metadata)
     environment_id = string("env-", bytes2hex(sha256(codeunits(identity_json))))
     label = get(ENV, "BENCH_ENVIRONMENT_LABEL", "")
-    isempty(label) && (label = string(cpu_model, " / Julia ", VERSION, " / ", Threads.nthreads(), " threads"))
+    isempty(label) && (label = gethostname())
     (; environment_id, label, metadata=metadata_json)
 end
 

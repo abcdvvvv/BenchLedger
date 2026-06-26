@@ -32,7 +32,7 @@ export type TrendBoardPageProps = {
   };
   filters: {
     environment: string;
-    environmentOptions: string[];
+    environmentOptions: { value: string; label: string }[];
     onEnvironmentChange: (environment: string) => void;
     metricKind: string;
     metricOptions: string[];
@@ -112,7 +112,7 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
           <Field>
             <FieldLabel>Environment</FieldLabel>
             <SelectField value={filters.environment} onChange={(event) => filters.onEnvironmentChange(event.target.value)} disabled={!header.hasDataset}>
-              {filters.environmentOptions.map((option) => <option key={option} value={option}>{option === "all" ? "All environments" : option}</option>)}
+              {filters.environmentOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </SelectField>
           </Field>
           <Field>

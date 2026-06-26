@@ -110,7 +110,7 @@ export function useTrendBoardModel(options: UseTrendBoardModelOptions): UseTrend
         commitAxisOrder: trendAxisMode === "commit" ? commitAxisCategoryOrder(cardRows) : undefined,
         traces: splitTrendRowsByEnvironment(cardRows).flatMap((series, environmentIndex, environmentSeries) => {
           const color = colorForBenchmark(index * Math.max(environmentSeries.length, 1) + environmentIndex);
-          const seriesLabel = environmentSeries.length > 1 ? series.environmentId : label;
+          const seriesLabel = environmentSeries.length > 1 ? series.environmentLabel : label;
 
           return buildTrendTrace(series.rows, {
             axisMode: trendAxisMode,
