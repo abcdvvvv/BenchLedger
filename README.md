@@ -46,6 +46,7 @@ that can be deployed as a static viewer with project-owned SQLite data.
 
 ## Example Projects
 
+- [ClapeyronBenchmarks](https://github.com/ClapeyronThermo/ClapeyronBenchmarks): [benchmark dashboard](https://clapeyronthermo.github.io/ClapeyronBenchmarks/benchmarks/index.html)
 - [ComponentLogging.jl](https://github.com/JuliaLogging/ComponentLogging.jl): [benchmark dashboard](https://julialogging.github.io/ComponentLogging.jl/benchmarks/)
 
 ## Quick Start
