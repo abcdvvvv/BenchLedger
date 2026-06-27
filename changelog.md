@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-06-27
+
+### Fixed
+
+- Fixed commit-axis trend charts to use real code timestamps for x-positioning while preserving commit/tag labels, eliminating misordered multi-series plots and Z-shaped line reversals.
+
 ## [0.5.1] - 2026-06-26
 
 ### Changed

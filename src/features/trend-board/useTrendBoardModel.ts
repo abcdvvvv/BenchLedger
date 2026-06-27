@@ -8,7 +8,7 @@ import {
   Trend_Y_Padding_Ratio,
   buildRuns,
   buildTrendTrace,
-  commitAxisCategoryOrder,
+  commitAxisTickLabels,
   colorForBenchmark,
   colorWithAlpha,
   splitTrendRowsByEnvironment,
@@ -28,7 +28,7 @@ export type TrendBoardCard = {
   path: string[];
   metricLabel: string;
   traces: Array<Record<string, unknown>>;
-  commitAxisOrder?: { categoryorder: "array"; categoryarray: string[] };
+  commitAxisLabels?: { type: "date"; tickmode: "array"; tickvals: string[]; ticktext: string[] };
 };
 
 type UseTrendBoardModelOptions = {
@@ -107,7 +107,7 @@ export function useTrendBoardModel(options: UseTrendBoardModelOptions): UseTrend
         label,
         path,
         metricLabel: displayUnitContext.formatMetricLabel(metricKind),
-        commitAxisOrder: trendAxisMode === "commit" ? commitAxisCategoryOrder(cardRows) : undefined,
+        commitAxisLabels: trendAxisMode === "commit" ? commitAxisTickLabels(cardRows) : undefined,
         traces: splitTrendRowsByEnvironment(cardRows).flatMap((series, environmentIndex, environmentSeries) => {
           const color = colorForBenchmark(index * Math.max(environmentSeries.length, 1) + environmentIndex);
           const seriesLabel = environmentSeries.length > 1 ? series.environmentLabel : label;

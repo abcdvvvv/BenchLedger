@@ -75,7 +75,7 @@ export function buildAppPages(state: BenchmarkDatasetState, openLocalFilePicker:
         trendAxisMode: settings.trendAxisMode,
         onToggleTrendAxisMode: () => setSetting("trendAxisMode", settings.trendAxisMode === "commit" ? "time" : "commit"),
         trendTraces: overviewModel.trendTraces,
-        trendCommitAxisOrder: overviewModel.trendCommitAxisOrder,
+        trendCommitAxisLabels: overviewModel.trendCommitAxisLabels,
         trendPlotMargin: overviewModel.trendPlotMargin,
         plotTheme
       },

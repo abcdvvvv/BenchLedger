@@ -191,7 +191,7 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
                       showgrid: false,
                       color: trend.plotTheme.axis,
                       tickfont: { size: 14 },
-                      ...(header.trendAxisMode === "commit" ? card.commitAxisOrder : undefined)
+                      ...(header.trendAxisMode === "commit" ? card.commitAxisLabels : undefined)
                     },
                     yaxis: {
                       title: { text: card.metricLabel || trend.selectedMetricLabel || "Metric value" },

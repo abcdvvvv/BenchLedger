@@ -11,7 +11,7 @@ import {
   Trend_Y_Padding_Ratio,
   buildRuns,
   buildTrendTrace,
-  commitAxisCategoryOrder,
+  commitAxisTickLabels,
   colorForBenchmark,
   defaultRunPairSortDirection,
   metricFamilyKey,
@@ -82,7 +82,7 @@ type UseOverviewModelResult = {
   trendPlotMargin: { t: number; r: number; b: number; l: number };
   deltaPlotMargin: { t: number; r: number; b: number; l: number };
   trendTraces: Array<Record<string, unknown>>;
-  trendCommitAxisOrder?: { categoryorder: "array"; categoryarray: string[] };
+  trendCommitAxisLabels?: { type: "date"; tickmode: "array"; tickvals: string[]; ticktext: string[] };
   toggleRunPairSort: (key: RunPairSortKey) => void;
 };
 
@@ -222,8 +222,8 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
     [benchmarkOptions, overviewTrendRowsByBenchmark]
   );
   const trendDisplayContext = useMemo(() => trendDisplayUnitContext(trendRows), [trendRows]);
-  const trendCommitAxisOrder = useMemo(
-    () => trendAxisMode === "commit" ? commitAxisCategoryOrder(trendRows) : undefined,
+  const trendCommitAxisLabels = useMemo(
+    () => trendAxisMode === "commit" ? commitAxisTickLabels(trendRows) : undefined,
     [trendAxisMode, trendRows]
   );
   const trendMetricLabel = useMemo(
@@ -367,7 +367,7 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
     trendPlotMargin,
     deltaPlotMargin,
     trendTraces,
-    trendCommitAxisOrder,
+    trendCommitAxisLabels,
     toggleRunPairSort
   };
 }

@@ -121,9 +121,11 @@ export type TrendEnvironmentSeries = {
   rows: TrendPlotRow[];
 };
 
-export type PlotAxisCategoryOrder = {
-  categoryorder: "array";
-  categoryarray: string[];
+export type PlotAxisTickLabels = {
+  type: "date";
+  tickmode: "array";
+  tickvals: string[];
+  ticktext: string[];
 };
 
 export const UI_SETTINGS_STORAGE_KEY = "benchledger-ui-settings";
@@ -449,10 +451,27 @@ export function splitTrendRowsByEnvironment(rows: TrendPlotRow[]): TrendEnvironm
     }));
 }
 
-export function commitAxisCategoryOrder(rows: TrendPlotRow[]): PlotAxisCategoryOrder | undefined {
+export function commitAxisTickLabels(rows: TrendPlotRow[]): PlotAxisTickLabels | undefined {
   if (!rows.length) return undefined;
-  const categoryarray = unique(rows.map((row) => row.run_axis_label));
-  return categoryarray.length ? { categoryorder: "array", categoryarray } : undefined;
+  const labelsByDate = new Map<string, string>();
+  for (const row of [...rows].sort((left, right) => {
+    const leftValue = parseDate(left.code_date)?.valueOf() ?? 0;
+    const rightValue = parseDate(right.code_date)?.valueOf() ?? 0;
+    return leftValue - rightValue;
+  })) {
+    if (!labelsByDate.has(row.code_date)) {
+      labelsByDate.set(row.code_date, row.run_axis_label);
+    }
+  }
+  const tickvals = Array.from(labelsByDate.keys());
+  return tickvals.length
+    ? {
+        type: "date",
+        tickmode: "array",
+        tickvals,
+        ticktext: tickvals.map((value) => labelsByDate.get(value) ?? value)
+      }
+    : undefined;
 }
 
 export function buildTrendTrace(
@@ -489,7 +508,7 @@ export function buildTrendTrace(
     showLegend,
     fillGradientScale
   } = options;
-  const x = rows.map((row) => axisMode === "commit" ? row.run_axis_label : row.code_date);
+  const x = rows.map((row) => row.code_date);
   const y = rows.map((row) => displayUnitContext.scaleValue(row.value, row.unit));
   const unit = displayUnitContext.unit || (rows[0]?.unit ?? "");
   const gradientStart = colorWithAlpha(color, 0);
@@ -517,6 +536,7 @@ export function buildTrendTrace(
       x,
       y,
       customdata: rows.map((row) => [
+        row.run_axis_label,
         row.code_date,
         row.measured_at,
         displayUnitContext.formatValue(row.value, row.unit)
@@ -538,7 +558,9 @@ export function buildTrendTrace(
         type: "vertical",
         colorscale
       },
-      hovertemplate: `%{x}<br>Code date: %{customdata[0]}<br>Measured: %{customdata[1]}<br>Value: %{customdata[2]}<br>Unit: ${unit || "n/a"}<extra></extra>`,
+      hovertemplate: axisMode === "commit"
+        ? `%{customdata[0]}<br>Code date: %{customdata[1]}<br>Measured: %{customdata[2]}<br>Value: %{customdata[3]}<br>Unit: ${unit || "n/a"}<extra></extra>`
+        : `%{x}<br>Measured: %{customdata[2]}<br>Value: %{customdata[3]}<br>Unit: ${unit || "n/a"}<extra></extra>`,
       showlegend: showLegend
     }
   ];

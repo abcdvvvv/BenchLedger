@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   clampTrendBoardColumns,
-  commitAxisCategoryOrder,
+  buildTrendTrace,
+  commitAxisTickLabels,
   comparePath,
   databaseDescription,
   databaseTitle,
@@ -175,9 +176,108 @@ describe("dashboard helpers", () => {
       })
     ];
 
-    expect(commitAxisCategoryOrder(rows)).toEqual({
-      categoryorder: "array",
-      categoryarray: ["v0.6.25", "af73b09", "df357f6", "00a99b7"]
+    expect(commitAxisTickLabels(rows)).toEqual({
+      type: "date",
+      tickmode: "array",
+      tickvals: [
+        "2026-06-02T00:00:00Z",
+        "2026-06-08T00:00:00Z",
+        "2026-06-17T00:00:00Z",
+        "2026-06-20T00:00:00Z"
+      ],
+      ticktext: ["v0.6.25", "af73b09", "df357f6", "00a99b7"]
+    });
+  });
+
+  it("uses code dates as x positions in commit mode while preserving commit labels", () => {
+    const rows = [
+      makeTrendRow({
+        run_id: "run-early",
+        code_date: "2026-06-08T00:00:00Z",
+        measured_at: "2026-06-20T00:00:00Z",
+        run_axis_label: "af73b09",
+        value: 20
+      }),
+      makeTrendRow({
+        run_id: "run-late",
+        code_date: "2026-06-20T00:00:00Z",
+        measured_at: "2026-06-21T00:00:00Z",
+        run_axis_label: "00a99b7",
+        value: 10
+      })
+    ];
+    const context = trendDisplayUnitContext(rows);
+    const traces = buildTrendTrace(rows, {
+      axisMode: "commit",
+      lineShape: "line",
+      markerSymbol: "circle",
+      markerFillMode: "hollow",
+      displayUnitContext: context,
+      color: "#000000",
+      label: "Series",
+      plotTheme: {
+        paper: "transparent",
+        plot: "transparent",
+        grid: "#ccc",
+        axis: "#333",
+        zero: "#999",
+        line: "#000",
+        areaGradientStart: "rgba(0,0,0,0)",
+        areaGradientEnd: "rgba(0,0,0,0.2)",
+        markerStrong: "#000",
+        marker: "#000",
+        markerMuted: "#666",
+        deltaUp: "#f00",
+        deltaDown: "#0f0",
+        deltaNeutral: "#999"
+      },
+      theme: "light",
+      yMin: 0,
+      yPadding: 1,
+      showLegend: true
+    });
+
+    expect(traces[1]?.x).toEqual([
+      "2026-06-08T00:00:00Z",
+      "2026-06-20T00:00:00Z"
+    ]);
+    expect(traces[1]?.customdata).toEqual([
+      ["af73b09", "2026-06-08T00:00:00Z", "2026-06-20T00:00:00Z", "20 ns"],
+      ["00a99b7", "2026-06-20T00:00:00Z", "2026-06-21T00:00:00Z", "10 ns"]
+    ]);
+  });
+
+  it("builds globally time-sorted commit ticks even when labels first appear out of order across series", () => {
+    const rows = [
+      makeTrendRow({
+        run_id: "run-24",
+        code_date: "2026-06-24T00:00:00Z",
+        run_axis_label: "5681ad0",
+        benchmark_id: "bench-a"
+      }),
+      makeTrendRow({
+        run_id: "run-08",
+        code_date: "2025-01-03T00:00:00Z",
+        run_axis_label: "v0.6.8",
+        benchmark_id: "bench-b"
+      }),
+      makeTrendRow({
+        run_id: "run-09",
+        code_date: "2025-01-29T00:00:00Z",
+        run_axis_label: "v0.6.9",
+        benchmark_id: "bench-b"
+      })
+    ];
+
+    expect(commitAxisTickLabels(rows)).toEqual({
+      type: "date",
+      tickmode: "array",
+      tickvals: [
+        "2025-01-03T00:00:00Z",
+        "2025-01-29T00:00:00Z",
+        "2026-06-24T00:00:00Z"
+      ],
+      ticktext: ["v0.6.8", "v0.6.9", "5681ad0"]
     });
   });
 
