@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   clampTrendBoardColumns,
   buildTrendTrace,
-  commitAxisTickLabels,
+  commitAxisLayout,
   comparePath,
   databaseDescription,
   databaseTitle,
@@ -155,43 +155,45 @@ describe("dashboard helpers", () => {
   it("builds commit axis category order from code-date-sorted trend rows", () => {
     const rows = [
       makeTrendRow({
+        code_state_id: "state-1",
         run_id: "run-1",
         code_date: "2026-06-02T00:00:00Z",
-        run_axis_label: "v0.6.25"
+        run_axis_label: "v0.6.25",
+        run_tone: "tag"
       }),
       makeTrendRow({
+        code_state_id: "state-2",
         run_id: "run-2",
         code_date: "2026-06-08T00:00:00Z",
         run_axis_label: "af73b09"
       }),
       makeTrendRow({
+        code_state_id: "state-3",
         run_id: "run-3",
         code_date: "2026-06-17T00:00:00Z",
         run_axis_label: "df357f6"
       }),
       makeTrendRow({
+        code_state_id: "state-4",
         run_id: "run-4",
         code_date: "2026-06-20T00:00:00Z",
-        run_axis_label: "00a99b7"
+        run_axis_label: "00a99b7",
+        run_tone: "tag"
       })
     ];
 
-    expect(commitAxisTickLabels(rows)).toEqual({
-      type: "date",
+    expect(commitAxisLayout(rows)?.tickLabels).toEqual({
+      type: "linear",
       tickmode: "array",
-      tickvals: [
-        "2026-06-02T00:00:00Z",
-        "2026-06-08T00:00:00Z",
-        "2026-06-17T00:00:00Z",
-        "2026-06-20T00:00:00Z"
-      ],
+      tickvals: [0, 1 / 3, 2 / 3, 1],
       ticktext: ["v0.6.25", "af73b09", "df357f6", "00a99b7"]
     });
   });
 
-  it("uses code dates as x positions in commit mode while preserving commit labels", () => {
+  it("uses synthetic commit positions as x values while preserving commit labels", () => {
     const rows = [
       makeTrendRow({
+        code_state_id: "state-2",
         run_id: "run-early",
         code_date: "2026-06-08T00:00:00Z",
         measured_at: "2026-06-20T00:00:00Z",
@@ -199,16 +201,29 @@ describe("dashboard helpers", () => {
         value: 20
       }),
       makeTrendRow({
+        code_state_id: "state-4",
         run_id: "run-late",
         code_date: "2026-06-20T00:00:00Z",
         measured_at: "2026-06-21T00:00:00Z",
         run_axis_label: "00a99b7",
-        value: 10
+        value: 10,
+        run_tone: "tag"
       })
     ];
     const context = trendDisplayUnitContext(rows);
+    const commitAxis = commitAxisLayout([
+      makeTrendRow({
+        code_state_id: "state-1",
+        run_id: "run-tag-1",
+        code_date: "2026-06-02T00:00:00Z",
+        run_axis_label: "v0.6.25",
+        run_tone: "tag"
+      }),
+      ...rows
+    ]);
     const traces = buildTrendTrace(rows, {
       axisMode: "commit",
+      commitAxisPositions: commitAxis?.positionsByCodeStateId,
       lineShape: "line",
       markerSymbol: "circle",
       markerFillMode: "hollow",
@@ -237,10 +252,7 @@ describe("dashboard helpers", () => {
       showLegend: true
     });
 
-    expect(traces[1]?.x).toEqual([
-      "2026-06-08T00:00:00Z",
-      "2026-06-20T00:00:00Z"
-    ]);
+    expect(traces[1]?.x).toEqual([0.5, 1]);
     expect(traces[1]?.customdata).toEqual([
       ["af73b09", "2026-06-08T00:00:00Z", "2026-06-20T00:00:00Z", "20 ns"],
       ["00a99b7", "2026-06-20T00:00:00Z", "2026-06-21T00:00:00Z", "10 ns"]
@@ -250,34 +262,86 @@ describe("dashboard helpers", () => {
   it("builds globally time-sorted commit ticks even when labels first appear out of order across series", () => {
     const rows = [
       makeTrendRow({
+        code_state_id: "state-24",
         run_id: "run-24",
         code_date: "2026-06-24T00:00:00Z",
         run_axis_label: "5681ad0",
         benchmark_id: "bench-a"
       }),
       makeTrendRow({
+        code_state_id: "state-08",
         run_id: "run-08",
         code_date: "2025-01-03T00:00:00Z",
         run_axis_label: "v0.6.8",
-        benchmark_id: "bench-b"
+        benchmark_id: "bench-b",
+        run_tone: "tag"
       }),
       makeTrendRow({
+        code_state_id: "state-09",
         run_id: "run-09",
         code_date: "2025-01-29T00:00:00Z",
         run_axis_label: "v0.6.9",
-        benchmark_id: "bench-b"
+        benchmark_id: "bench-b",
+        run_tone: "tag"
       })
     ];
 
-    expect(commitAxisTickLabels(rows)).toEqual({
-      type: "date",
+    expect(commitAxisLayout(rows)?.tickLabels).toEqual({
+      type: "linear",
       tickmode: "array",
-      tickvals: [
-        "2025-01-03T00:00:00Z",
-        "2025-01-29T00:00:00Z",
-        "2026-06-24T00:00:00Z"
-      ],
+      tickvals: [0, 0.5, 1],
       ticktext: ["v0.6.8", "v0.6.9", "5681ad0"]
+    });
+  });
+
+  it("evenly spaces commits inside each tagged segment while keeping every commit label visible", () => {
+    const rows = [
+      makeTrendRow({
+        code_state_id: "state-v1",
+        run_id: "run-v1",
+        code_date: "2026-06-01T00:00:00Z",
+        run_axis_label: "v1.0.0",
+        run_tone: "tag"
+      }),
+      makeTrendRow({
+        code_state_id: "state-a",
+        run_id: "run-a",
+        code_date: "2026-06-02T00:00:00Z",
+        run_axis_label: "aaaaaaa"
+      }),
+      makeTrendRow({
+        code_state_id: "state-b",
+        run_id: "run-b",
+        code_date: "2026-06-03T00:00:00Z",
+        run_axis_label: "bbbbbbb"
+      }),
+      makeTrendRow({
+        code_state_id: "state-v2",
+        run_id: "run-v2",
+        code_date: "2026-06-04T00:00:00Z",
+        run_axis_label: "v2.0.0",
+        run_tone: "tag"
+      }),
+      makeTrendRow({
+        code_state_id: "state-c",
+        run_id: "run-c",
+        code_date: "2026-06-05T00:00:00Z",
+        run_axis_label: "ccccccc"
+      }),
+      makeTrendRow({
+        code_state_id: "state-v3",
+        run_id: "run-v3",
+        code_date: "2026-06-06T00:00:00Z",
+        run_axis_label: "v3.0.0",
+        run_tone: "tag"
+      })
+    ];
+
+    expect(commitAxisLayout(rows)?.tickLabels).toEqual({
+      type: "linear",
+      tickmode: "array",
+      tickvals: [0, 1 / 6, 1 / 3, 0.5, 0.75, 1],
+      ticktext: ["v1.0.0", "aaaaaaa", "bbbbbbb", "v2.0.0", "ccccccc", "v3.0.0"]
     });
   });
 

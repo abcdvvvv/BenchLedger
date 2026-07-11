@@ -122,10 +122,15 @@ export type TrendEnvironmentSeries = {
 };
 
 export type PlotAxisTickLabels = {
-  type: "date";
+  type?: "date" | "linear";
   tickmode: "array";
-  tickvals: string[];
+  tickvals: Array<string | number>;
   ticktext: string[];
+};
+
+export type CommitAxisLayout = {
+  positionsByCodeStateId: ReadonlyMap<string, number>;
+  tickLabels: PlotAxisTickLabels;
 };
 
 export const UI_SETTINGS_STORAGE_KEY = "benchledger-ui-settings";
@@ -451,33 +456,87 @@ export function splitTrendRowsByEnvironment(rows: TrendPlotRow[]): TrendEnvironm
     }));
 }
 
-export function commitAxisTickLabels(rows: TrendPlotRow[]): PlotAxisTickLabels | undefined {
-  if (!rows.length) return undefined;
-  const labelsByDate = new Map<string, string>();
+type CommitAxisState = {
+  codeStateId: string;
+  label: string;
+  isTag: boolean;
+};
+
+function _commitAxisStates(rows: TrendPlotRow[]): CommitAxisState[] {
+  const statesById = new Map<string, CommitAxisState>();
+
   for (const row of [...rows].sort((left, right) => {
     const leftValue = parseDate(left.code_date)?.valueOf() ?? 0;
     const rightValue = parseDate(right.code_date)?.valueOf() ?? 0;
-    return leftValue - rightValue;
+    if (leftValue !== rightValue) return leftValue - rightValue;
+    return left.code_state_id.localeCompare(right.code_state_id);
   })) {
-    if (!labelsByDate.has(row.code_date)) {
-      labelsByDate.set(row.code_date, row.run_axis_label);
+    if (statesById.has(row.code_state_id)) continue;
+    statesById.set(row.code_state_id, {
+      codeStateId: row.code_state_id,
+      label: row.run_axis_label,
+      isTag: row.run_tone === "tag"
+    });
+  }
+
+  return Array.from(statesById.values());
+}
+
+function _commitAxisAnchorIndices(states: CommitAxisState[]): number[] {
+  if (!states.length) return [];
+  if (states.length === 1) return [0];
+
+  const anchors = states.flatMap((state, index) => state.isTag ? [index] : []);
+
+  if (!anchors.length) return [0, states.length - 1];
+  if (anchors[0] !== 0) anchors.unshift(0);
+  if (anchors[anchors.length - 1] !== states.length - 1) anchors.push(states.length - 1);
+  return anchors;
+}
+
+export function commitAxisLayout(rows: TrendPlotRow[]): CommitAxisLayout | undefined {
+  const states = _commitAxisStates(rows);
+  if (!states.length) return undefined;
+
+  const anchors = _commitAxisAnchorIndices(states);
+  const positionsByCodeStateId = new Map<string, number>();
+
+  if (anchors.length === 1) {
+    positionsByCodeStateId.set(states[0].codeStateId, 0);
+  } else {
+    for (let anchorIndex = 0; anchorIndex < anchors.length - 1; anchorIndex += 1) {
+      const startStateIndex = anchors[anchorIndex];
+      const endStateIndex = anchors[anchorIndex + 1];
+      const startPosition = anchorIndex / (anchors.length - 1);
+      const endPosition = (anchorIndex + 1) / (anchors.length - 1);
+      const stateCount = endStateIndex - startStateIndex;
+
+      for (let offset = 0; offset <= stateCount; offset += 1) {
+        const state = states[startStateIndex + offset];
+        const position = stateCount === 0
+          ? startPosition
+          : startPosition + ((endPosition - startPosition) * offset) / stateCount;
+        positionsByCodeStateId.set(state.codeStateId, position);
+      }
     }
   }
-  const tickvals = Array.from(labelsByDate.keys());
-  return tickvals.length
-    ? {
-        type: "date",
-        tickmode: "array",
-        tickvals,
-        ticktext: tickvals.map((value) => labelsByDate.get(value) ?? value)
-      }
-    : undefined;
+
+  return {
+    positionsByCodeStateId,
+    tickLabels: {
+      type: "linear",
+      tickmode: "array",
+      tickvals: states.map((state) => positionsByCodeStateId.get(state.codeStateId) ?? 0),
+      ticktext: states.map((state) => state.label)
+    }
+  };
 }
 
 export function buildTrendTrace(
   rows: TrendPlotRow[],
   options: {
     axisMode: TrendAxisMode;
+    commitAxisPositions?: ReadonlyMap<string, number>;
     lineShape: TrendLineShape;
     markerSymbol: TrendMarkerSymbol;
     markerFillMode: TrendMarkerFillMode;
@@ -495,6 +554,7 @@ export function buildTrendTrace(
   if (!rows.length) return [];
   const {
     axisMode,
+    commitAxisPositions,
     lineShape,
     markerSymbol,
     markerFillMode,
@@ -508,7 +568,9 @@ export function buildTrendTrace(
     showLegend,
     fillGradientScale
   } = options;
-  const x = rows.map((row) => row.code_date);
+  const x = axisMode === "commit"
+    ? rows.map((row, index) => commitAxisPositions?.get(row.code_state_id) ?? index)
+    : rows.map((row) => row.code_date);
   const y = rows.map((row) => displayUnitContext.scaleValue(row.value, row.unit));
   const unit = displayUnitContext.unit || (rows[0]?.unit ?? "");
   const gradientStart = colorWithAlpha(color, 0);

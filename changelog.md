@@ -1,6 +1,10 @@
 # Changelog
 
-## [Unreleased]
+## [0.5.3] - 2026-07-11
+
+### Changed
+
+- Reworked commit-axis trend spacing in Overview and Trend Board so tagged commits evenly partition the axis and intervening commits are evenly distributed within each tagged segment.
 
 ## [0.5.2] - 2026-06-27
 

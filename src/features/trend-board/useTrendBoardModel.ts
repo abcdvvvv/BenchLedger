@@ -8,11 +8,12 @@ import {
   Trend_Y_Padding_Ratio,
   buildRuns,
   buildTrendTrace,
-  commitAxisTickLabels,
+  commitAxisLayout,
   colorForBenchmark,
   colorWithAlpha,
   splitTrendRowsByEnvironment,
   trendDisplayUnitContext,
+  type PlotAxisTickLabels,
   type PlotTheme,
   type ThemeMode,
   type TrendAxisMode,
@@ -28,7 +29,7 @@ export type TrendBoardCard = {
   path: string[];
   metricLabel: string;
   traces: Array<Record<string, unknown>>;
-  commitAxisLabels?: { type: "date"; tickmode: "array"; tickvals: string[]; ticktext: string[] };
+  commitAxisLabels?: PlotAxisTickLabels;
 };
 
 type UseTrendBoardModelOptions = {
@@ -101,19 +102,21 @@ export function useTrendBoardModel(options: UseTrendBoardModelOptions): UseTrend
       const yPadding = ySpan > 0
         ? ySpan * Trend_Y_Padding_Ratio
         : Math.max(Math.abs(yMin) * Trend_Y_Padding_Ratio, 1);
+      const commitAxis = trendAxisMode === "commit" ? commitAxisLayout(cardRows) : undefined;
 
       return [{
         benchmarkId: benchmarkKey,
         label,
         path,
         metricLabel: displayUnitContext.formatMetricLabel(metricKind),
-        commitAxisLabels: trendAxisMode === "commit" ? commitAxisTickLabels(cardRows) : undefined,
+        commitAxisLabels: commitAxis?.tickLabels,
         traces: splitTrendRowsByEnvironment(cardRows).flatMap((series, environmentIndex, environmentSeries) => {
           const color = colorForBenchmark(index * Math.max(environmentSeries.length, 1) + environmentIndex);
           const seriesLabel = environmentSeries.length > 1 ? series.environmentLabel : label;
 
           return buildTrendTrace(series.rows, {
             axisMode: trendAxisMode,
+            commitAxisPositions: commitAxis?.positionsByCodeStateId,
             lineShape: trendLineShape,
             markerSymbol: trendMarkerSymbol,
             markerFillMode: trendMarkerFillMode,

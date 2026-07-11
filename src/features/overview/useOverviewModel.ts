@@ -11,7 +11,7 @@ import {
   Trend_Y_Padding_Ratio,
   buildRuns,
   buildTrendTrace,
-  commitAxisTickLabels,
+  commitAxisLayout,
   colorForBenchmark,
   defaultRunPairSortDirection,
   metricFamilyKey,
@@ -23,6 +23,7 @@ import {
   type RunPairSort,
   type RunPairSortKey,
   type DisplayStrategy,
+  type PlotAxisTickLabels,
   type ThemeMode,
   type TrendAxisMode,
   type TrendLineShape,
@@ -82,7 +83,7 @@ type UseOverviewModelResult = {
   trendPlotMargin: { t: number; r: number; b: number; l: number };
   deltaPlotMargin: { t: number; r: number; b: number; l: number };
   trendTraces: Array<Record<string, unknown>>;
-  trendCommitAxisLabels?: { type: "date"; tickmode: "array"; tickvals: string[]; ticktext: string[] };
+  trendCommitAxisLabels?: PlotAxisTickLabels;
   toggleRunPairSort: (key: RunPairSortKey) => void;
 };
 
@@ -222,10 +223,11 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
     [benchmarkOptions, overviewTrendRowsByBenchmark]
   );
   const trendDisplayContext = useMemo(() => trendDisplayUnitContext(trendRows), [trendRows]);
-  const trendCommitAxisLabels = useMemo(
-    () => trendAxisMode === "commit" ? commitAxisTickLabels(trendRows) : undefined,
+  const trendCommitAxis = useMemo(
+    () => trendAxisMode === "commit" ? commitAxisLayout(trendRows) : undefined,
     [trendAxisMode, trendRows]
   );
+  const trendCommitAxisLabels = trendCommitAxis?.tickLabels;
   const trendMetricLabel = useMemo(
     () => trendDisplayContext.formatMetricLabel(metricKind),
     [metricKind, trendDisplayContext]
@@ -255,6 +257,7 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
 
         return buildTrendTrace(series.rows, {
           axisMode: trendAxisMode,
+          commitAxisPositions: trendCommitAxis?.positionsByCodeStateId,
           lineShape: trendLineShape,
           markerSymbol: trendMarkerSymbol,
           markerFillMode: trendMarkerFillMode,
@@ -276,6 +279,7 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
     selectedBenchmarkIds,
     theme,
     trendAxisMode,
+    trendCommitAxis,
     trendDisplayContext,
     trendLineShape,
     trendMarkerFillMode,

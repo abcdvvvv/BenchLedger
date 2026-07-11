@@ -18,6 +18,7 @@ import {
   runHeadline,
   runPairTableColumns,
   type DisplayStrategy,
+  type PlotAxisTickLabels,
   type PlotTheme,
   type RunPairSort,
   type RunPairSortKey,
@@ -83,7 +84,7 @@ export type OverviewPageProps = {
     trendAxisMode: TrendAxisMode;
     onToggleTrendAxisMode: () => void;
     trendTraces: Array<Record<string, unknown>>;
-    trendCommitAxisLabels?: { type: "date"; tickmode: "array"; tickvals: string[]; ticktext: string[] };
+    trendCommitAxisLabels?: PlotAxisTickLabels;
     trendPlotMargin: { t: number; r: number; b: number; l: number };
     plotTheme: PlotTheme;
   };
