@@ -29,14 +29,14 @@ function SegmentedToggle(props: {
 
   return (
     <div
-      className="surface-control relative inline-grid min-h-[2.3rem] min-w-[8rem] grid-cols-2 overflow-hidden rounded-full p-[0.2rem] shadow-none"
+      className="control-frame surface-control relative inline-grid min-h-[2.3rem] min-w-[8rem] grid-cols-2 overflow-hidden p-[0.2rem] shadow-none"
       role="group"
       aria-label={props.ariaLabel}
     >
       <span
         aria-hidden="true"
         className={cn(
-          "absolute top-[0.2rem] bottom-[0.2rem] left-[0.2rem] z-0 w-[calc((100%-0.4rem)/2)] rounded-full transition-transform",
+          "radius-theme absolute top-[0.2rem] bottom-[0.2rem] left-[0.2rem] z-0 w-[calc((100%-0.4rem)/2)] transition-transform",
           activeClassName
         )}
         style={{ backgroundColor: "var(--color-text-theme-brand)" }}
@@ -48,7 +48,7 @@ function SegmentedToggle(props: {
             key={option.value}
             type="button"
             className={cn(
-              "relative z-10 rounded-full border-0 bg-transparent px-3 text-center text-[0.82rem] font-semibold transition",
+              "radius-theme relative z-10 border-0 bg-transparent px-3 text-center text-[0.82rem] font-semibold transition",
               active ? "text-stone-950" : "text-stone-500 dark:text-stone-400"
             )}
             onClick={() => props.onChange(option.value)}

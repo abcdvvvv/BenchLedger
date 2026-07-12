@@ -9,10 +9,10 @@ type MarkerSymbolMenuProps = {
   onSelect: (value: TrendMarkerSymbol) => void;
 };
 
-function MarkerSymbolIcon(props: { option: MarkerSymbolOption }) {
-  const { option } = props;
+function MarkerSymbolIcon(props: { option: MarkerSymbolOption; className?: string }) {
+  const { option, className } = props;
   return (
-    <svg viewBox="-16 -16 32 32" aria-hidden="true" className="size-4">
+    <svg viewBox="-16 -16 32 32" aria-hidden="true" className={className}>
       <path
         d={option.path}
         className={option.noFill ? "marker-symbol-path marker-symbol-path-stroke" : "marker-symbol-path"}
@@ -31,17 +31,16 @@ export function MarkerSymbolMenu(props: MarkerSymbolMenuProps) {
         className={menuTriggerClassName()}
         aria-label="Trend marker symbol"
       >
-        <DisclosureTriggerContent align="center" contentClassName="inline-flex items-center justify-center text-gray-700 dark:text-gray-200">
-          {selectedOption ? <MarkerSymbolIcon option={selectedOption} /> : null}
+        <DisclosureTriggerContent contentClassName="inline-flex w-full items-center justify-center text-gray-700 dark:text-gray-200">
+          {selectedOption ? <MarkerSymbolIcon option={selectedOption} className="size-4" /> : null}
         </DisclosureTriggerContent>
       </MenuButton>
       <Menu
         gutter={6}
-        sameWidth
         unmountOnHide
-        className={menuSurfaceClassName()}
+        className={menuSurfaceClassName("w-[11rem] max-w-[calc(100vw-2rem)]")}
       >
-        <div role="presentation" className="grid grid-cols-4 gap-1">
+        <div role="presentation" className="grid grid-cols-4 gap-2">
           {options.map((option) => {
             const isSelected = option.value === selectedValue;
             return (
@@ -49,13 +48,13 @@ export function MarkerSymbolMenu(props: MarkerSymbolMenuProps) {
                 key={option.value}
                 className={cn(
                   menuItemRowClassName({ state: isSelected ? "selected" : "default", align: "center" }),
-                  "aspect-square"
+                  "size-10 p-0"
                 )}
                 onClick={() => onSelect(option.value)}
                 aria-label={option.value}
                 title={option.value}
               >
-                <MarkerSymbolIcon option={option} />
+                <MarkerSymbolIcon option={option} className="size-5" />
               </MenuItem>
             );
           })}
