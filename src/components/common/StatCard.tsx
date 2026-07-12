@@ -8,10 +8,12 @@ export function StatCard(props: {
   Icon: IconType;
   label: string;
   value: string;
+  valueTone?: SemanticTone;
   delta?: string;
   deltaTone?: SemanticTone;
   detail: ReactNode;
   detailFullWidth?: boolean;
+  inlineNoWrap?: boolean;
 }) {
   const Icon = props.Icon;
 
@@ -24,7 +26,7 @@ export function StatCard(props: {
         <div className="min-w-0 space-y-2">
           <p className="type-body-muted">{props.label}</p>
           <div className="flex flex-wrap items-baseline gap-2">
-            <strong className="type-page-title text-3xl leading-none">{props.value}</strong>
+            <strong className={cn("type-page-title text-3xl leading-none", props.valueTone ? semanticTextClassName(props.valueTone) : null)}>{props.value}</strong>
             {props.delta ? <span className={cn("type-body-strong", semanticTextClassName(props.deltaTone ?? "neutral"))}>{props.delta}</span> : null}
           </div>
         </div>
@@ -40,9 +42,19 @@ export function StatCard(props: {
       </div>
       <div className="min-w-0 space-y-2">
         <p className="type-body-muted">{props.label}</p>
-        <div className="flex flex-wrap items-baseline gap-2">
-          <strong className="type-page-title text-3xl leading-none">{props.value}</strong>
-          {props.delta ? <span className={cn("type-body-strong", semanticTextClassName(props.deltaTone ?? "neutral"))}>{props.delta}</span> : null}
+        <div className={cn("flex items-baseline gap-2", props.inlineNoWrap ? "min-w-0 flex-nowrap overflow-hidden" : "flex-wrap")}>
+          <strong className={cn("type-page-title text-3xl leading-none", props.valueTone ? semanticTextClassName(props.valueTone) : null)}>{props.value}</strong>
+          {props.delta ? (
+            <span
+              className={cn(
+                "type-body-strong",
+                semanticTextClassName(props.deltaTone ?? "neutral"),
+                props.inlineNoWrap ? "min-w-0 overflow-hidden text-ellipsis whitespace-nowrap" : null
+              )}
+            >
+              {props.delta}
+            </span>
+          ) : null}
         </div>
         <p className="type-body-muted">{props.detail}</p>
       </div>

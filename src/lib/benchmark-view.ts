@@ -32,6 +32,93 @@ export type BenchmarkViewFilterState = {
   displayStrategy: DisplayStrategy;
 };
 
+export type BenchmarkViewIndexedRow = {
+  row: BenchmarkRow;
+  metricKind: string;
+  branch: string;
+  codeDateValue: number | null;
+  hasTags: boolean;
+  isMainBranch: boolean;
+};
+
+export type BenchmarkViewIndex = {
+  rowsByEnvironment: ReadonlyMap<string, BenchmarkViewIndexedRow[]>;
+  metricOptionsByEnvironment: ReadonlyMap<string, string[]>;
+  branchOptions: string[];
+  datasetTimeStart: string;
+  datasetTimeEnd: string;
+};
+
+export type BenchmarkViewResolvedSlice = {
+  effectiveEnvironment: string;
+  effectiveMetricKind: string;
+  effectiveBranch: string;
+  effectiveGroup: string;
+  metricOptions: string[];
+  branchOptions: string[];
+  datasetTimeStart: string;
+  datasetTimeEnd: string;
+  filteredRows: BenchmarkRow[];
+  groupOptions: BenchmarkViewGroupOption[];
+  selectedGroupLabel: string;
+  scopedRows: BenchmarkRow[];
+  benchmarkOptions: BenchmarkViewBenchmarkOption[];
+};
+
+export function buildBenchmarkViewIndex(rows: BenchmarkRow[]): BenchmarkViewIndex {
+  const allRows: BenchmarkViewIndexedRow[] = [];
+  const rowsByEnvironment = new Map<string, BenchmarkViewIndexedRow[]>([["all", allRows]]);
+  const metricOptionsByEnvironment = new Map<string, Set<string>>([["all", new Set<string>()]]);
+  const branchOptions = new Set<string>();
+  let earliestCodeDateValue = Number.POSITIVE_INFINITY;
+  let earliestCodeDate = "";
+  let latestCodeDateValue = Number.NEGATIVE_INFINITY;
+  let latestCodeDate = "";
+
+  for (const row of rows) {
+    const indexedRow = _indexRow(row);
+    allRows.push(indexedRow);
+    metricOptionsByEnvironment.get("all")!.add(indexedRow.metricKind);
+
+    const environmentRows = rowsByEnvironment.get(row.environment_id);
+    if (environmentRows) {
+      environmentRows.push(indexedRow);
+    } else {
+      rowsByEnvironment.set(row.environment_id, [indexedRow]);
+    }
+
+    const environmentMetricOptions = metricOptionsByEnvironment.get(row.environment_id);
+    if (environmentMetricOptions) {
+      environmentMetricOptions.add(indexedRow.metricKind);
+    } else {
+      metricOptionsByEnvironment.set(row.environment_id, new Set([indexedRow.metricKind]));
+    }
+
+    if (indexedRow.branch) branchOptions.add(indexedRow.branch);
+
+    if (indexedRow.codeDateValue === null) continue;
+    if (indexedRow.codeDateValue < earliestCodeDateValue) {
+      earliestCodeDateValue = indexedRow.codeDateValue;
+      earliestCodeDate = row.code_date;
+    }
+    if (indexedRow.codeDateValue > latestCodeDateValue) {
+      latestCodeDateValue = indexedRow.codeDateValue;
+      latestCodeDate = row.code_date;
+    }
+  }
+
+  return {
+    rowsByEnvironment,
+    metricOptionsByEnvironment: new Map(Array.from(metricOptionsByEnvironment.entries()).map(([environment, metricOptions]) => [
+      environment,
+      Array.from(metricOptions).sort()
+    ])),
+    branchOptions: ["all", ...Array.from(branchOptions).sort()],
+    datasetTimeStart: dateInputValue(earliestCodeDate),
+    datasetTimeEnd: dateInputValue(latestCodeDate)
+  };
+}
+
 export function buildGroupOptions(rows: BenchmarkRow[]): BenchmarkViewGroupOption[] {
   const optionsByValue = new Map<string, BenchmarkViewGroupOption>();
   for (const row of rows) {
@@ -85,6 +172,52 @@ export function datasetTimeBound(
   }
 
   return dateInputValue(selectedCodeDate);
+}
+
+export function resolveBenchmarkViewSlice(
+  index: BenchmarkViewIndex,
+  state: BenchmarkViewFilterState & { group: string }
+): BenchmarkViewResolvedSlice {
+  const effectiveEnvironment = index.rowsByEnvironment.has(state.environment) ? state.environment : "all";
+  const metricOptions = index.metricOptionsByEnvironment.get(effectiveEnvironment) ?? [];
+  const effectiveMetricKind = metricOptions.includes(state.metricKind) ? state.metricKind : (metricOptions[0] ?? "");
+  const effectiveBranch = index.branchOptions.includes(state.branch) ? state.branch : "all";
+  const filteredRows = effectiveMetricKind
+    ? (index.rowsByEnvironment.get(effectiveEnvironment) ?? [])
+      .filter((indexedRow) => {
+        if (indexedRow.metricKind !== effectiveMetricKind) return false;
+        if (effectiveBranch !== "all" && indexedRow.branch !== effectiveBranch) return false;
+        if (!rowMatchesDisplayStrategyFromFacts(indexedRow, state.displayStrategy)) return false;
+        if (state.timeStartValue !== null && (indexedRow.codeDateValue === null || indexedRow.codeDateValue < state.timeStartValue)) return false;
+        if (state.timeEndValue !== null && (indexedRow.codeDateValue === null || indexedRow.codeDateValue > state.timeEndValue)) return false;
+        return true;
+      })
+      .map((indexedRow) => indexedRow.row)
+    : [];
+  const groupOptions = buildGroupOptions(filteredRows);
+  const groupOptionsByValue = new Map(groupOptions.map((option) => [option.value, option]));
+  const effectiveGroup = state.group === "all" || groupOptionsByValue.has(state.group) ? state.group : "all";
+  const selectedGroupPath = effectiveGroup === "all" ? null : groupOptionsByValue.get(effectiveGroup)?.path ?? null;
+  const selectedGroupLabel = effectiveGroup === "all"
+    ? "All groups"
+    : groupOptionsByValue.get(effectiveGroup)?.path.join(" > ") ?? "All groups";
+  const scopedRows = scopeRowsToGroup(filteredRows, selectedGroupPath);
+
+  return {
+    effectiveEnvironment,
+    effectiveMetricKind,
+    effectiveBranch,
+    effectiveGroup,
+    metricOptions,
+    branchOptions: index.branchOptions,
+    datasetTimeStart: index.datasetTimeStart,
+    datasetTimeEnd: index.datasetTimeEnd,
+    filteredRows,
+    groupOptions,
+    selectedGroupLabel,
+    scopedRows,
+    benchmarkOptions: buildBenchmarkOptions(scopedRows)
+  };
 }
 
 export function filterRowsByViewState(
@@ -159,6 +292,55 @@ export function buildTrendRowsByBenchmark(
   return rowsByBenchmark;
 }
 
+export function createLRUCache<K, V>(limit: number) {
+  const entries = new Map<K, V>();
+
+  return {
+    get(key: K): V | undefined {
+      const value = entries.get(key);
+      if (value === undefined) return undefined;
+      entries.delete(key);
+      entries.set(key, value);
+      return value;
+    },
+    set(key: K, value: V) {
+      if (entries.has(key)) entries.delete(key);
+      entries.set(key, value);
+      if (entries.size <= limit) return;
+      const oldestKey = entries.keys().next().value as K | undefined;
+      if (oldestKey !== undefined) entries.delete(oldestKey);
+    },
+    keys(): K[] {
+      return Array.from(entries.keys());
+    }
+  };
+}
+
 function _compareTrendRowsByDate(left: TrendPlotRow, right: TrendPlotRow): number {
   return left.date_value!.valueOf() - right.date_value!.valueOf();
+}
+
+function _indexRow(row: BenchmarkRow): BenchmarkViewIndexedRow {
+  const branch = row.code_state_metadata.source?.branch || row.run_metadata.source?.branch || "";
+  const tags = row.code_state_metadata.source?.tags?.length
+    ? row.code_state_metadata.source.tags
+    : row.run_metadata.source?.tags ?? [];
+
+  return {
+    row,
+    metricKind: metricFamilyLabel(row),
+    branch,
+    codeDateValue: parseDate(row.code_date)?.valueOf() ?? null,
+    hasTags: Boolean(tags.length),
+    isMainBranch: branch === "main" || branch === "master"
+  };
+}
+
+function rowMatchesDisplayStrategyFromFacts(
+  row: Pick<BenchmarkViewIndexedRow, "hasTags" | "isMainBranch">,
+  strategy: DisplayStrategy
+): boolean {
+  if (strategy === "all") return true;
+  if (row.hasTags) return true;
+  return strategy === "tagged-main" && row.isMainBranch;
 }

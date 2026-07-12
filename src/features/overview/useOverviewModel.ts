@@ -1,35 +1,17 @@
 import { createElement, useEffect, useMemo, type ReactNode } from "react";
 import { FiActivity, FiClock, FiDatabase, FiGitBranch } from "react-icons/fi";
 import type { IconType } from "react-icons";
-import { formatMetricValue, formatPercent, percentageChange, unique } from "../../lib/format";
+import { formatPercent, percentageChange, unique } from "../../lib/format";
 import {
-  buildTrendRowsByBenchmark,
-  normalizeSelectedBenchmarkIds,
-  type BenchmarkViewBenchmarkOption
-} from "../../lib/benchmark-view";
-import {
-  Trend_Y_Padding_Ratio,
   buildRuns,
-  buildTrendTrace,
-  commitAxisLayout,
-  colorForBenchmark,
   defaultRunPairSortDirection,
   metricFamilyKey,
   runId,
   runPairSortValue,
-  splitTrendRowsByEnvironment,
   trendDisplayUnitContext,
-  type PlotTheme,
   type RunPairSort,
-  type RunPairSortKey,
-  type DisplayStrategy,
-  type PlotAxisTickLabels,
-  type ThemeMode,
-  type TrendAxisMode,
-  type TrendLineShape,
-  type TrendMarkerFillMode
+  type RunPairSortKey
 } from "../../lib/dashboard";
-import type { TrendMarkerSymbol } from "../../lib/trend-marker-symbols";
 import type { BenchmarkRow, PairComparison } from "../../lib/types";
 import { benchmarkDeltaTone } from "../benchmarks/benchmarkDeltaPresentation";
 
@@ -37,17 +19,16 @@ export type OverviewStat = {
   Icon: IconType;
   label: string;
   value: string;
+  valueTone?: "positive" | "negative" | "neutral";
   delta: string;
   deltaTone: "positive" | "negative" | "neutral";
   detail: ReactNode;
   detailFullWidth?: boolean;
+  inlineNoWrap?: boolean;
 };
 
 type UseOverviewModelOptions = {
   rows: BenchmarkRow[];
-  benchmarkOptions: BenchmarkViewBenchmarkOption[];
-  selectedBenchmarkIds: string[];
-  onSelectedBenchmarkIdsChange: (values: string[]) => void;
   focusRunId: string;
   onFocusRunIdChange: (runId: string) => void;
   baselineRunId: string;
@@ -60,13 +41,6 @@ type UseOverviewModelOptions = {
   branch: string;
   timeStart: string;
   timeEnd: string;
-  displayStrategy: DisplayStrategy;
-  trendAxisMode: TrendAxisMode;
-  trendLineShape: TrendLineShape;
-  trendMarkerSymbol: TrendMarkerSymbol;
-  trendMarkerFillMode: TrendMarkerFillMode;
-  plotTheme: PlotTheme;
-  theme: ThemeMode;
 };
 
 type UseOverviewModelResult = {
@@ -76,23 +50,14 @@ type UseOverviewModelResult = {
   focusRun: ReturnType<typeof buildRuns>[number] | null;
   baselineRun: ReturnType<typeof buildRuns>[number] | null;
   environmentMismatch: boolean;
-  comparisonRows: PairComparison[];
   sortedComparisonRows: PairComparison[];
   stats: OverviewStat[];
-  trendMetricLabel: string;
-  trendPlotMargin: { t: number; r: number; b: number; l: number };
-  deltaPlotMargin: { t: number; r: number; b: number; l: number };
-  trendTraces: Array<Record<string, unknown>>;
-  trendCommitAxisLabels?: PlotAxisTickLabels;
   toggleRunPairSort: (key: RunPairSortKey) => void;
 };
 
 export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewModelResult {
   const {
     rows,
-    benchmarkOptions,
-    selectedBenchmarkIds,
-    onSelectedBenchmarkIdsChange,
     focusRunId,
     onFocusRunIdChange,
     baselineRunId,
@@ -104,13 +69,7 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
     group,
     branch,
     timeStart,
-    timeEnd,
-    trendAxisMode,
-    trendLineShape,
-    trendMarkerSymbol,
-    trendMarkerFillMode,
-    plotTheme,
-    theme
+    timeEnd
   } = options;
 
   const runs = useMemo(() => buildRuns(rows), [rows]);
@@ -135,18 +94,9 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
     );
   }, [baselineRunId, filteredRuns, filteredRunsById, focusRunId, onBaselineRunIdChange, onFocusRunIdChange]);
 
-  useEffect(() => {
-    onSelectedBenchmarkIdsChange(normalizeSelectedBenchmarkIds(selectedBenchmarkIds, benchmarkOptions));
-  }, [benchmarkOptions, onSelectedBenchmarkIdsChange, selectedBenchmarkIds]);
-
-  const currentBenchmarkId = selectedBenchmarkIds[0] ?? "";
   const focusRun = filteredRunsById.get(focusRunId) ?? filteredRuns[0] ?? null;
   const baselineRun = filteredRunsById.get(baselineRunId) ?? filteredRuns[1] ?? filteredRuns[0] ?? null;
   const environmentMismatch = Boolean(focusRun && baselineRun && focusRun.environment_id !== baselineRun.environment_id);
-  const benchmarkOptionsById = useMemo(
-    () => new Map(benchmarkOptions.map((option) => [option.value, option])),
-    [benchmarkOptions]
-  );
 
   const focusRows = useMemo(
     () => (focusRun ? rows.filter((row) => runId(row) === focusRun.run_id) : []),
@@ -159,8 +109,6 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
 
   const focusByBenchmark = useMemo(() => new Map(focusRows.map((row) => [row.benchmark_id, row])), [focusRows]);
   const baselineByBenchmark = useMemo(() => new Map(baselineRows.map((row) => [row.benchmark_id, row])), [baselineRows]);
-  const focusBenchmark = currentBenchmarkId ? focusByBenchmark.get(currentBenchmarkId) ?? null : null;
-  const baselineBenchmark = currentBenchmarkId ? baselineByBenchmark.get(currentBenchmarkId) ?? null : null;
 
   const comparisonRows = useMemo<PairComparison[]>(() => {
     const keys = unique([...focusByBenchmark.keys(), ...baselineByBenchmark.keys()]).sort();
@@ -212,86 +160,6 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
     );
   }
 
-  const runsById = useMemo(() => new Map(runs.map((run) => [run.run_id, run])), [runs]);
-  const overviewTrendRowsByBenchmark = useMemo(
-    () => buildTrendRowsByBenchmark(rows, runsById, selectedBenchmarkIds),
-    [rows, runsById, selectedBenchmarkIds]
-  );
-
-  const trendRows = useMemo(
-    () => benchmarkOptions.flatMap((option) => overviewTrendRowsByBenchmark.get(option.value) ?? []),
-    [benchmarkOptions, overviewTrendRowsByBenchmark]
-  );
-  const trendDisplayContext = useMemo(() => trendDisplayUnitContext(trendRows), [trendRows]);
-  const trendCommitAxis = useMemo(
-    () => trendAxisMode === "commit" ? commitAxisLayout(trendRows) : undefined,
-    [trendAxisMode, trendRows]
-  );
-  const trendCommitAxisLabels = trendCommitAxis?.tickLabels;
-  const trendMetricLabel = useMemo(
-    () => trendDisplayContext.formatMetricLabel(metricKind),
-    [metricKind, trendDisplayContext]
-  );
-  const trendPlotMargin = trendRows.length ? { t: 10, r: 16, b: 40, l: 55 } : { t: 10, r: 16, b: 40, l: 20 };
-  const deltaPlotMargin = comparisonRows.length ? { t: 10, r: 12, b: 36, l: 170 } : { t: 10, r: 12, b: 36, l: 20 };
-  const trendY = trendRows.map((row) => trendDisplayContext.scaleValue(row.value, row.unit));
-  const trendYMin = trendY.length ? Math.min(...trendY) : 0;
-  const trendYMax = trendY.length ? Math.max(...trendY) : 0;
-  const trendYSpan = trendYMax - trendYMin;
-  const trendYPadding = trendYSpan > 0
-    ? trendYSpan * Trend_Y_Padding_Ratio
-    : Math.max(Math.abs(trendYMin) * Trend_Y_Padding_Ratio, 1);
-
-  const trendTraces = useMemo(() => {
-    if (!selectedBenchmarkIds.length) return [];
-    return selectedBenchmarkIds.flatMap((benchmarkKey, index) => {
-      const traceRows = overviewTrendRowsByBenchmark.get(benchmarkKey) ?? [];
-      const benchmarkLabel = benchmarkOptionsById.get(benchmarkKey)?.label ?? benchmarkKey;
-      const environmentSeries = splitTrendRowsByEnvironment(traceRows);
-
-      return environmentSeries.flatMap((series, environmentIndex) => {
-        const label = environmentSeries.length > 1
-          ? `${benchmarkLabel} · ${series.environmentLabel}`
-          : benchmarkLabel;
-        const color = colorForBenchmark(index * Math.max(environmentSeries.length, 1) + environmentIndex);
-
-        return buildTrendTrace(series.rows, {
-          axisMode: trendAxisMode,
-          commitAxisPositions: trendCommitAxis?.positionsByCodeStateId,
-          lineShape: trendLineShape,
-          markerSymbol: trendMarkerSymbol,
-          markerFillMode: trendMarkerFillMode,
-          displayUnitContext: trendDisplayContext,
-          color,
-          label,
-          plotTheme,
-          theme,
-          yMin: trendYMin,
-          yPadding: trendYPadding,
-          showLegend: selectedBenchmarkIds.length > 1 || environmentSeries.length > 1
-        });
-      });
-    });
-  }, [
-    benchmarkOptionsById,
-    overviewTrendRowsByBenchmark,
-    plotTheme,
-    selectedBenchmarkIds,
-    theme,
-    trendAxisMode,
-    trendCommitAxis,
-    trendDisplayContext,
-    trendLineShape,
-    trendMarkerFillMode,
-    trendMarkerSymbol,
-    trendYMin,
-    trendYPadding
-  ]);
-
-  const selectedMetricDelta = focusBenchmark && baselineBenchmark
-    ? percentageChange(focusBenchmark.value, baselineBenchmark.value)
-    : null;
-
   const capturedRunsDetail = useMemo(() => {
     const filterStates = [
       { label: "Environment", enabled: environment !== "all" },
@@ -319,6 +187,22 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
     );
   }, [branch, environment, group, metricKind, timeEnd, timeStart]);
 
+  const largestDeltaRow = comparisonRows[0] ?? null;
+  const improvedCount = useMemo(
+    () => comparisonRows.filter((row) => benchmarkDeltaTone(row.delta, row.better) === "positive").length,
+    [comparisonRows]
+  );
+  const regressedCount = useMemo(
+    () => comparisonRows.filter((row) => benchmarkDeltaTone(row.delta, row.better) === "negative").length,
+    [comparisonRows]
+  );
+  const largestDeltaLabel = useMemo(() => {
+    if (!largestDeltaRow?.benchmark_label) return "";
+    return largestDeltaRow.benchmark_label.length > 20
+      ? `${largestDeltaRow.benchmark_label.slice(0, 17)}...`
+      : largestDeltaRow.benchmark_label;
+  }, [largestDeltaRow]);
+
   const stats = useMemo<OverviewStat[]>(() => [
     {
       Icon: FiDatabase,
@@ -339,13 +223,13 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
     },
     {
       Icon: FiClock,
-      label: "Selected Metric",
-      value: focusBenchmark ? formatMetricValue(focusBenchmark.value, focusBenchmark.unit) : "n/a",
-      delta: selectedMetricDelta === null ? "" : formatPercent(selectedMetricDelta),
-      deltaTone: selectedMetricDelta === null || !focusBenchmark
-        ? "neutral"
-        : benchmarkDeltaTone(selectedMetricDelta, focusBenchmark.better),
-      detail: focusBenchmark && baselineBenchmark ? "vs baseline" : ""
+      label: "Largest Delta",
+      value: largestDeltaRow ? formatPercent(largestDeltaRow.delta) : "n/a",
+      valueTone: largestDeltaRow ? benchmarkDeltaTone(largestDeltaRow.delta, largestDeltaRow.better) : "neutral",
+      delta: largestDeltaLabel,
+      deltaTone: "neutral",
+      detail: `${improvedCount.toLocaleString()} improved · ${regressedCount.toLocaleString()} regressed`,
+      inlineNoWrap: true
     },
     {
       Icon: FiGitBranch,
@@ -355,7 +239,7 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
       deltaTone: "neutral",
       detail: latestRun?.code_state_metadata.source?.dirty ? "Latest run was recorded from a dirty worktree" : "Latest run is clean"
     }
-  ], [baselineBenchmark, capturedRunsDetail, filteredRuns, focusBenchmark, latestRun, rows, selectedMetricDelta]);
+  ], [capturedRunsDetail, filteredRuns, improvedCount, largestDeltaLabel, largestDeltaRow, latestRun, regressedCount, rows]);
 
   return {
     runs,
@@ -364,14 +248,8 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
     focusRun,
     baselineRun,
     environmentMismatch,
-    comparisonRows,
     sortedComparisonRows,
     stats,
-    trendMetricLabel,
-    trendPlotMargin,
-    deltaPlotMargin,
-    trendTraces,
-    trendCommitAxisLabels,
     toggleRunPairSort
   };
 }

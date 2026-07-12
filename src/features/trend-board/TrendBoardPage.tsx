@@ -15,9 +15,10 @@ import {
   clampTrendBoardColumns,
   type DisplayStrategy,
   type PlotTheme,
-  type TrendAxisMode
+  type TrendAxisMode,
+  type TrendBoardViewMode
 } from "../../lib/dashboard";
-import type { TrendBoardCard } from "./useTrendBoardModel";
+import type { TrendBoardCard, TrendBoardCombinedChart } from "./useTrendBoardModel";
 
 export type TrendBoardPageProps = {
   header: {
@@ -27,6 +28,8 @@ export type TrendBoardPageProps = {
     hasDataset: boolean;
     trendBoardColumns: number;
     onTrendBoardColumnsChange: (value: number) => void;
+    trendBoardViewMode: TrendBoardViewMode;
+    onToggleTrendBoardViewMode: () => void;
     trendAxisMode: TrendAxisMode;
     onToggleTrendAxisMode: () => void;
   };
@@ -57,6 +60,8 @@ export type TrendBoardPageProps = {
   trend: {
     selectedMetricLabel: string;
     trendBoardCards: TrendBoardCard[];
+    combinedTrendChart: TrendBoardCombinedChart | null;
+    showCombinedTrendChart: boolean;
     trendPlotMargin: { t: number; r: number; b: number; l: number };
     plotTheme: PlotTheme;
   };
@@ -64,13 +69,17 @@ export type TrendBoardPageProps = {
 
 export function TrendBoardPage(props: TrendBoardPageProps) {
   const { header, filters, trend } = props;
+  const showCombinedTrendChart = trend.showCombinedTrendChart;
+  const pageDescription = showCombinedTrendChart
+    ? "All selected benchmark keys are rendered together in one shared trend chart."
+    : "Each selected benchmark key is rendered as its own independent trend chart.";
 
   return (
     <>
       <PageHeader
         eyebrow="Benchmarking › Trend Board"
         title="Trend Board"
-        description="Each selected benchmark key is rendered as its own independent trend chart."
+        description={pageDescription}
         actions={(
           <>
             <Field className="min-w-0 flex-1 xl:min-w-[22rem] xl:max-w-[34rem]">
@@ -94,8 +103,14 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
                   const nextValue = Number(event.target.value);
                   header.onTrendBoardColumnsChange(clampTrendBoardColumns(nextValue));
                 }}
-                disabled={!header.hasDataset}
+                disabled={!header.hasDataset || showCombinedTrendChart}
               />
+            </Field>
+            <Field className="max-sm:w-full">
+              <FieldLabel className="invisible">View mode</FieldLabel>
+              <Button variant="secondary" className="max-sm:w-full" onClick={header.onToggleTrendBoardViewMode}>
+                View: {header.trendBoardViewMode === "combined" ? "Combined" : "Separate"}
+              </Button>
             </Field>
             <Field className="max-sm:w-full">
               <FieldLabel className="invisible">Axis mode</FieldLabel>
@@ -165,7 +180,51 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
         </ToolbarGrid>
       </Toolbar>
 
-      {trend.trendBoardCards.length ? (
+      {showCombinedTrendChart && trend.combinedTrendChart ? (
+        <Panel className="surface-card-trend-board pad-trend-board-card min-w-0">
+          <SectionTitle title="Combined Trend" description="Trend Board benchmarks overlaid in one chart." />
+          <div className="mt-5" style={{ height: `${Trend_Board_Plot_Height}px` }}>
+            <Plot
+              useResizeHandler
+              style={{ width: "100%", height: "100%" }}
+              data={trend.combinedTrendChart.traces}
+              layout={{
+                autosize: true,
+                margin: trend.trendPlotMargin,
+                paper_bgcolor: "rgba(0, 0, 0, 0)",
+                plot_bgcolor: "rgba(0, 0, 0, 0)",
+                font: { color: trend.plotTheme.axis },
+                xaxis: {
+                  showgrid: false,
+                  color: trend.plotTheme.axis,
+                  tickfont: { size: 14 },
+                  ...(header.trendAxisMode === "commit" ? trend.combinedTrendChart.commitAxisLabels : undefined)
+                },
+                yaxis: {
+                  title: { text: trend.combinedTrendChart.metricLabel || trend.selectedMetricLabel || "Metric value" },
+                  gridcolor: trend.plotTheme.grid,
+                  zeroline: false,
+                  color: trend.plotTheme.axis,
+                  tickfont: { size: 14 }
+                },
+                modebar: {
+                  bgcolor: "rgba(0, 0, 0, 0)",
+                  color: trend.plotTheme.axis,
+                  activecolor: trend.plotTheme.line
+                },
+                showlegend: trend.combinedTrendChart.showLegend,
+                legend: trend.combinedTrendChart.showLegend ? {
+                  orientation: "h",
+                  x: 0,
+                  y: -0.2,
+                  font: { color: trend.plotTheme.axis }
+                } : undefined
+              }}
+              config={{ displayModeBar: "hover", responsive: true }}
+            />
+          </div>
+        </Panel>
+      ) : trend.trendBoardCards.length ? (
         <section
           className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:[grid-template-columns:repeat(var(--trend-board-columns),minmax(0,1fr))]"
           style={{ "--trend-board-columns": String(header.trendBoardColumns) } as CSSProperties}

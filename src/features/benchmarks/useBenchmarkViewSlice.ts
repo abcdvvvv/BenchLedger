@@ -1,20 +1,17 @@
-import { useEffect, useMemo } from "react";
-import { unique } from "../../lib/format";
-import { dateRangeEnd, dateRangeStart, formatDateRangePart, metricFamilyLabel, type DisplayStrategy } from "../../lib/dashboard";
+import { useEffect, useMemo, useRef } from "react";
+import { dateRangeEnd, dateRangeStart, formatDateRangePart, type DisplayStrategy } from "../../lib/dashboard";
 import {
-  buildBenchmarkOptions,
-  buildGroupOptions,
-  datasetTimeBound,
-  filterRowsByViewState,
-  scopeRowsToGroup,
+  createLRUCache,
+  resolveBenchmarkViewSlice,
+  type BenchmarkViewIndex,
   type BenchmarkViewBenchmarkOption,
-  type BenchmarkViewGroupOption
+  type BenchmarkViewGroupOption,
+  type BenchmarkViewResolvedSlice
 } from "../../lib/benchmark-view";
 import type { BenchmarkRow } from "../../lib/types";
 
 type UseBenchmarkViewSliceOptions = {
-  rows: BenchmarkRow[];
-  environmentOptions: { value: string; label: string }[];
+  index: BenchmarkViewIndex;
   environment: string;
   onEnvironmentChange: (environment: string) => void;
   metricKind: string;
@@ -41,16 +38,11 @@ type UseBenchmarkViewSliceResult = {
   runsEmptyTimeRangeLabel: string;
 };
 
-function rowBranch(row: BenchmarkRow): string {
-  return row.code_state_metadata.source?.branch || row.run_metadata.source?.branch || "";
-}
-
 export function useBenchmarkViewSlice(
   options: UseBenchmarkViewSliceOptions
 ): UseBenchmarkViewSliceResult {
   const {
-    rows,
-    environmentOptions,
+    index,
     environment,
     onEnvironmentChange,
     metricKind,
@@ -64,92 +56,78 @@ export function useBenchmarkViewSlice(
     onGroupChange
   } = options;
 
-  const metricOptions = useMemo(() => {
-    const metricRows = environment && environment !== "all" ? rows.filter((row) => row.environment_id === environment) : rows;
-    return unique(metricRows.map((row) => metricFamilyLabel(row))).sort();
-  }, [environment, rows]);
-
-  const branchOptions = useMemo(
-    () => ["all", ...unique(rows.map((row) => rowBranch(row)).filter(Boolean)).sort()],
-    [rows]
-  );
-
   const timeStartValue = useMemo(() => dateRangeStart(timeStart), [timeStart]);
   const timeEndValue = useMemo(() => dateRangeEnd(timeEnd), [timeEnd]);
+  const sliceCacheRef = useRef(createLRUCache<string, BenchmarkViewResolvedSlice>(64));
+  const cachedIndexRef = useRef<BenchmarkViewIndex | null>(null);
 
-  const datasetTimeStart = useMemo(() => datasetTimeBound(rows, "earliest"), [rows]);
-  const datasetTimeEnd = useMemo(() => datasetTimeBound(rows, "latest"), [rows]);
+  if (cachedIndexRef.current !== index) {
+    cachedIndexRef.current = index;
+    sliceCacheRef.current = createLRUCache<string, BenchmarkViewResolvedSlice>(64);
+  }
 
-  useEffect(() => {
-    onEnvironmentChange(environment && environmentOptions.some((option) => option.value === environment) ? environment : "all");
-  }, [environment, environmentOptions, onEnvironmentChange]);
-
-  useEffect(() => {
-    if (!metricOptions.length) return;
-    onMetricKindChange(metricKind && metricOptions.includes(metricKind) ? metricKind : metricOptions[0]);
-  }, [metricKind, metricOptions, onMetricKindChange]);
-
-  useEffect(() => {
-    if (!branchOptions.length) return;
-    onBranchChange(branchOptions.includes(branch) ? branch : "all");
-  }, [branch, branchOptions, onBranchChange]);
-
-  const filteredRows = useMemo(
-    () => filterRowsByViewState(rows, {
+  const resolvedSlice = useMemo(() => {
+    const cacheKey = JSON.stringify({
       environment,
       metricKind,
       branch,
       timeStartValue,
       timeEndValue,
-      displayStrategy
-    }),
-    [branch, displayStrategy, environment, metricKind, rows, timeEndValue, timeStartValue]
-  );
+      displayStrategy,
+      group
+    });
+    const cachedSlice = sliceCacheRef.current.get(cacheKey);
+    if (cachedSlice) return cachedSlice;
 
-  const groupOptions = useMemo(() => buildGroupOptions(filteredRows), [filteredRows]);
-  const groupOptionsByValue = useMemo(
-    () => new Map(groupOptions.map((option) => [option.value, option])),
-    [groupOptions]
-  );
+    const computedSlice = resolveBenchmarkViewSlice(index, {
+      environment,
+      metricKind,
+      branch,
+      timeStartValue,
+      timeEndValue,
+      displayStrategy,
+      group
+    });
+    sliceCacheRef.current.set(cacheKey, computedSlice);
+    return computedSlice;
+  }, [branch, displayStrategy, environment, group, index, metricKind, timeEndValue, timeStartValue]);
 
   useEffect(() => {
-    if (group === "all" || groupOptionsByValue.has(group)) return;
-    onGroupChange("all");
-  }, [group, groupOptionsByValue, onGroupChange]);
+    if (environment === resolvedSlice.effectiveEnvironment) return;
+    onEnvironmentChange(resolvedSlice.effectiveEnvironment);
+  }, [environment, onEnvironmentChange, resolvedSlice.effectiveEnvironment]);
 
-  const selectedGroupPath = useMemo(
-    () => (group === "all" ? null : groupOptionsByValue.get(group)?.path ?? null),
-    [group, groupOptionsByValue]
-  );
+  useEffect(() => {
+    if (!resolvedSlice.metricOptions.length || metricKind === resolvedSlice.effectiveMetricKind) return;
+    onMetricKindChange(resolvedSlice.effectiveMetricKind);
+  }, [metricKind, onMetricKindChange, resolvedSlice.effectiveMetricKind, resolvedSlice.metricOptions.length]);
 
-  const selectedGroupLabel = useMemo(() => {
-    if (group === "all") return "All groups";
-    const option = groupOptionsByValue.get(group);
-    return option ? option.path.join(" > ") : "All groups";
-  }, [group, groupOptionsByValue]);
+  useEffect(() => {
+    if (branch === resolvedSlice.effectiveBranch) return;
+    onBranchChange(resolvedSlice.effectiveBranch);
+  }, [branch, onBranchChange, resolvedSlice.effectiveBranch]);
 
-  const scopedRows = useMemo(
-    () => scopeRowsToGroup(filteredRows, selectedGroupPath),
-    [filteredRows, selectedGroupPath]
-  );
-
-  const benchmarkOptions = useMemo(() => buildBenchmarkOptions(scopedRows), [scopedRows]);
   const runsEmptyTimeRangeLabel = useMemo(() => (
     timeStart || timeEnd
       ? `${formatDateRangePart(timeStart, "Any start")} - ${formatDateRangePart(timeEnd, "Any end")}`
       : "All time"
   ), [timeEnd, timeStart]);
 
+  useEffect(() => {
+    if (group === resolvedSlice.effectiveGroup) return;
+    onGroupChange(resolvedSlice.effectiveGroup);
+  }, [group, onGroupChange, resolvedSlice.effectiveGroup]);
+
   return {
-    metricOptions,
-    branchOptions,
-    datasetTimeStart,
-    datasetTimeEnd,
-    filteredRows,
-    groupOptions,
-    selectedGroupLabel,
-    scopedRows,
-    benchmarkOptions,
+    metricOptions: resolvedSlice.metricOptions,
+    branchOptions: resolvedSlice.branchOptions,
+    datasetTimeStart: resolvedSlice.datasetTimeStart,
+    datasetTimeEnd: resolvedSlice.datasetTimeEnd,
+    filteredRows: resolvedSlice.filteredRows,
+    groupOptions: resolvedSlice.groupOptions,
+    selectedGroupLabel: resolvedSlice.selectedGroupLabel,
+    scopedRows: resolvedSlice.scopedRows,
+    benchmarkOptions: resolvedSlice.benchmarkOptions,
     runsEmptyTimeRangeLabel
   };
 }

@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.5.4] - 2026-07-12
+
+### Changed
+
+- Trend Board now includes a built-in view toggle for `Separate` and `Combined` charts, so you can switch between per-benchmark cards and a single merged plot without relying on a separate homepage chart.
+- Reworked the dashboard comparison area into a clearer `Benchmark Diff` table with pagination controls, page-size switching, page indicators, and a more natural `Baseline -> Focus -> Delta` reading order.
+- Refined dashboard summary cards so the most important delta is easier to scan at a glance, with stronger emphasis on the largest percentage change and clearer improved/regressed counts.
+- Improved table and control layout details across the dashboard, including better column balance in `Benchmark Diff`, adaptive action-button sizing, and cleaner segmented-control alignment.
+
+### Fixed
+
+- Fixed expensive environment switching in Overview and Trend Board by moving benchmark-view filtering onto an indexed and cached data path, making repeated environment changes much more responsive on large datasets.
+- Removed the old homepage `Benchmark Trend` card and its duplicate data path, so trend exploration now lives in one place and stays consistent with the Trend Board controls.
+
 ## [0.5.3] - 2026-07-11
 
 ### Changed
@@ -96,7 +110,10 @@
 
 Initial usable release of BenchLedger.
 
-[Unreleased]: https://github.com/abcdvvvv/BenchLedger/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/abcdvvvv/BenchLedger/compare/v0.5.4...HEAD
+[0.5.4]: https://github.com/abcdvvvv/BenchLedger/releases/tag/v0.5.4
+[0.5.3]: https://github.com/abcdvvvv/BenchLedger/releases/tag/v0.5.3
+[0.5.2]: https://github.com/abcdvvvv/BenchLedger/releases/tag/v0.5.2
 [0.5.1]: https://github.com/abcdvvvv/BenchLedger/releases/tag/v0.5.1
 [0.4.2]: https://github.com/abcdvvvv/BenchLedger/releases/tag/v0.4.2
 [0.4.0]: https://github.com/abcdvvvv/BenchLedger/releases/tag/v0.4.0

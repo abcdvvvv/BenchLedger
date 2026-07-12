@@ -1,10 +1,11 @@
+import { useEffect, useMemo, useState } from "react";
 import { FiFolder } from "react-icons/fi";
-import { BenchmarkKeyCascadeFilter, type BenchmarkKeyFilterOption } from "../benchmarks/components/BenchmarkKeyCascadeFilter";
+import { FiChevronLeft, FiChevronRight } from "react-icons/fi";
 import { TimeRangePopover } from "../benchmarks/components/TimeRangePopover";
 import { GroupCascadeMenu, type GroupMenuOption } from "../benchmarks/components/GroupCascadeMenu";
-import Plot from "../benchmarks/components/Plot";
 import { RunSelectMenu } from "../benchmarks/components/RunSelectMenu";
 import { Button } from "../../components/ui/Button";
+import { IconButton } from "../../components/ui/IconButton";
 import { StatusBadge } from "../../components/ui/Badge";
 import { Banner } from "../../components/common/Banner";
 import { EmptyState } from "../../components/common/EmptyState";
@@ -14,24 +15,67 @@ import { PageHeader } from "../../components/common/PageHeader";
 import { StatCard } from "../../components/common/StatCard";
 import { DataCell, DataHeadCell, DataTable, DataTableShell, SortButton } from "../../components/ui/Table";
 import {
-  Largest_Deltas_Bar_Width,
+  Benchmark_Diff_Page_Size_Options,
+  type BenchmarkDiffPageSize,
   runHeadline,
   runPairTableColumns,
   type DisplayStrategy,
-  type PlotAxisTickLabels,
-  type PlotTheme,
   type RunPairSort,
-  type RunPairSortKey,
-  type TrendAxisMode
+  type RunPairSortKey
 } from "../../lib/dashboard";
 import {
   formatDate,
   formatMetricValue,
   formatPercent
 } from "../../lib/format";
-import { benchmarkDeltaColor, benchmarkDeltaTone } from "../benchmarks/benchmarkDeltaPresentation";
+import { cn } from "../../components/ui/cn";
+import { benchmarkDeltaTone } from "../benchmarks/benchmarkDeltaPresentation";
 import type { OverviewStat } from "./useOverviewModel";
 import type { BenchmarkRun, PairComparison } from "../../lib/types";
+
+function SegmentedToggle(props: {
+  value: string;
+  options: Array<{ value: string; label: string }>;
+  onChange: (value: string) => void;
+  ariaLabel: string;
+}) {
+  const activeIndex = props.options.findIndex((option) => option.value === props.value);
+  const optionCount = Math.max(props.options.length, 1);
+  const activeStyle = {
+    width: `calc((100% - 0.4rem) / ${optionCount})`,
+    transform: `translateX(calc(${activeIndex} * 100%))`
+  };
+
+  return (
+    <div
+      className="control-frame surface-control relative inline-grid min-h-[2.3rem] min-w-[10rem] grid-cols-3 place-items-stretch overflow-hidden p-[0.2rem] shadow-none"
+      role="group"
+      aria-label={props.ariaLabel}
+    >
+      <span
+        aria-hidden="true"
+        className="radius-theme absolute top-[0.2rem] bottom-[0.2rem] left-[0.2rem] z-0 transition-transform"
+        style={{ ...activeStyle, backgroundColor: "var(--color-text-theme-brand)" }}
+      />
+      {props.options.map((option) => {
+        const active = option.value === props.value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            className={cn(
+              "radius-theme relative z-10 flex h-full w-full items-center justify-center border-0 bg-transparent px-0 text-center text-[0.82rem] leading-none font-semibold tabular-nums transition",
+              active ? "text-stone-950" : "text-stone-500 dark:text-stone-400"
+            )}
+            onClick={() => props.onChange(option.value)}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 export type OverviewPageProps = {
   header: {
@@ -76,25 +120,13 @@ export type OverviewPageProps = {
     onDisplayStrategyChange: (strategy: DisplayStrategy) => void;
   };
   stats: OverviewStat[];
-  trend: {
-    benchmarkOptions: BenchmarkKeyFilterOption[];
-    selectedBenchmarkIds: string[];
-    onSelectedBenchmarkIdsChange: (values: string[]) => void;
-    selectedMetricLabel: string;
-    trendAxisMode: TrendAxisMode;
-    onToggleTrendAxisMode: () => void;
-    trendTraces: Array<Record<string, unknown>>;
-    trendCommitAxisLabels?: PlotAxisTickLabels;
-    trendPlotMargin: { t: number; r: number; b: number; l: number };
-    plotTheme: PlotTheme;
-  };
   comparison: {
     focusRun: BenchmarkRun | null;
     baselineRun: BenchmarkRun | null;
     environmentMismatch: boolean;
-    comparisonRows: PairComparison[];
-    deltaPlotMargin: { t: number; r: number; b: number; l: number };
     sortedComparisonRows: PairComparison[];
+    benchmarkDiffPageSize: BenchmarkDiffPageSize;
+    onBenchmarkDiffPageSizeChange: (value: BenchmarkDiffPageSize) => void;
     runPairSort: RunPairSort | null;
     onToggleRunPairSort: (key: RunPairSortKey) => void;
   };
@@ -195,9 +227,18 @@ export function OverviewPage(props: OverviewPageProps) {
     datasetState,
     filters,
     stats,
-    trend,
     comparison
   } = props;
+  const [benchmarkDiffPage, setBenchmarkDiffPage] = useState(1);
+  const benchmarkDiffTotalPages = Math.max(1, Math.ceil(comparison.sortedComparisonRows.length / comparison.benchmarkDiffPageSize));
+  const pagedComparisonRows = useMemo(() => {
+    const startIndex = (benchmarkDiffPage - 1) * comparison.benchmarkDiffPageSize;
+    return comparison.sortedComparisonRows.slice(startIndex, startIndex + comparison.benchmarkDiffPageSize);
+  }, [benchmarkDiffPage, comparison.benchmarkDiffPageSize, comparison.sortedComparisonRows]);
+
+  useEffect(() => {
+    setBenchmarkDiffPage((currentPage) => Math.min(currentPage, benchmarkDiffTotalPages));
+  }, [benchmarkDiffTotalPages]);
 
   return (
     <>
@@ -313,138 +354,72 @@ export function OverviewPage(props: OverviewPageProps) {
             Icon={stat.Icon}
             label={stat.label}
             value={stat.value}
+            valueTone={stat.valueTone}
             delta={stat.delta}
             deltaTone={stat.deltaTone}
             detail={stat.detail}
             detailFullWidth={stat.detailFullWidth}
+            inlineNoWrap={stat.inlineNoWrap}
           />
         ))}
       </section>
 
       <section className="grid gap-4">
-        <Panel style={{ paddingBottom: 8 }}>
+        <Panel>
           <SectionTitle
-            title="Benchmark Trend"
+            title="Benchmark Diff"
             action={(
-              <div className="flex w-full flex-col gap-3 lg:flex-row lg:items-center lg:justify-end">
-                <div className="min-w-0 sm:min-w-[18rem] lg:min-w-[22rem]">
-                  <BenchmarkKeyCascadeFilter
-                    options={trend.benchmarkOptions}
-                    selectedValues={trend.selectedBenchmarkIds}
-                    setSelectedValues={trend.onSelectedBenchmarkIdsChange}
-                    disabled={!datasetState.hasDataset}
-                    stretchWidth
-                  />
+              <div className="flex flex-wrap items-center justify-end gap-3">
+                <SegmentedToggle
+                  value={String(comparison.benchmarkDiffPageSize)}
+                  options={Benchmark_Diff_Page_Size_Options.map((pageSize) => ({ value: String(pageSize), label: String(pageSize) }))}
+                  onChange={(value) => {
+                    comparison.onBenchmarkDiffPageSizeChange(Number(value) as BenchmarkDiffPageSize);
+                    setBenchmarkDiffPage(1);
+                  }}
+                  ariaLabel="Benchmark diff rows per page"
+                />
+                <div className="type-table-head text-stone-500 dark:text-stone-400">
+                  {benchmarkDiffPage} / {benchmarkDiffTotalPages}
                 </div>
-                <Button variant="secondary" size="normal" className="w-34 max-lg:w-full" onClick={trend.onToggleTrendAxisMode}>
-                  X-Axis: {trend.trendAxisMode === "commit" ? "Commit" : "Time"}
-                </Button>
+                <div className="flex items-center gap-2">
+                  <IconButton
+                    label="Previous page"
+                    variant="secondary"
+                    disabled={benchmarkDiffPage <= 1}
+                    onClick={() => setBenchmarkDiffPage((page) => Math.max(1, page - 1))}
+                  >
+                    <FiChevronLeft aria-hidden="true" />
+                  </IconButton>
+                  <IconButton
+                    label="Next page"
+                    variant="secondary"
+                    disabled={benchmarkDiffPage >= benchmarkDiffTotalPages}
+                    onClick={() => setBenchmarkDiffPage((page) => Math.min(benchmarkDiffTotalPages, page + 1))}
+                  >
+                    <FiChevronRight aria-hidden="true" />
+                  </IconButton>
+                </div>
               </div>
             )}
           />
-          <div className="mt-3 h-[24rem]">
-            {trend.selectedBenchmarkIds.length ? (
-              <div className="h-[24rem]">
-                <Plot
-                  useResizeHandler
-                  style={{ width: "100%", height: "100%" }}
-                  data={trend.trendTraces}
-                  layout={{
-                    autosize: true,
-                    margin: trend.trendPlotMargin,
-                    paper_bgcolor: "rgba(0, 0, 0, 0)",
-                    plot_bgcolor: "rgba(0, 0, 0, 0)",
-                    font: { color: trend.plotTheme.axis },
-                    xaxis: {
-                      showgrid: false,
-                      color: trend.plotTheme.axis,
-                      tickfont: { size: 14 },
-                      ...(trend.trendAxisMode === "commit" ? trend.trendCommitAxisLabels : undefined)
-                    },
-                    yaxis: {
-                      title: { text: trend.selectedMetricLabel || "Metric value" },
-                      gridcolor: trend.plotTheme.grid,
-                      zeroline: false,
-                      color: trend.plotTheme.axis,
-                      tickfont: { size: 14 }
-                    },
-                    modebar: {
-                      bgcolor: "rgba(0, 0, 0, 0)",
-                      color: trend.plotTheme.axis,
-                      activecolor: trend.plotTheme.line
-                    },
-                    showlegend: trend.selectedBenchmarkIds.length > 1,
-                    legend: trend.selectedBenchmarkIds.length > 1 ? {
-                      orientation: "h",
-                      x: 0,
-                      y: -0.2,
-                      font: { color: trend.plotTheme.axis }
-                    } : undefined
-                  }}
-                  config={{ displayModeBar: "hover", responsive: true }}
-                />
-              </div>
-            ) : (
-              <EmptyState
-                className="pad-empty flex h-full flex-col items-center justify-center text-center"
-                title="No benchmark key selected"
-              />
-            )}
-          </div>
-        </Panel>
-
-        <Panel>
-          <SectionTitle title="Largest Deltas" description="Top movers between the focus run and the baseline run." />
-          <div className="mt-5 h-[24rem]">
-            <Plot
-              useResizeHandler
-              style={{ width: "100%", height: "100%" }}
-              data={[
-                {
-                  type: "bar",
-                  orientation: "h",
-                  width: Largest_Deltas_Bar_Width,
-                  x: comparison.comparisonRows.slice(0, 6).map((row) => row.delta).reverse(),
-                  y: comparison.comparisonRows.slice(0, 6).map((row) => row.benchmark_label).reverse(),
-                  marker: {
-                    color: comparison.comparisonRows
-                      .slice(0, 6)
-                      .map((row) => benchmarkDeltaColor(row.delta, row.better, trend.plotTheme))
-                      .reverse()
-                  },
-                  hovertemplate: "%{y}<br>%{x:.2f}%<extra></extra>"
-                }
-              ]}
-              layout={{
-                autosize: true,
-                margin: comparison.deltaPlotMargin,
-                paper_bgcolor: "rgba(0, 0, 0, 0)",
-                plot_bgcolor: "rgba(0, 0, 0, 0)",
-                font: { color: trend.plotTheme.axis },
-                xaxis: { title: "Delta (%)", gridcolor: trend.plotTheme.grid, zerolinecolor: trend.plotTheme.zero, color: trend.plotTheme.axis },
-                yaxis: { automargin: true, color: trend.plotTheme.axis },
-                showlegend: false
-              }}
-              config={{ displayModeBar: false, responsive: true }}
-            />
-          </div>
-        </Panel>
-
-        <RunContextPanel focusRun={comparison.focusRun} />
-
-        <Panel>
-          <SectionTitle title="Run Pair Table" description="All comparable benchmark rows in the selected pair for the chosen metric." />
           {comparison.environmentMismatch ? (
             <Banner
-              className="mt-5"
+              className="mt-4"
               tone="warning"
               title="Comparing different environments"
               description={`Focus run uses ${comparison.focusRun?.environment_label || "n/a"}, while baseline uses ${comparison.baselineRun?.environment_label || "n/a"}.`}
             />
           ) : null}
           {comparison.sortedComparisonRows.length ? (
-            <DataTableShell className="mt-5">
-              <DataTable>
+            <DataTableShell className="mt-2">
+              <DataTable className="table-fixed">
+                <colgroup>
+                  <col style={{ width: "64%" }} />
+                  <col style={{ width: "12%" }} />
+                  <col style={{ width: "12%" }} />
+                  <col style={{ width: "12%" }} />
+                </colgroup>
                 <thead>
                   <tr>
                     {runPairTableColumns.map((column) => (
@@ -461,26 +436,27 @@ export function OverviewPage(props: OverviewPageProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {comparison.sortedComparisonRows.map((row) => (
+                  {pagedComparisonRows.map((row) => (
                     <tr key={row.benchmark_id}>
                       <DataCell code className="align-top">{row.benchmark_label}</DataCell>
-                      <DataCell>{formatMetricValue(row.focus_value, row.unit)}</DataCell>
-                      <DataCell>{formatMetricValue(row.baseline_value, row.unit)}</DataCell>
-                      <DataCell tone="plain">
+                      <DataCell className="whitespace-nowrap">{formatMetricValue(row.baseline_value, row.unit)}</DataCell>
+                      <DataCell className="whitespace-nowrap">{formatMetricValue(row.focus_value, row.unit)}</DataCell>
+                      <DataCell tone="plain" className="whitespace-nowrap">
                         <StatusBadge tone={benchmarkDeltaTone(row.delta, row.better)}>
                           {formatPercent(row.delta)}
                         </StatusBadge>
                       </DataCell>
-                      <DataCell tone="muted">{row.unit}</DataCell>
                     </tr>
                   ))}
                 </tbody>
               </DataTable>
             </DataTableShell>
           ) : (
-            <EmptyState className="surface-empty pad-empty mt-5 flex min-h-44 flex-col items-center justify-center text-center" title="No comparable benchmark rows" description="Adjust the selected runs or filters to compare benchmark rows." />
+            <EmptyState className="surface-empty pad-empty mt-4 flex min-h-44 flex-col items-center justify-center text-center" title="No comparable benchmark rows" description="Adjust the selected runs or filters to compare benchmark rows." />
           )}
         </Panel>
+
+        <RunContextPanel focusRun={comparison.focusRun} />
       </section>
     </>
   );

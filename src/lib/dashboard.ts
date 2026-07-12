@@ -14,15 +14,18 @@ export type ThemeMode = "light" | "dark";
 export type TrendLineShape = "line" | "curve";
 export type TrendMarkerFillMode = "hollow" | "filled";
 export type TrendAxisMode = "commit" | "time";
+export type TrendBoardViewMode = "separate" | "combined";
 export type DisplayStrategy = "all" | "tagged-only" | "tagged-main";
 export type ActivePage = "overview" | "trend-board" | "benchmark-keys" | "settings" | "database-catalog" | "about";
 export type AppPhase = "booting" | "select-source" | "loading-database" | "ready";
-export type RunPairSortKey = "benchmark" | "focus" | "baseline" | "delta" | "unit";
+export type RunPairSortKey = "benchmark" | "focus" | "baseline" | "delta";
 export type SortDirection = "asc" | "desc";
 export type RunPairSort = {
   key: RunPairSortKey;
   direction: SortDirection;
 };
+export const Benchmark_Diff_Page_Size_Options = [25, 50, 100] as const;
+export type BenchmarkDiffPageSize = typeof Benchmark_Diff_Page_Size_Options[number];
 
 export type DatabaseCatalogStats = {
   rowCount: number;
@@ -69,13 +72,14 @@ export type UISettings = {
   trendBoardTimeStart: string;
   trendBoardTimeEnd: string;
   displayStrategy: DisplayStrategy;
-  overviewSelectedBenchmarkIds: string[];
   trendBoardSelectedBenchmarkIds: string[];
   trendLineShape: TrendLineShape;
   trendMarkerSymbol: TrendMarkerSymbol;
   trendMarkerFillMode: TrendMarkerFillMode;
   trendAxisMode: TrendAxisMode;
   trendBoardColumns: number;
+  trendBoardViewMode: TrendBoardViewMode;
+  benchmarkDiffPageSize: BenchmarkDiffPageSize;
 };
 
 export type TrendPlotRow = BenchmarkRow & {
@@ -139,7 +143,6 @@ export const Trend_Board_Default_Columns = 3;
 export const Trend_Board_Min_Columns = 1;
 export const Trend_Board_Max_Columns = 10;
 export const Trend_Board_Plot_Height = 280;
-export const Largest_Deltas_Bar_Width = 0.5;
 export const Asset_Base_URL = import.meta.env.BASE_URL;
 
 export const deltaColorKey = {
@@ -156,10 +159,9 @@ export const statDeltaTone = {
 
 export const runPairTableColumns: { key: RunPairSortKey; label: string }[] = [
   { key: "benchmark", label: "Benchmark" },
-  { key: "focus", label: "Focus" },
   { key: "baseline", label: "Baseline" },
-  { key: "delta", label: "Delta" },
-  { key: "unit", label: "Unit" }
+  { key: "focus", label: "Focus" },
+  { key: "delta", label: "Delta" }
 ];
 
 const _Trend_Categorical_Colors = schemeTableau10;
@@ -209,6 +211,12 @@ function stringArraySetting(settings: Record<string, unknown>, key: keyof UISett
 export function clampTrendBoardColumns(value: number): number {
   if (!Number.isFinite(value)) return Trend_Board_Default_Columns;
   return Math.min(Trend_Board_Max_Columns, Math.max(Trend_Board_Min_Columns, Math.round(value)));
+}
+
+export function clampBenchmarkDiffPageSize(value: number): BenchmarkDiffPageSize {
+  return Benchmark_Diff_Page_Size_Options.includes(value as BenchmarkDiffPageSize)
+    ? value as BenchmarkDiffPageSize
+    : 50;
 }
 
 export function comparePath(left: string[], right: string[]): number {
@@ -649,13 +657,14 @@ export function readUISettings(): UISettings {
     trendBoardTimeStart: "",
     trendBoardTimeEnd: "",
     displayStrategy: "all",
-    overviewSelectedBenchmarkIds: [],
     trendBoardSelectedBenchmarkIds: [],
     trendLineShape: "curve",
     trendMarkerSymbol: "circle",
     trendMarkerFillMode: "hollow",
     trendAxisMode: "commit",
-    trendBoardColumns: Trend_Board_Default_Columns
+    trendBoardColumns: Trend_Board_Default_Columns,
+    trendBoardViewMode: "separate",
+    benchmarkDiffPageSize: 50
   };
   const rawSettings = window.localStorage.getItem(UI_SETTINGS_STORAGE_KEY);
   if (!rawSettings) return defaults;
@@ -663,9 +672,6 @@ export function readUISettings(): UISettings {
   try {
     const parsedSettings: unknown = JSON.parse(rawSettings);
     if (!isRecord(parsedSettings)) return defaults;
-    const overviewSelectedBenchmarkIds = stringArraySetting(parsedSettings, "overviewSelectedBenchmarkIds").length
-      ? stringArraySetting(parsedSettings, "overviewSelectedBenchmarkIds")
-      : defaults.overviewSelectedBenchmarkIds;
     const trendBoardSelectedBenchmarkIds = stringArraySetting(parsedSettings, "trendBoardSelectedBenchmarkIds").length
       ? stringArraySetting(parsedSettings, "trendBoardSelectedBenchmarkIds")
       : defaults.trendBoardSelectedBenchmarkIds;
@@ -707,7 +713,6 @@ export function readUISettings(): UISettings {
         parsedSettings.displayStrategy === "tagged-main"
           ? parsedSettings.displayStrategy
           : defaults.displayStrategy,
-      overviewSelectedBenchmarkIds,
       trendBoardSelectedBenchmarkIds,
       trendLineShape:
         parsedSettings.trendLineShape === "line" || parsedSettings.trendLineShape === "curve"
@@ -729,6 +734,15 @@ export function readUISettings(): UISettings {
         typeof parsedSettings.trendBoardColumns === "number"
           ? parsedSettings.trendBoardColumns
           : defaults.trendBoardColumns
+      ),
+      trendBoardViewMode:
+        parsedSettings.trendBoardViewMode === "combined" || parsedSettings.trendBoardViewMode === "separate"
+          ? parsedSettings.trendBoardViewMode
+          : defaults.trendBoardViewMode,
+      benchmarkDiffPageSize: clampBenchmarkDiffPageSize(
+        typeof parsedSettings.benchmarkDiffPageSize === "number"
+          ? parsedSettings.benchmarkDiffPageSize
+          : defaults.benchmarkDiffPageSize
       )
     };
   } catch {
@@ -813,7 +827,6 @@ export function runPairSortValue(row: PairComparison, key: RunPairSortKey): stri
   if (key === "benchmark") return row.benchmark_label;
   if (key === "focus") return row.focus_value;
   if (key === "baseline") return row.baseline_value;
-  if (key === "unit") return row.unit;
   return row.delta;
 }
 

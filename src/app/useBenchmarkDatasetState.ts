@@ -14,6 +14,7 @@ import {
 import { unique } from "../lib/format";
 import { useBenchmarkDataSource } from "../lib/useBenchmarkDataSource";
 import { useBenchmarkViewSlice } from "../features/benchmarks/useBenchmarkViewSlice";
+import { buildBenchmarkViewIndex } from "../lib/benchmark-view";
 import { useOverviewModel } from "../features/overview/useOverviewModel";
 import { useTrendBoardModel } from "../features/trend-board/useTrendBoardModel";
 import { useStoredUISettings } from "./useStoredUISettings";
@@ -150,11 +151,11 @@ export function useBenchmarkDatasetState(): BenchmarkDatasetState {
   });
 
   const allRuns = useMemo(() => buildRuns(rows), [rows]);
+  const benchmarkViewIndex = useMemo(() => buildBenchmarkViewIndex(rows), [rows]);
   const environmentOptions = useMemo(() => buildEnvironmentOptions(allRuns), [allRuns]);
 
   const overviewSlice = useBenchmarkViewSlice({
-    rows,
-    environmentOptions,
+    index: benchmarkViewIndex,
     environment: settings.environment,
     onEnvironmentChange: (environment) => setSetting("environment", environment),
     metricKind: settings.metricKind,
@@ -169,8 +170,7 @@ export function useBenchmarkDatasetState(): BenchmarkDatasetState {
   });
 
   const trendBoardSlice = useBenchmarkViewSlice({
-    rows,
-    environmentOptions,
+    index: benchmarkViewIndex,
     environment: settings.trendBoardEnvironment,
     onEnvironmentChange: (environment) => setSetting("trendBoardEnvironment", environment),
     metricKind: settings.trendBoardMetricKind,
@@ -194,9 +194,6 @@ export function useBenchmarkDatasetState(): BenchmarkDatasetState {
 
   const overviewModel = useOverviewModel({
     rows: overviewSlice.scopedRows,
-    benchmarkOptions: overviewSlice.benchmarkOptions,
-    selectedBenchmarkIds: settings.overviewSelectedBenchmarkIds,
-    onSelectedBenchmarkIdsChange: (values) => setSetting("overviewSelectedBenchmarkIds", values),
     focusRunId: settings.focusRunId,
     onFocusRunIdChange: (runId) => setSetting("focusRunId", runId),
     baselineRunId: settings.baselineRunId,
@@ -208,14 +205,7 @@ export function useBenchmarkDatasetState(): BenchmarkDatasetState {
     group: settings.group,
     branch: settings.branch,
     timeStart: settings.timeStart,
-    timeEnd: settings.timeEnd,
-    displayStrategy: settings.displayStrategy,
-    trendAxisMode: settings.trendAxisMode,
-    trendLineShape: settings.trendLineShape,
-    trendMarkerSymbol: settings.trendMarkerSymbol,
-    trendMarkerFillMode: settings.trendMarkerFillMode,
-    plotTheme,
-    theme: settings.theme
+    timeEnd: settings.timeEnd
   });
 
   const trendBoardModel = useTrendBoardModel({

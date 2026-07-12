@@ -32,6 +32,13 @@ export type TrendBoardCard = {
   commitAxisLabels?: PlotAxisTickLabels;
 };
 
+export type TrendBoardCombinedChart = {
+  traces: Array<Record<string, unknown>>;
+  metricLabel: string;
+  commitAxisLabels?: PlotAxisTickLabels;
+  showLegend: boolean;
+};
+
 type UseTrendBoardModelOptions = {
   rows: BenchmarkRow[];
   benchmarkOptions: BenchmarkViewBenchmarkOption[];
@@ -48,6 +55,7 @@ type UseTrendBoardModelOptions = {
 
 type UseTrendBoardModelResult = {
   trendBoardCards: TrendBoardCard[];
+  combinedTrendChart: TrendBoardCombinedChart | null;
   trendPlotMargin: { t: number; r: number; b: number; l: number };
 };
 
@@ -86,6 +94,21 @@ export function useTrendBoardModel(options: UseTrendBoardModelOptions): UseTrend
     [benchmarkOptions, trendBoardRowsByBenchmark]
   );
   const trendPlotMargin = trendBoardRows.length ? { t: 2, r: 12, b: 50, l: 52 } : { t: 2, r: 12, b: 50, l: 20 };
+  const combinedDisplayUnitContext = useMemo(
+    () => trendDisplayUnitContext(trendBoardRows),
+    [trendBoardRows]
+  );
+  const combinedCommitAxis = useMemo(
+    () => trendAxisMode === "commit" ? commitAxisLayout(trendBoardRows) : undefined,
+    [trendAxisMode, trendBoardRows]
+  );
+  const combinedYValues = trendBoardRows.map((row) => combinedDisplayUnitContext.scaleValue(row.value, row.unit));
+  const combinedYMin = combinedYValues.length ? Math.min(...combinedYValues) : 0;
+  const combinedYMax = combinedYValues.length ? Math.max(...combinedYValues) : 0;
+  const combinedYSpan = combinedYMax - combinedYMin;
+  const combinedYPadding = combinedYSpan > 0
+    ? combinedYSpan * Trend_Y_Padding_Ratio
+    : Math.max(Math.abs(combinedYMin) * Trend_Y_Padding_Ratio, 1);
 
   const trendBoardCards = useMemo<TrendBoardCard[]>(() => {
     return selectedBenchmarkIds.flatMap((benchmarkKey, index) => {
@@ -149,8 +172,71 @@ export function useTrendBoardModel(options: UseTrendBoardModelOptions): UseTrend
     trendMarkerSymbol
   ]);
 
+  const combinedTrendChart = useMemo<TrendBoardCombinedChart | null>(() => {
+    if (!selectedBenchmarkIds.length) return null;
+
+    let showLegend = false;
+    const traces = selectedBenchmarkIds.flatMap((benchmarkKey, index) => {
+      const traceRows = trendBoardRowsByBenchmark.get(benchmarkKey) ?? [];
+      if (!traceRows.length) return [];
+      const benchmarkLabel = benchmarkOptionsById.get(benchmarkKey)?.label ?? benchmarkKey;
+      const environmentSeries = splitTrendRowsByEnvironment(traceRows);
+
+      if (selectedBenchmarkIds.length > 1 || environmentSeries.length > 1) {
+        showLegend = true;
+      }
+
+      return environmentSeries.flatMap((series, environmentIndex) => {
+        const label = environmentSeries.length > 1
+          ? `${benchmarkLabel} · ${series.environmentLabel}`
+          : benchmarkLabel;
+        const color = colorForBenchmark(index * Math.max(environmentSeries.length, 1) + environmentIndex);
+
+        return buildTrendTrace(series.rows, {
+          axisMode: trendAxisMode,
+          commitAxisPositions: combinedCommitAxis?.positionsByCodeStateId,
+          lineShape: trendLineShape,
+          markerSymbol: trendMarkerSymbol,
+          markerFillMode: trendMarkerFillMode,
+          displayUnitContext: combinedDisplayUnitContext,
+          color,
+          label,
+          plotTheme,
+          theme,
+          yMin: combinedYMin,
+          yPadding: combinedYPadding,
+          showLegend: selectedBenchmarkIds.length > 1 || environmentSeries.length > 1
+        });
+      });
+    });
+
+    if (!traces.length) return null;
+    return {
+      traces,
+      metricLabel: combinedDisplayUnitContext.formatMetricLabel(metricKind),
+      commitAxisLabels: combinedCommitAxis?.tickLabels,
+      showLegend
+    };
+  }, [
+    benchmarkOptionsById,
+    combinedCommitAxis,
+    combinedDisplayUnitContext,
+    combinedYMin,
+    combinedYPadding,
+    metricKind,
+    plotTheme,
+    selectedBenchmarkIds,
+    theme,
+    trendAxisMode,
+    trendBoardRowsByBenchmark,
+    trendLineShape,
+    trendMarkerFillMode,
+    trendMarkerSymbol
+  ]);
+
   return {
     trendBoardCards,
+    combinedTrendChart,
     trendPlotMargin
   };
 }

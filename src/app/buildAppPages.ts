@@ -67,25 +67,13 @@ export function buildAppPages(state: BenchmarkDatasetState, openLocalFilePicker:
         onDisplayStrategyChange: (strategy) => setSetting("displayStrategy", strategy)
       },
       stats: overviewModel.stats,
-      trend: {
-        benchmarkOptions: overviewSlice.benchmarkOptions,
-        selectedBenchmarkIds: settings.overviewSelectedBenchmarkIds,
-        onSelectedBenchmarkIdsChange: (values) => setSetting("overviewSelectedBenchmarkIds", values),
-        selectedMetricLabel: overviewModel.trendMetricLabel,
-        trendAxisMode: settings.trendAxisMode,
-        onToggleTrendAxisMode: () => setSetting("trendAxisMode", settings.trendAxisMode === "commit" ? "time" : "commit"),
-        trendTraces: overviewModel.trendTraces,
-        trendCommitAxisLabels: overviewModel.trendCommitAxisLabels,
-        trendPlotMargin: overviewModel.trendPlotMargin,
-        plotTheme
-      },
       comparison: {
         focusRun: overviewModel.focusRun,
         baselineRun: overviewModel.baselineRun,
         environmentMismatch: overviewModel.environmentMismatch,
-        comparisonRows: overviewModel.comparisonRows,
-        deltaPlotMargin: overviewModel.deltaPlotMargin,
         sortedComparisonRows: overviewModel.sortedComparisonRows,
+        benchmarkDiffPageSize: settings.benchmarkDiffPageSize,
+        onBenchmarkDiffPageSizeChange: (value) => setSetting("benchmarkDiffPageSize", value),
         runPairSort,
         onToggleRunPairSort: overviewModel.toggleRunPairSort
       }
@@ -98,6 +86,8 @@ export function buildAppPages(state: BenchmarkDatasetState, openLocalFilePicker:
         hasDataset,
         trendBoardColumns: settings.trendBoardColumns,
         onTrendBoardColumnsChange: (value) => setSetting("trendBoardColumns", value),
+        trendBoardViewMode: settings.trendBoardViewMode,
+        onToggleTrendBoardViewMode: () => setSetting("trendBoardViewMode", settings.trendBoardViewMode === "combined" ? "separate" : "combined"),
         trendAxisMode: settings.trendAxisMode,
         onToggleTrendAxisMode: () => setSetting("trendAxisMode", settings.trendAxisMode === "commit" ? "time" : "commit")
       },
@@ -128,6 +118,8 @@ export function buildAppPages(state: BenchmarkDatasetState, openLocalFilePicker:
       trend: {
         selectedMetricLabel: settings.trendBoardMetricKind,
         trendBoardCards: trendBoardModel.trendBoardCards,
+        combinedTrendChart: trendBoardModel.combinedTrendChart,
+        showCombinedTrendChart: settings.trendBoardViewMode === "combined",
         trendPlotMargin: trendBoardModel.trendPlotMargin,
         plotTheme
       }
