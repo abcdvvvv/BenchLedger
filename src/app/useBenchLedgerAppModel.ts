@@ -13,8 +13,10 @@ export function useBenchLedgerAppModel(): BenchLedgerAppModel {
     phase: state.phase,
     fileInputRef: state.fileInputRef,
     handleLocalFileChange: state.handleLocalFileChange,
+    openLocalFilePicker,
     siteTitle: state.siteTitle,
     sidebarProps: buildSidebarProps(state),
+    datasetState: state,
     pages: buildAppPages(state, openLocalFilePicker)
   };
 }

@@ -1,24 +1,16 @@
-export type BenchmarkCodeStateMetadata = {
+export type BenchmarkCodeStateIdentity = {
   source?: {
     kind?: string;
-    branch?: string;
-    tags?: string[];
     revision?: string;
-    dirty?: boolean;
     diff_digest?: string;
     [key: string]: unknown;
   };
   [key: string]: unknown;
 };
 
-export type BenchmarkEnvironmentMetadata = {
+export type BenchmarkEnvironmentIdentity = {
   platform?: {
     os?: {
-      name?: string;
-      version?: string;
-      [key: string]: unknown;
-    };
-    kernel?: {
       name?: string;
       version?: string;
       [key: string]: unknown;
@@ -39,6 +31,23 @@ export type BenchmarkEnvironmentMetadata = {
     version?: string;
     [key: string]: unknown;
   };
+  execution?: {
+    processes?: number;
+    threads?: number;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+};
+
+export type BenchmarkCodeStateMetadata = {
+  source?: {
+    dirty?: boolean;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+};
+
+export type BenchmarkEnvironmentMetadata = {
   benchmark?: {
     framework?: {
       name?: string;
@@ -47,9 +56,12 @@ export type BenchmarkEnvironmentMetadata = {
     };
     [key: string]: unknown;
   };
-  execution?: {
-    processes?: number;
-    threads?: number;
+  platform?: {
+    kernel?: {
+      name?: string;
+      version?: string;
+      [key: string]: unknown;
+    };
     [key: string]: unknown;
   };
   [key: string]: unknown;
@@ -80,29 +92,49 @@ export type BenchmarkRunMetadata = {
   [key: string]: unknown;
 };
 
+/** A unique benchmark definition shared by all metric results and runs. */
+export type BenchmarkDefinition = {
+  id: string;
+  path: string[];
+  label: string;
+};
+
+/** A single metric result. Benchmark, run, code-state, and environment context live in normalized entity maps. */
 export type BenchmarkRow = {
   run_id: string;
-  code_state_id: string;
-  code_label: string;
-  code_date: string;
-  environment_id: string;
-  environment_label: string;
-  measured_at: string;
-  notes: string;
-  code_state_metadata: BenchmarkCodeStateMetadata;
-  environment_metadata: BenchmarkEnvironmentMetadata;
-  run_metadata: BenchmarkRunMetadata;
-  benchmark_path: string[];
   benchmark_id: string;
-  benchmark_label: string;
   metric_name: string;
   statistic: string;
   unit: string;
   value: number;
   better: "lower" | "higher" | "neutral";
-  group: string;
 };
 
+export type BenchmarkCodeState = {
+  id: string;
+  label: string;
+  code_date: string;
+  identity: BenchmarkCodeStateIdentity;
+  metadata: BenchmarkCodeStateMetadata;
+};
+
+export type BenchmarkEnvironment = {
+  id: string;
+  label: string;
+  identity: BenchmarkEnvironmentIdentity;
+  metadata: BenchmarkEnvironmentMetadata;
+};
+
+export type BenchmarkRunRecord = {
+  id: string;
+  code_state_id: string;
+  environment_id: string;
+  measured_at: string;
+  notes: string;
+  metadata: BenchmarkRunMetadata;
+};
+
+/** Resolved run context used by the UI. Built once per run from the normalized entity maps. */
 export type BenchmarkRun = {
   run_id: string;
   code_state_id: string;
@@ -112,7 +144,9 @@ export type BenchmarkRun = {
   environment_label: string;
   measured_at: string;
   notes: string;
+  code_state_identity: BenchmarkCodeStateIdentity;
   code_state_metadata: BenchmarkCodeStateMetadata;
+  environment_identity: BenchmarkEnvironmentIdentity;
   environment_metadata: BenchmarkEnvironmentMetadata;
   run_metadata: BenchmarkRunMetadata;
   benchmark_count: number;
@@ -168,6 +202,10 @@ export type BenchLedgerMetadata = {
 
 export type LoadedBenchmarkDataset = {
   rows: BenchmarkRow[];
+  benchmarksById: ReadonlyMap<string, BenchmarkDefinition>;
+  runsById: ReadonlyMap<string, BenchmarkRunRecord>;
+  codeStatesById: ReadonlyMap<string, BenchmarkCodeState>;
+  environmentsById: ReadonlyMap<string, BenchmarkEnvironment>;
   metadata: BenchLedgerMetadata;
   source_label: string;
   source_url: string | null;

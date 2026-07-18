@@ -1,5 +1,6 @@
 import type { SemanticTone } from "../../components/common/semanticTone";
-import { deltaColorKey, type PlotTheme } from "../../lib/dashboard";
+import { deltaColorKey } from "../../lib/dashboard-data";
+import type { PlotTheme } from "../../lib/dashboard-plotting";
 import { metricDeltaClass } from "../../lib/format";
 import type { PairComparison } from "../../lib/types";
 

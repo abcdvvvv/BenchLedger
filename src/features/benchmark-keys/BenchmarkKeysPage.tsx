@@ -1,11 +1,12 @@
 import Plot from "../benchmarks/components/Plot";
 import { EmptyState } from "../../components/common/EmptyState";
 import { PageHeader } from "../../components/common/PageHeader";
-import { colorForBenchmark, type PlotTheme, type ThemeMode } from "../../lib/dashboard";
-import type { BenchmarkRow } from "../../lib/types";
+import { colorForBenchmark, type PlotTheme } from "../../lib/dashboard-plotting";
+import type { ThemeMode } from "../../lib/dashboard-settings";
+import type { BenchmarkDefinition } from "../../lib/types";
 
 export type BenchmarkKeysPageProps = {
-  rows: BenchmarkRow[];
+  benchmarks: BenchmarkDefinition[];
   plotTheme: PlotTheme;
   theme: ThemeMode;
 };
@@ -19,7 +20,7 @@ type IcicleNode = {
   rootKey: string;
 };
 
-function buildIcicleNodes(rows: BenchmarkRow[]): IcicleNode[] {
+function buildIcicleNodes(benchmarks: BenchmarkDefinition[]): IcicleNode[] {
   const nodeMap = new Map<string, IcicleNode>();
 
   nodeMap.set("root", {
@@ -31,10 +32,10 @@ function buildIcicleNodes(rows: BenchmarkRow[]): IcicleNode[] {
     rootKey: "root"
   });
 
-  for (const row of rows) {
-    const path = row.benchmark_path.length ? row.benchmark_path : [row.benchmark_label];
+  for (const benchmark of benchmarks) {
+    const path = benchmark.path.length ? benchmark.path : [benchmark.label];
     let parentId = "root";
-    const rootKey = path[0] ?? row.benchmark_id;
+    const rootKey = path[0] ?? benchmark.id;
 
     for (let index = 0; index < path.length; index += 1) {
       const segment = path[index];
@@ -52,11 +53,11 @@ function buildIcicleNodes(rows: BenchmarkRow[]): IcicleNode[] {
       parentId = nodeId;
     }
 
-    const leafId = `${parentId}#${row.benchmark_id}`;
+    const leafId = `${parentId}#${benchmark.id}`;
     nodeMap.set(leafId, {
       id: leafId,
       parent: parentId,
-      label: row.benchmark_label,
+      label: benchmark.label,
       value: 1,
       depth: path.length + 1,
       rootKey
@@ -115,9 +116,9 @@ function buildIcicleColors(nodes: IcicleNode[], theme: ThemeMode): string[] {
 }
 
 export function BenchmarkKeysPage(props: BenchmarkKeysPageProps) {
-  const { rows, plotTheme, theme } = props;
-  const nodes = buildIcicleNodes(rows);
-  const hasKeys = rows.length > 0;
+  const { benchmarks, plotTheme, theme } = props;
+  const nodes = buildIcicleNodes(benchmarks);
+  const hasKeys = benchmarks.length > 0;
   const colors = buildIcicleColors(nodes, theme);
 
   return (

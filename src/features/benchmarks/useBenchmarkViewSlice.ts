@@ -1,12 +1,11 @@
-import { useEffect, useMemo, useRef } from "react";
-import { dateRangeEnd, dateRangeStart, formatDateRangePart, type DisplayStrategy } from "../../lib/dashboard";
+import { useEffect, useMemo } from "react";
+import { dateRangeEnd, dateRangeStart, formatDateRangePart, type DisplayStrategy } from "../../lib/dashboard-settings";
 import {
-  createLRUCache,
-  resolveBenchmarkViewSlice,
+  resolveBenchmarkViewBaseSlice,
+  resolveBenchmarkViewGroupSlice,
   type BenchmarkViewIndex,
   type BenchmarkViewBenchmarkOption,
-  type BenchmarkViewGroupOption,
-  type BenchmarkViewResolvedSlice
+  type BenchmarkViewGroupOption
 } from "../../lib/benchmark-view";
 import type { BenchmarkRow } from "../../lib/types";
 
@@ -58,39 +57,20 @@ export function useBenchmarkViewSlice(
 
   const timeStartValue = useMemo(() => dateRangeStart(timeStart), [timeStart]);
   const timeEndValue = useMemo(() => dateRangeEnd(timeEnd), [timeEnd]);
-  const sliceCacheRef = useRef(createLRUCache<string, BenchmarkViewResolvedSlice>(64));
-  const cachedIndexRef = useRef<BenchmarkViewIndex | null>(null);
 
-  if (cachedIndexRef.current !== index) {
-    cachedIndexRef.current = index;
-    sliceCacheRef.current = createLRUCache<string, BenchmarkViewResolvedSlice>(64);
-  }
+  const baseSlice = useMemo(() => resolveBenchmarkViewBaseSlice(index, {
+    environment,
+    metricKind,
+    branch,
+    timeStartValue,
+    timeEndValue,
+    displayStrategy
+  }), [branch, displayStrategy, environment, index, metricKind, timeEndValue, timeStartValue]);
 
-  const resolvedSlice = useMemo(() => {
-    const cacheKey = JSON.stringify({
-      environment,
-      metricKind,
-      branch,
-      timeStartValue,
-      timeEndValue,
-      displayStrategy,
-      group
-    });
-    const cachedSlice = sliceCacheRef.current.get(cacheKey);
-    if (cachedSlice) return cachedSlice;
-
-    const computedSlice = resolveBenchmarkViewSlice(index, {
-      environment,
-      metricKind,
-      branch,
-      timeStartValue,
-      timeEndValue,
-      displayStrategy,
-      group
-    });
-    sliceCacheRef.current.set(cacheKey, computedSlice);
-    return computedSlice;
-  }, [branch, displayStrategy, environment, group, index, metricKind, timeEndValue, timeStartValue]);
+  const resolvedSlice = useMemo(
+    () => resolveBenchmarkViewGroupSlice(baseSlice, group),
+    [baseSlice, group]
+  );
 
   useEffect(() => {
     if (environment === resolvedSlice.effectiveEnvironment) return;

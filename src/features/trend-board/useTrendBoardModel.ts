@@ -6,7 +6,6 @@ import {
 } from "../../lib/benchmark-view";
 import {
   Trend_Y_Padding_Ratio,
-  buildRuns,
   buildTrendTrace,
   commitAxisLayout,
   colorForBenchmark,
@@ -14,14 +13,11 @@ import {
   splitTrendRowsByEnvironment,
   trendDisplayUnitContext,
   type PlotAxisTickLabels,
-  type PlotTheme,
-  type ThemeMode,
-  type TrendAxisMode,
-  type TrendLineShape,
-  type TrendMarkerFillMode
-} from "../../lib/dashboard";
+  type PlotTheme
+} from "../../lib/dashboard-plotting";
+import type { ThemeMode, TrendAxisMode, TrendLineShape, TrendMarkerFillMode } from "../../lib/dashboard-settings";
 import type { TrendMarkerSymbol } from "../../lib/trend-marker-symbols";
-import type { BenchmarkRow } from "../../lib/types";
+import type { BenchmarkRow, BenchmarkRun } from "../../lib/types";
 
 export type TrendBoardCard = {
   benchmarkId: string;
@@ -41,6 +37,7 @@ export type TrendBoardCombinedChart = {
 
 type UseTrendBoardModelOptions = {
   rows: BenchmarkRow[];
+  runsById: ReadonlyMap<string, BenchmarkRun>;
   benchmarkOptions: BenchmarkViewBenchmarkOption[];
   selectedBenchmarkIds: string[];
   onSelectedBenchmarkIdsChange: (values: string[]) => void;
@@ -62,6 +59,7 @@ type UseTrendBoardModelResult = {
 export function useTrendBoardModel(options: UseTrendBoardModelOptions): UseTrendBoardModelResult {
   const {
     rows,
+    runsById,
     benchmarkOptions,
     selectedBenchmarkIds,
     onSelectedBenchmarkIdsChange,
@@ -78,8 +76,6 @@ export function useTrendBoardModel(options: UseTrendBoardModelOptions): UseTrend
     onSelectedBenchmarkIdsChange(normalizeSelectedBenchmarkIds(selectedBenchmarkIds, benchmarkOptions));
   }, [benchmarkOptions, onSelectedBenchmarkIdsChange, selectedBenchmarkIds]);
 
-  const runs = useMemo(() => buildRuns(rows), [rows]);
-  const runsById = useMemo(() => new Map(runs.map((run) => [run.run_id, run])), [runs]);
   const benchmarkOptionsById = useMemo(
     () => new Map(benchmarkOptions.map((option) => [option.value, option])),
     [benchmarkOptions]

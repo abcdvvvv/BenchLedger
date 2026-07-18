@@ -2,13 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { FiDatabase, FiMoon, FiSun } from "react-icons/fi";
 import { formatDate } from "../lib/format";
 import { App_Page_Definitions } from "../app/pageRegistry";
-import {
-  databaseTitle,
-  metadataTitle,
-  sourceSummary,
-  type ActivePage,
-  type ThemeMode
-} from "../lib/dashboard";
+import { databaseTitle, metadataTitle, sourceSummary } from "../lib/dashboard-data";
+import type { ActivePage, ThemeMode } from "../lib/dashboard-settings";
 import type {
   BenchmarkRun,
   BenchLedgerManifestDatabase,

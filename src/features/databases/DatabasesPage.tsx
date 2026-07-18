@@ -7,7 +7,7 @@ import {
   formatOptionalDate,
   formatSchemaLabel,
   type DatabaseCatalogEntry
-} from "../../lib/dashboard";
+} from "../../lib/dashboard-data";
 import { formatBytes } from "../../lib/format";
 
 export type DatabasesPageProps = {

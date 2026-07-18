@@ -12,7 +12,6 @@ import {
   metricLabel,
   metadataDescription,
   metadataTitle,
-  rowMatchesDisplayStrategy,
   splitTrendRowsByEnvironment,
   trendDisplayUnitContext,
   type TrendPlotRow
@@ -21,30 +20,22 @@ import type { BenchmarkRow } from "./types";
 
 const Base_Row: BenchmarkRow = {
   run_id: "run-1",
-  code_state_id: "state-1",
-  code_label: "Run 1",
-  code_date: "2026-01-01T00:00:00Z",
-  environment_id: "env-1",
-  environment_label: "Environment 1",
-  measured_at: "2026-01-01T00:00:00Z",
-  notes: "",
-  code_state_metadata: { source: { branch: "feature", tags: [], revision: "abcdef123456", dirty: false } },
-  environment_metadata: { runtime: { name: "Julia", version: "1.10" } },
-  run_metadata: {},
-  benchmark_path: ["suite", "case"],
   benchmark_id: "bench-1",
-  benchmark_label: "bench-1",
   metric_name: "time",
   statistic: "median",
   unit: "ns",
   value: 1000,
-  better: "lower",
-  group: "suite"
+  better: "lower"
 };
 
 function makeTrendRow(overrides: Partial<TrendPlotRow>): TrendPlotRow {
   return {
     ...Base_Row,
+    code_state_id: "state-1",
+    code_date: "2026-01-01T00:00:00Z",
+    environment_id: "env-1",
+    environment_label: "Environment 1",
+    measured_at: "2026-01-01T00:00:00Z",
     date_value: new Date("2026-01-01T00:00:00Z"),
     run_axis_label: "2026-01-01",
     run_headline: "Run 1",
@@ -66,13 +57,6 @@ describe("dashboard helpers", () => {
     expect(comparePath(["a"], ["a", "b"])).toBeLessThan(0);
     expect(comparePath(["b"], ["a", "z"])).toBeGreaterThan(0);
     expect(comparePath(["a", "b"], ["a", "b"])).toBe(0);
-  });
-
-  it("matches rows against display strategies", () => {
-    expect(rowMatchesDisplayStrategy(Base_Row, "all")).toBe(true);
-    expect(rowMatchesDisplayStrategy({ ...Base_Row, code_state_metadata: { source: { ...Base_Row.code_state_metadata.source, tags: ["v1.0.0"] } } }, "tagged-only")).toBe(true);
-    expect(rowMatchesDisplayStrategy({ ...Base_Row, code_state_metadata: { source: { ...Base_Row.code_state_metadata.source, branch: "main" } } }, "tagged-main")).toBe(true);
-    expect(rowMatchesDisplayStrategy(Base_Row, "tagged-main")).toBe(false);
   });
 
   it("chooses a readable display unit for trend values", () => {
@@ -355,7 +339,7 @@ describe("dashboard helpers", () => {
       metadata_preview: { description: "Preview text" }
     })).toBe("Preview text");
     expect(metadataTitle({
-      schema_version: 3,
+      schema_version: 5,
       name: "BenchLedger Demo",
       description: "",
       project_url: "",
@@ -367,7 +351,7 @@ describe("dashboard helpers", () => {
       raw: {}
     })).toBe("BenchLedger Demo");
     expect(metadataDescription({
-      schema_version: 3,
+      schema_version: 5,
       name: "",
       description: "",
       project_url: "",
@@ -379,7 +363,7 @@ describe("dashboard helpers", () => {
       raw: {}
     })).toBe("Fallback notes");
     expect(formatSchemaLabel(null)).toBe("n/a");
-    expect(formatSchemaLabel(3)).toBe("v3");
+    expect(formatSchemaLabel(5)).toBe("v5");
   });
 
   it("uses expected default sort directions", () => {

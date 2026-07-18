@@ -1,5 +1,5 @@
 import createPlotlyComponentModule from "react-plotly.js/factory";
-import Plotly from "plotly.js-dist-min";
+import Plotly from "../../../lib/plotly";
 
 const createPlotlyComponent =
   typeof createPlotlyComponentModule === "function"

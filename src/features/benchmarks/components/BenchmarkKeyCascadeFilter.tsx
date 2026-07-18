@@ -10,7 +10,7 @@ import {
   useMenuStore
 } from "@ariakit/react";
 import { FiCheck, FiChevronDown, FiChevronRight, FiMinus, FiSearch } from "react-icons/fi";
-import { comparePath } from "../../../lib/dashboard";
+import { comparePath } from "../../../lib/dashboard-data";
 import { cn } from "../../../components/ui/cn";
 import {
   Disclosure_Trigger_Icon_Class_Name,

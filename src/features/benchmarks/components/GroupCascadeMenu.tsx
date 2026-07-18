@@ -6,7 +6,7 @@ import {
   MenuProvider,
   useMenuStore
 } from "@ariakit/react";
-import { comparePath } from "../../../lib/dashboard";
+import { comparePath } from "../../../lib/dashboard-data";
 import { cn } from "../../../components/ui/cn";
 import { DisclosureTriggerContent, menuItemRowClassName, menuSurfaceClassName, menuTriggerClassName } from "../../../components/ui/Menu";
 

@@ -8,7 +8,7 @@ import {
   FiTrendingUp
 } from "react-icons/fi";
 import type { IconType } from "react-icons";
-import type { ActivePage } from "../lib/dashboard";
+import type { ActivePage } from "../lib/dashboard-settings";
 
 export type AppPageDefinition = {
   id: ActivePage;
@@ -25,14 +25,14 @@ export const App_Page_Definitions: AppPageDefinition[] = [
   { id: "about", navigationLabel: "About", Icon: FiInfo }
 ];
 
-export const OverviewPage = lazy(async () => {
-  const module = await import("../features/overview/OverviewPage");
-  return { default: module.OverviewPage };
+export const OverviewFeature = lazy(async () => {
+  const module = await import("../features/overview/OverviewFeature");
+  return { default: module.OverviewFeature };
 });
 
-export const TrendBoardPage = lazy(async () => {
-  const module = await import("../features/trend-board/TrendBoardPage");
-  return { default: module.TrendBoardPage };
+export const TrendBoardFeature = lazy(async () => {
+  const module = await import("../features/trend-board/TrendBoardFeature");
+  return { default: module.TrendBoardFeature };
 });
 
 export const BenchmarkKeysPage = lazy(async () => {

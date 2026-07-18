@@ -1,6 +1,6 @@
 import { Menu, MenuButton, MenuItem, MenuProvider } from "@ariakit/react";
 import { FiCheck } from "react-icons/fi";
-import { runHeadline } from "../../../lib/dashboard";
+import { runHeadline } from "../../../lib/dashboard-data";
 import { formatDate, formatDateOnly } from "../../../lib/format";
 import type { BenchmarkRun } from "../../../lib/types";
 import { cn } from "../../../components/ui/cn";

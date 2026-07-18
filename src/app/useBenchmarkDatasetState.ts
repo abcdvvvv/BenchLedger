@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef } from "react";
 import type { RefObject } from "react";
 import {
   buildRuns,
@@ -6,19 +6,18 @@ import {
   databaseTitle,
   metadataDescription,
   metadataTitle,
-  plotThemeFor,
   type DatabaseCatalogEntry,
-  type DatabaseCatalogStats,
-  type RunPairSort
-} from "../lib/dashboard";
+  type DatabaseCatalogStats
+} from "../lib/dashboard-data";
+import { plotThemeFor } from "../lib/dashboard-plotting";
 import { unique } from "../lib/format";
 import { useBenchmarkDataSource } from "../lib/useBenchmarkDataSource";
-import { useBenchmarkViewSlice } from "../features/benchmarks/useBenchmarkViewSlice";
 import { buildBenchmarkViewIndex } from "../lib/benchmark-view";
-import { useOverviewModel } from "../features/overview/useOverviewModel";
-import { useTrendBoardModel } from "../features/trend-board/useTrendBoardModel";
 import { useStoredUISettings } from "./useStoredUISettings";
-import type { BenchmarkRun, LoadedBenchmarkDataset } from "../lib/types";
+import type { BenchmarkDefinition, BenchmarkRun, LoadedBenchmarkDataset } from "../lib/types";
+
+
+const Empty_Benchmarks_By_Id: ReadonlyMap<string, BenchmarkDefinition> = new Map();
 
 type UseBenchmarkDataSourceRows = ReturnType<typeof useBenchmarkDataSource>["rows"];
 
@@ -32,20 +31,19 @@ export type BenchmarkDatasetState = {
   error: string;
   rows: UseBenchmarkDataSourceRows;
   dataset: LoadedBenchmarkDataset | null;
+  benchmarksById: ReadonlyMap<string, BenchmarkDefinition>;
+  benchmarkDefinitions: BenchmarkDefinition[];
   sourceDatabases: NonNullable<ReturnType<typeof useBenchmarkDataSource>["manifest"]>["databases"];
   currentMetadata: LoadedBenchmarkDataset["metadata"] | null;
   siteTitle: string;
   siteDescription: string;
   plotTheme: ReturnType<typeof plotThemeFor>;
   allRuns: BenchmarkRun[];
+  runsById: ReadonlyMap<string, BenchmarkRun>;
   environmentOptions: { value: string; label: string }[];
   hasDataset: boolean;
-  overviewSlice: ReturnType<typeof useBenchmarkViewSlice>;
-  trendBoardSlice: ReturnType<typeof useBenchmarkViewSlice>;
-  overviewModel: ReturnType<typeof useOverviewModel>;
-  trendBoardModel: ReturnType<typeof useTrendBoardModel>;
-  runPairSort: RunPairSort | null;
-  setRunPairSort: React.Dispatch<React.SetStateAction<RunPairSort | null>>;
+  benchmarkViewIndex: ReturnType<typeof buildBenchmarkViewIndex>;
+  latestRun: BenchmarkRun | null;
   databaseCatalog: DatabaseCatalogEntry[];
 };
 
@@ -74,8 +72,8 @@ function buildLoadedDatabaseStats(
   return {
     rowCount: rows.length,
     runCount: runs.length,
-    keyCount: unique(rows.map((row) => row.benchmark_id)).length,
-    environmentCount: unique(rows.map((row) => row.environment_id)).length,
+    keyCount: dataset.benchmarksById.size,
+    environmentCount: unique(runs.map((run) => run.environment_id)).length,
     metrics: unique(rows.map((row) => `${row.metric_name} ${row.statistic} ${row.unit}`)).sort(),
     latestRunDate: runs[0]?.measured_at ?? "",
     dirtyRunCount: runs.filter((run) => Boolean(run.code_state_metadata.source?.dirty)).length
@@ -136,7 +134,6 @@ function buildDatabaseCatalog(options: {
 export function useBenchmarkDatasetState(): BenchmarkDatasetState {
   const { settings, setSetting } = useStoredUISettings();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [runPairSort, setRunPairSort] = useState<RunPairSort | null>(null);
   const {
     rows,
     dataset,
@@ -150,39 +147,15 @@ export function useBenchmarkDatasetState(): BenchmarkDatasetState {
     onSelectedDatabaseIdChange: (databaseId) => setSetting("selectedDatabaseId", databaseId)
   });
 
-  const allRuns = useMemo(() => buildRuns(rows), [rows]);
-  const benchmarkViewIndex = useMemo(() => buildBenchmarkViewIndex(rows), [rows]);
+  const benchmarksById = dataset?.benchmarksById ?? Empty_Benchmarks_By_Id;
+  const benchmarkDefinitions = useMemo(() => Array.from(benchmarksById.values()), [benchmarksById]);
+  const allRuns = useMemo(() => dataset ? buildRuns(dataset) : [], [dataset]);
+  const runsById = useMemo(() => new Map(allRuns.map((run) => [run.run_id, run])), [allRuns]);
+  const benchmarkViewIndex = useMemo(
+    () => buildBenchmarkViewIndex(rows, runsById, benchmarksById),
+    [benchmarksById, rows, runsById]
+  );
   const environmentOptions = useMemo(() => buildEnvironmentOptions(allRuns), [allRuns]);
-
-  const overviewSlice = useBenchmarkViewSlice({
-    index: benchmarkViewIndex,
-    environment: settings.environment,
-    onEnvironmentChange: (environment) => setSetting("environment", environment),
-    metricKind: settings.metricKind,
-    onMetricKindChange: (metricKind) => setSetting("metricKind", metricKind),
-    branch: settings.branch,
-    onBranchChange: (branch) => setSetting("branch", branch),
-    timeStart: settings.timeStart,
-    timeEnd: settings.timeEnd,
-    displayStrategy: settings.displayStrategy,
-    group: settings.group,
-    onGroupChange: (group) => setSetting("group", group)
-  });
-
-  const trendBoardSlice = useBenchmarkViewSlice({
-    index: benchmarkViewIndex,
-    environment: settings.trendBoardEnvironment,
-    onEnvironmentChange: (environment) => setSetting("trendBoardEnvironment", environment),
-    metricKind: settings.trendBoardMetricKind,
-    onMetricKindChange: (metricKind) => setSetting("trendBoardMetricKind", metricKind),
-    branch: settings.trendBoardBranch,
-    onBranchChange: (branch) => setSetting("trendBoardBranch", branch),
-    timeStart: settings.trendBoardTimeStart,
-    timeEnd: settings.trendBoardTimeEnd,
-    displayStrategy: settings.trendBoardDisplayStrategy,
-    group: settings.trendBoardGroup,
-    onGroupChange: (group) => setSetting("trendBoardGroup", group)
-  });
 
   const plotTheme = useMemo(() => plotThemeFor(settings.theme), [settings.theme]);
   const sourceDatabases = manifest?.databases ?? [];
@@ -191,36 +164,6 @@ export function useBenchmarkDatasetState(): BenchmarkDatasetState {
   const siteDescription = currentMetadata
     ? metadataDescription(currentMetadata)
     : manifest?.site?.description || "Load a benchmark SQLite database to inspect runs and trends.";
-
-  const overviewModel = useOverviewModel({
-    rows: overviewSlice.scopedRows,
-    focusRunId: settings.focusRunId,
-    onFocusRunIdChange: (runId) => setSetting("focusRunId", runId),
-    baselineRunId: settings.baselineRunId,
-    onBaselineRunIdChange: (runId) => setSetting("baselineRunId", runId),
-    runPairSort,
-    onRunPairSortChange: setRunPairSort,
-    environment: settings.environment,
-    metricKind: settings.metricKind,
-    group: settings.group,
-    branch: settings.branch,
-    timeStart: settings.timeStart,
-    timeEnd: settings.timeEnd
-  });
-
-  const trendBoardModel = useTrendBoardModel({
-    rows: trendBoardSlice.scopedRows,
-    benchmarkOptions: trendBoardSlice.benchmarkOptions,
-    selectedBenchmarkIds: settings.trendBoardSelectedBenchmarkIds,
-    onSelectedBenchmarkIdsChange: (values) => setSetting("trendBoardSelectedBenchmarkIds", values),
-    metricKind: settings.trendBoardMetricKind,
-    trendAxisMode: settings.trendAxisMode,
-    trendLineShape: settings.trendLineShape,
-    trendMarkerSymbol: settings.trendMarkerSymbol,
-    trendMarkerFillMode: settings.trendMarkerFillMode,
-    plotTheme,
-    theme: settings.theme
-  });
 
   const loadedDatabaseStats = useMemo(
     () => buildLoadedDatabaseStats(dataset, rows, allRuns),
@@ -248,20 +191,19 @@ export function useBenchmarkDatasetState(): BenchmarkDatasetState {
     error,
     rows,
     dataset,
+    benchmarksById,
+    benchmarkDefinitions,
     sourceDatabases,
     currentMetadata,
     siteTitle,
     siteDescription,
     plotTheme,
     allRuns,
+    runsById,
     environmentOptions,
     hasDataset: Boolean(dataset && rows.length),
-    overviewSlice,
-    trendBoardSlice,
-    overviewModel,
-    trendBoardModel,
-    runPairSort,
-    setRunPairSort,
+    benchmarkViewIndex,
+    latestRun: allRuns[0] ?? null,
     databaseCatalog
   };
 }

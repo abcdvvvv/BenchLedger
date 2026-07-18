@@ -14,15 +14,14 @@ import { Panel, SectionTitle } from "../../components/ui/Card";
 import { PageHeader } from "../../components/common/PageHeader";
 import { StatCard } from "../../components/common/StatCard";
 import { DataCell, DataHeadCell, DataTable, DataTableShell, SortButton } from "../../components/ui/Table";
+import { runHeadline, runPairTableColumns } from "../../lib/dashboard-data";
 import {
   Benchmark_Diff_Page_Size_Options,
   type BenchmarkDiffPageSize,
-  runHeadline,
-  runPairTableColumns,
   type DisplayStrategy,
   type RunPairSort,
   type RunPairSortKey
-} from "../../lib/dashboard";
+} from "../../lib/dashboard-settings";
 import {
   formatDate,
   formatMetricValue,
@@ -152,16 +151,16 @@ function DatasetBanner(props: Pick<OverviewPageProps, "datasetState" | "header">
 
 function RunContextPanel(props: { focusRun: BenchmarkRun | null }) {
   const { focusRun } = props;
-  const runtimeName = focusRun?.environment_metadata.runtime?.name || "";
-  const runtimeVersion = focusRun?.environment_metadata.runtime?.version || "";
-  const cpuModel = focusRun?.environment_metadata.hardware?.cpu?.model || "";
-  const cpuThreads = focusRun?.environment_metadata.hardware?.cpu?.logical_threads;
-  const osName = focusRun?.environment_metadata.platform?.os?.name || "";
-  const osVersion = focusRun?.environment_metadata.platform?.os?.version || "";
-  const architecture = focusRun?.environment_metadata.platform?.architecture || "";
-  const revision = focusRun?.code_state_metadata.source?.revision || "";
-  const branch = focusRun?.code_state_metadata.source?.branch || focusRun?.run_metadata.source?.branch || "";
-  const tags = focusRun?.code_state_metadata.source?.tags || focusRun?.run_metadata.source?.tags || [];
+  const runtimeName = focusRun?.environment_identity.runtime?.name || "";
+  const runtimeVersion = focusRun?.environment_identity.runtime?.version || "";
+  const cpuModel = focusRun?.environment_identity.hardware?.cpu?.model || "";
+  const cpuThreads = focusRun?.environment_identity.hardware?.cpu?.logical_threads;
+  const osName = focusRun?.environment_identity.platform?.os?.name || "";
+  const osVersion = focusRun?.environment_identity.platform?.os?.version || "";
+  const architecture = focusRun?.environment_identity.platform?.architecture || "";
+  const revision = focusRun?.code_state_identity.source?.revision || "";
+  const branch = focusRun?.run_metadata.source?.branch || "";
+  const tags = focusRun?.run_metadata.source?.tags || [];
   const dirty = typeof focusRun?.code_state_metadata.source?.dirty === "boolean" ? String(focusRun.code_state_metadata.source.dirty) : "n/a";
   const rows = [
     ["Run", focusRun ? runHeadline(focusRun) : "n/a"],
@@ -200,11 +199,19 @@ function RunContextPanel(props: { focusRun: BenchmarkRun | null }) {
       </div>
       {focusRun ? (
         <details className="mt-5">
-          <summary className="type-body-strong cursor-pointer">Raw Metadata</summary>
+          <summary className="type-body-strong cursor-pointer">Raw Identity & Metadata</summary>
           <div className="mt-3 grid gap-3">
+            <div>
+              <div className="type-table-head mb-2">Code State Identity</div>
+              <pre className="surface-inset pad-field type-table overflow-x-auto whitespace-pre-wrap break-words">{JSON.stringify(focusRun.code_state_identity, null, 2)}</pre>
+            </div>
             <div>
               <div className="type-table-head mb-2">Code State Metadata</div>
               <pre className="surface-inset pad-field type-table overflow-x-auto whitespace-pre-wrap break-words">{JSON.stringify(focusRun.code_state_metadata, null, 2)}</pre>
+            </div>
+            <div>
+              <div className="type-table-head mb-2">Environment Identity</div>
+              <pre className="surface-inset pad-field type-table overflow-x-auto whitespace-pre-wrap break-words">{JSON.stringify(focusRun.environment_identity, null, 2)}</pre>
             </div>
             <div>
               <div className="type-table-head mb-2">Environment Metadata</div>

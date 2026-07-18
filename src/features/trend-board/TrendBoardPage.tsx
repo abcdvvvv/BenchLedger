@@ -8,16 +8,15 @@ import { EmptyState } from "../../components/common/EmptyState";
 import { Field, FieldLabel, InputField, SelectField, Toolbar, ToolbarGrid } from "../../components/ui/Field";
 import { Panel, SectionTitle } from "../../components/ui/Card";
 import { PageHeader } from "../../components/common/PageHeader";
+import { Trend_Board_Plot_Height, type PlotTheme } from "../../lib/dashboard-plotting";
 import {
   Trend_Board_Max_Columns,
   Trend_Board_Min_Columns,
-  Trend_Board_Plot_Height,
   clampTrendBoardColumns,
   type DisplayStrategy,
-  type PlotTheme,
   type TrendAxisMode,
   type TrendBoardViewMode
-} from "../../lib/dashboard";
+} from "../../lib/dashboard-settings";
 import type { TrendBoardCard, TrendBoardCombinedChart } from "./useTrendBoardModel";
 
 export type TrendBoardPageProps = {

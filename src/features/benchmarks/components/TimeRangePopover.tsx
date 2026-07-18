@@ -5,7 +5,7 @@ import {
   useStoreState
 } from "@ariakit/react";
 import { useEffect, useRef } from "react";
-import { openNativeDatePicker } from "../../../lib/dashboard";
+import { openNativeDatePicker } from "../../../lib/dashboard-settings";
 import { InputField } from "../../../components/ui/Field";
 import { DisclosureTriggerContent, menuTriggerClassName } from "../../../components/ui/Menu";
 

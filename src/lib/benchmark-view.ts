@@ -1,16 +1,8 @@
 import { parseDate } from "./format";
-import {
-  comparePath,
-  dateInputValue,
-  metricFamilyLabel,
-  rowMatchesDisplayStrategy,
-  runAxisLabel,
-  runHeadline,
-  runTone,
-  type DisplayStrategy,
-  type TrendPlotRow
-} from "./dashboard";
-import type { BenchmarkRow, BenchmarkRun } from "./types";
+import { comparePath, runAxisLabel, runHeadline, runTone } from "./dashboard-data";
+import { metricFamilyLabel, type TrendPlotRow } from "./dashboard-plotting";
+import { dateInputValue, type DisplayStrategy } from "./dashboard-settings";
+import type { BenchmarkDefinition, BenchmarkRow, BenchmarkRun } from "./types";
 
 export type BenchmarkViewGroupOption = {
   value: string;
@@ -34,6 +26,9 @@ export type BenchmarkViewFilterState = {
 
 export type BenchmarkViewIndexedRow = {
   row: BenchmarkRow;
+  benchmark: BenchmarkDefinition;
+  environmentId: string;
+  codeDate: string;
   metricKind: string;
   branch: string;
   codeDateValue: number | null;
@@ -49,23 +44,31 @@ export type BenchmarkViewIndex = {
   datasetTimeEnd: string;
 };
 
-export type BenchmarkViewResolvedSlice = {
+export type BenchmarkViewBaseSlice = {
   effectiveEnvironment: string;
   effectiveMetricKind: string;
   effectiveBranch: string;
-  effectiveGroup: string;
   metricOptions: string[];
   branchOptions: string[];
   datasetTimeStart: string;
   datasetTimeEnd: string;
   filteredRows: BenchmarkRow[];
+  filteredBenchmarks: BenchmarkDefinition[];
   groupOptions: BenchmarkViewGroupOption[];
+};
+
+export type BenchmarkViewResolvedSlice = BenchmarkViewBaseSlice & {
+  effectiveGroup: string;
   selectedGroupLabel: string;
   scopedRows: BenchmarkRow[];
   benchmarkOptions: BenchmarkViewBenchmarkOption[];
 };
 
-export function buildBenchmarkViewIndex(rows: BenchmarkRow[]): BenchmarkViewIndex {
+export function buildBenchmarkViewIndex(
+  rows: BenchmarkRow[],
+  runsById: ReadonlyMap<string, BenchmarkRun>,
+  benchmarksById: ReadonlyMap<string, BenchmarkDefinition>
+): BenchmarkViewIndex {
   const allRows: BenchmarkViewIndexedRow[] = [];
   const rowsByEnvironment = new Map<string, BenchmarkViewIndexedRow[]>([["all", allRows]]);
   const metricOptionsByEnvironment = new Map<string, Set<string>>([["all", new Set<string>()]]);
@@ -76,22 +79,22 @@ export function buildBenchmarkViewIndex(rows: BenchmarkRow[]): BenchmarkViewInde
   let latestCodeDate = "";
 
   for (const row of rows) {
-    const indexedRow = _indexRow(row);
+    const indexedRow = _indexRow(row, runsById.get(row.run_id), benchmarksById.get(row.benchmark_id));
     allRows.push(indexedRow);
     metricOptionsByEnvironment.get("all")!.add(indexedRow.metricKind);
 
-    const environmentRows = rowsByEnvironment.get(row.environment_id);
+    const environmentRows = rowsByEnvironment.get(indexedRow.environmentId);
     if (environmentRows) {
       environmentRows.push(indexedRow);
     } else {
-      rowsByEnvironment.set(row.environment_id, [indexedRow]);
+      rowsByEnvironment.set(indexedRow.environmentId, [indexedRow]);
     }
 
-    const environmentMetricOptions = metricOptionsByEnvironment.get(row.environment_id);
+    const environmentMetricOptions = metricOptionsByEnvironment.get(indexedRow.environmentId);
     if (environmentMetricOptions) {
       environmentMetricOptions.add(indexedRow.metricKind);
     } else {
-      metricOptionsByEnvironment.set(row.environment_id, new Set([indexedRow.metricKind]));
+      metricOptionsByEnvironment.set(indexedRow.environmentId, new Set([indexedRow.metricKind]));
     }
 
     if (indexedRow.branch) branchOptions.add(indexedRow.branch);
@@ -99,11 +102,11 @@ export function buildBenchmarkViewIndex(rows: BenchmarkRow[]): BenchmarkViewInde
     if (indexedRow.codeDateValue === null) continue;
     if (indexedRow.codeDateValue < earliestCodeDateValue) {
       earliestCodeDateValue = indexedRow.codeDateValue;
-      earliestCodeDate = row.code_date;
+      earliestCodeDate = indexedRow.codeDate;
     }
     if (indexedRow.codeDateValue > latestCodeDateValue) {
       latestCodeDateValue = indexedRow.codeDateValue;
-      latestCodeDate = row.code_date;
+      latestCodeDate = indexedRow.codeDate;
     }
   }
 
@@ -119,11 +122,11 @@ export function buildBenchmarkViewIndex(rows: BenchmarkRow[]): BenchmarkViewInde
   };
 }
 
-export function buildGroupOptions(rows: BenchmarkRow[]): BenchmarkViewGroupOption[] {
+export function buildGroupOptions(benchmarks: Iterable<BenchmarkDefinition>): BenchmarkViewGroupOption[] {
   const optionsByValue = new Map<string, BenchmarkViewGroupOption>();
-  for (const row of rows) {
-    for (let depth = 1; depth <= row.benchmark_path.length; depth += 1) {
-      const path = row.benchmark_path.slice(0, depth);
+  for (const benchmark of benchmarks) {
+    for (let depth = 1; depth <= benchmark.path.length; depth += 1) {
+      const path = benchmark.path.slice(0, depth);
       const value = JSON.stringify(path);
       if (optionsByValue.has(value)) continue;
       optionsByValue.set(value, { value, path });
@@ -132,118 +135,90 @@ export function buildGroupOptions(rows: BenchmarkRow[]): BenchmarkViewGroupOptio
   return Array.from(optionsByValue.values()).sort((left, right) => comparePath(left.path, right.path));
 }
 
-export function buildBenchmarkOptions(rows: BenchmarkRow[]): BenchmarkViewBenchmarkOption[] {
-  const optionRows = Array.from(new Map(rows.map((row) => [row.benchmark_id, row])).values());
-  return optionRows
-    .map((row) => ({
-      value: row.benchmark_id,
-      label: row.benchmark_label,
-      path: row.benchmark_path.length ? row.benchmark_path : [row.benchmark_label]
-    }))
-    .sort((left, right) => comparePath(left.path, right.path) || left.label.localeCompare(right.label) || left.value.localeCompare(right.value));
+export function buildBenchmarkOptions(benchmarks: Iterable<BenchmarkDefinition>): BenchmarkViewBenchmarkOption[] {
+  return Array.from(benchmarks, (benchmark) => ({
+    value: benchmark.id,
+    label: benchmark.label,
+    path: benchmark.path
+  })).sort((left, right) => comparePath(left.path, right.path) || left.label.localeCompare(right.label) || left.value.localeCompare(right.value));
 }
 
-export function scopeRowsToGroup(rows: BenchmarkRow[], selectedGroupPath: string[] | null): BenchmarkRow[] {
-  if (!selectedGroupPath) return rows;
-  return rows.filter((row) => selectedGroupPath.every((segment, index) => row.benchmark_path[index] === segment));
+function benchmarkMatchesGroup(benchmark: BenchmarkDefinition, selectedGroupPath: string[] | null): boolean {
+  if (!selectedGroupPath) return true;
+  return selectedGroupPath.every((segment, index) => benchmark.path[index] === segment);
 }
 
-export function datasetTimeBound(
-  rows: BenchmarkRow[],
-  mode: "earliest" | "latest"
-): string {
-  let selectedCodeDate = "";
-  let selectedTime = mode === "earliest" ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY;
+export function resolveBenchmarkViewBaseSlice(
+  index: BenchmarkViewIndex,
+  state: BenchmarkViewFilterState
+): BenchmarkViewBaseSlice {
+  const effectiveEnvironment = index.rowsByEnvironment.has(state.environment) ? state.environment : "all";
+  const metricOptions = index.metricOptionsByEnvironment.get(effectiveEnvironment) ?? [];
+  const effectiveMetricKind = metricOptions.includes(state.metricKind) ? state.metricKind : (metricOptions[0] ?? "");
+  const effectiveBranch = index.branchOptions.includes(state.branch) ? state.branch : "all";
+  const filteredRows: BenchmarkRow[] = [];
+  const filteredBenchmarksById = new Map<string, BenchmarkDefinition>();
 
-  for (const row of rows) {
-    const rowDate = parseDate(row.code_date)?.valueOf();
-    if (rowDate === undefined) continue;
-    if (mode === "earliest") {
-      if (rowDate < selectedTime) {
-        selectedTime = rowDate;
-        selectedCodeDate = row.code_date;
-      }
-      continue;
-    }
-    if (rowDate > selectedTime) {
-      selectedTime = rowDate;
-      selectedCodeDate = row.code_date;
+  if (effectiveMetricKind) {
+    for (const indexedRow of index.rowsByEnvironment.get(effectiveEnvironment) ?? []) {
+      if (indexedRow.metricKind !== effectiveMetricKind) continue;
+      if (effectiveBranch !== "all" && indexedRow.branch !== effectiveBranch) continue;
+      if (!rowMatchesDisplayStrategyFromFacts(indexedRow, state.displayStrategy)) continue;
+      if (state.timeStartValue !== null && (indexedRow.codeDateValue === null || indexedRow.codeDateValue < state.timeStartValue)) continue;
+      if (state.timeEndValue !== null && (indexedRow.codeDateValue === null || indexedRow.codeDateValue > state.timeEndValue)) continue;
+      filteredRows.push(indexedRow.row);
+      filteredBenchmarksById.set(indexedRow.benchmark.id, indexedRow.benchmark);
     }
   }
 
-  return dateInputValue(selectedCodeDate);
+  const filteredBenchmarks = Array.from(filteredBenchmarksById.values());
+  return {
+    effectiveEnvironment,
+    effectiveMetricKind,
+    effectiveBranch,
+    metricOptions,
+    branchOptions: index.branchOptions,
+    datasetTimeStart: index.datasetTimeStart,
+    datasetTimeEnd: index.datasetTimeEnd,
+    filteredRows,
+    filteredBenchmarks,
+    groupOptions: buildGroupOptions(filteredBenchmarks)
+  };
+}
+
+export function resolveBenchmarkViewGroupSlice(
+  baseSlice: BenchmarkViewBaseSlice,
+  group: string
+): BenchmarkViewResolvedSlice {
+  const selectedGroup = group === "all"
+    ? null
+    : baseSlice.groupOptions.find((option) => option.value === group) ?? null;
+  const effectiveGroup = selectedGroup ? group : "all";
+  const selectedGroupPath = selectedGroup?.path ?? null;
+  const scopedBenchmarks = selectedGroupPath
+    ? baseSlice.filteredBenchmarks.filter((benchmark) => benchmarkMatchesGroup(benchmark, selectedGroupPath))
+    : baseSlice.filteredBenchmarks;
+  const scopedRows = selectedGroupPath
+    ? (() => {
+        const scopedBenchmarkIds = new Set(scopedBenchmarks.map((benchmark) => benchmark.id));
+        return baseSlice.filteredRows.filter((row) => scopedBenchmarkIds.has(row.benchmark_id));
+      })()
+    : baseSlice.filteredRows;
+
+  return {
+    ...baseSlice,
+    effectiveGroup,
+    selectedGroupLabel: selectedGroup?.path.join(" > ") ?? "All groups",
+    scopedRows,
+    benchmarkOptions: buildBenchmarkOptions(scopedBenchmarks)
+  };
 }
 
 export function resolveBenchmarkViewSlice(
   index: BenchmarkViewIndex,
   state: BenchmarkViewFilterState & { group: string }
 ): BenchmarkViewResolvedSlice {
-  const effectiveEnvironment = index.rowsByEnvironment.has(state.environment) ? state.environment : "all";
-  const metricOptions = index.metricOptionsByEnvironment.get(effectiveEnvironment) ?? [];
-  const effectiveMetricKind = metricOptions.includes(state.metricKind) ? state.metricKind : (metricOptions[0] ?? "");
-  const effectiveBranch = index.branchOptions.includes(state.branch) ? state.branch : "all";
-  const filteredRows = effectiveMetricKind
-    ? (index.rowsByEnvironment.get(effectiveEnvironment) ?? [])
-      .filter((indexedRow) => {
-        if (indexedRow.metricKind !== effectiveMetricKind) return false;
-        if (effectiveBranch !== "all" && indexedRow.branch !== effectiveBranch) return false;
-        if (!rowMatchesDisplayStrategyFromFacts(indexedRow, state.displayStrategy)) return false;
-        if (state.timeStartValue !== null && (indexedRow.codeDateValue === null || indexedRow.codeDateValue < state.timeStartValue)) return false;
-        if (state.timeEndValue !== null && (indexedRow.codeDateValue === null || indexedRow.codeDateValue > state.timeEndValue)) return false;
-        return true;
-      })
-      .map((indexedRow) => indexedRow.row)
-    : [];
-  const groupOptions = buildGroupOptions(filteredRows);
-  const groupOptionsByValue = new Map(groupOptions.map((option) => [option.value, option]));
-  const effectiveGroup = state.group === "all" || groupOptionsByValue.has(state.group) ? state.group : "all";
-  const selectedGroupPath = effectiveGroup === "all" ? null : groupOptionsByValue.get(effectiveGroup)?.path ?? null;
-  const selectedGroupLabel = effectiveGroup === "all"
-    ? "All groups"
-    : groupOptionsByValue.get(effectiveGroup)?.path.join(" > ") ?? "All groups";
-  const scopedRows = scopeRowsToGroup(filteredRows, selectedGroupPath);
-
-  return {
-    effectiveEnvironment,
-    effectiveMetricKind,
-    effectiveBranch,
-    effectiveGroup,
-    metricOptions,
-    branchOptions: index.branchOptions,
-    datasetTimeStart: index.datasetTimeStart,
-    datasetTimeEnd: index.datasetTimeEnd,
-    filteredRows,
-    groupOptions,
-    selectedGroupLabel,
-    scopedRows,
-    benchmarkOptions: buildBenchmarkOptions(scopedRows)
-  };
-}
-
-export function filterRowsByViewState(
-  rows: BenchmarkRow[],
-  state: BenchmarkViewFilterState
-): BenchmarkRow[] {
-  const {
-    environment,
-    metricKind,
-    branch,
-    timeStartValue,
-    timeEndValue,
-    displayStrategy
-  } = state;
-
-  return rows.filter((row) => {
-    if (environment !== "all" && row.environment_id !== environment) return false;
-    if (metricFamilyLabel(row) !== metricKind) return false;
-    const rowBranch = row.code_state_metadata.source?.branch || row.run_metadata.source?.branch || "";
-    if (branch !== "all" && rowBranch !== branch) return false;
-    if (!rowMatchesDisplayStrategy(row, displayStrategy)) return false;
-    const rowDate = parseDate(row.code_date)?.valueOf() ?? null;
-    if (timeStartValue !== null && (rowDate === null || rowDate < timeStartValue)) return false;
-    if (timeEndValue !== null && (rowDate === null || rowDate > timeEndValue)) return false;
-    return true;
-  });
+  return resolveBenchmarkViewGroupSlice(resolveBenchmarkViewBaseSlice(index, state), state.group);
 }
 
 export function normalizeSelectedBenchmarkIds(
@@ -267,15 +242,21 @@ export function buildTrendRowsByBenchmark(
 
   for (const row of rows) {
     if (!selectedBenchmarkIdSet.has(row.benchmark_id)) continue;
-    const dateValue = parseDate(row.code_date);
-    if (!dateValue) continue;
     const run = runsById.get(row.run_id);
+    if (!run) continue;
+    const dateValue = parseDate(run.code_date);
+    if (!dateValue) continue;
     const entry: TrendPlotRow = {
       ...row,
+      code_state_id: run.code_state_id,
+      code_date: run.code_date,
+      environment_id: run.environment_id,
+      environment_label: run.environment_label,
+      measured_at: run.measured_at,
       date_value: dateValue,
-      run_axis_label: runAxisLabel(row),
-      run_headline: run ? runHeadline(run) : row.code_label,
-      run_tone: run ? runTone(run) : "branch"
+      run_axis_label: runAxisLabel(run),
+      run_headline: runHeadline(run),
+      run_tone: runTone(run)
     };
     const bucket = rowsByBenchmark.get(row.benchmark_id);
     if (bucket) {
@@ -292,45 +273,28 @@ export function buildTrendRowsByBenchmark(
   return rowsByBenchmark;
 }
 
-export function createLRUCache<K, V>(limit: number) {
-  const entries = new Map<K, V>();
-
-  return {
-    get(key: K): V | undefined {
-      const value = entries.get(key);
-      if (value === undefined) return undefined;
-      entries.delete(key);
-      entries.set(key, value);
-      return value;
-    },
-    set(key: K, value: V) {
-      if (entries.has(key)) entries.delete(key);
-      entries.set(key, value);
-      if (entries.size <= limit) return;
-      const oldestKey = entries.keys().next().value as K | undefined;
-      if (oldestKey !== undefined) entries.delete(oldestKey);
-    },
-    keys(): K[] {
-      return Array.from(entries.keys());
-    }
-  };
-}
 
 function _compareTrendRowsByDate(left: TrendPlotRow, right: TrendPlotRow): number {
   return left.date_value!.valueOf() - right.date_value!.valueOf();
 }
 
-function _indexRow(row: BenchmarkRow): BenchmarkViewIndexedRow {
-  const branch = row.code_state_metadata.source?.branch || row.run_metadata.source?.branch || "";
-  const tags = row.code_state_metadata.source?.tags?.length
-    ? row.code_state_metadata.source.tags
-    : row.run_metadata.source?.tags ?? [];
+function _indexRow(
+  row: BenchmarkRow,
+  run: BenchmarkRun | undefined,
+  benchmark: BenchmarkDefinition | undefined
+): BenchmarkViewIndexedRow {
+  const branch = run?.run_metadata.source?.branch || "";
+  const tags = run?.run_metadata.source?.tags ?? [];
+  const codeDate = run?.code_date ?? "";
 
   return {
     row,
+    benchmark: benchmark ?? { id: row.benchmark_id, path: [], label: row.benchmark_id },
+    environmentId: run?.environment_id ?? "",
+    codeDate,
     metricKind: metricFamilyLabel(row),
     branch,
-    codeDateValue: parseDate(row.code_date)?.valueOf() ?? null,
+    codeDateValue: parseDate(codeDate)?.valueOf() ?? null,
     hasTags: Boolean(tags.length),
     isMainBranch: branch === "main" || branch === "master"
   };

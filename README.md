@@ -51,7 +51,7 @@ that can be deployed as a static viewer with project-owned SQLite data.
 
 ## Quick Start
 
-For Julia packages, the fastest way to get started is to copy the two template files in [`templates/`](./templates):
+To get started with the bundled templates, copy the two template files in [`templates/`](./templates):
 
 ```text
 templates/runbench.jl
@@ -72,130 +72,122 @@ YourPackage/
 Then edit:
 
 - [`benchmark/runbench.jl`](./templates/runbench.jl): replace the arrow-marked block with your benchmark suite, and update the metadata defaults in that same block.
-- [`.github/workflows/Benchmarks.yml`](./templates/Benchmarks.yml): set your main benchmark branch, BenchLedger version, package name, description, and project URL in the top-level `env:` section.
+- [`.github/workflows/Benchmarks.yml`](./templates/Benchmarks.yml): set your main benchmark branch, BenchLedger version, database branch, and database file in the workflow.
 
-After that, commit the two files, push to your default branch, and let GitHub Actions generate and publish your benchmark database to `gh-pages`.
+After that, commit the two files, push to your default branch, and let GitHub Actions run the current target and update the configured benchmark database. With the default `gh-pages` database branch, the workflow also installs and publishes the BenchLedger viewer.
 
-The generic `runbench.jl` writer only reads `BENCH_*` inputs plus local system and git state. Platform-specific adapters such as `Benchmarks.yml` are responsible for mapping CI provider variables into `BENCH_*` and `BENCH_RUN_METADATA`.
+The generic `runbench.jl` writer only reads `BENCH_*` inputs plus local system and git state. Platform-specific adapters such as `Benchmarks.yml` are responsible for translating CI-specific context into this small input surface.
 
 ### Common `BENCH_*` inputs
 
-The generic Julia writer currently understands these public inputs:
+The bundled writer understands five public inputs:
 
-- `BENCH_TARGET_PATH`: target project path to benchmark
-- `BENCH_DB_PATH`: SQLite database path
-- `BENCH_DB_IN_CURRENT_BRANCH`: whether to store the database in the current git branch
-- `BENCH_SOURCE_BRANCH`: explicit source branch override
-- `BENCH_SOURCE_TAGS`: explicit source tags override as a comma-separated list
-- `BENCH_SOURCE_REVISION`: explicit source revision override
-- `BENCH_DATE`: explicit code-state date override
-- `BENCH_NOTES`: free-form run notes
-- `BENCH_CODE_STATE_METADATA`: JSON object merged into `code_state_metadata`
-- `BENCH_ENVIRONMENT_METADATA`: JSON object merged into `environment_metadata`
-- `BENCH_RUN_METADATA`: JSON object merged into `run_metadata`
+- `BENCH_DB_PATH`: required SQLite database file to update
+- `BENCH_TARGET_PATH`: optional target project path to benchmark; defaults to the project containing the benchmark directory
+- `BENCH_CODE_STATE`: optional JSON object with `id`, `label`, `code_date`, `identity`, and `metadata` overrides
+- `BENCH_ENVIRONMENT`: optional JSON object with `label`, `identity`, and `metadata` overrides
+- `BENCH_RUN`: optional JSON object with `notes` and `metadata` overrides
 
-Platform adapters such as GitHub Actions workflows should translate provider-specific variables into this `BENCH_*` surface rather than expecting the generic writer to recognize CI-vendor environment variables directly.
+Git revision, tags, branch, code date, platform, runtime, hardware, and execution context are detected automatically when available. Use the three JSON objects only when you need to override detected entity fields or attach additional metadata.
 
-## Schema v4
+## Data Layout
 
-BenchLedger now expects schema version 4 databases and does **not** migrate schema v3 databases.
+### Schema v5
 
-The Julia template writes five core relations:
+#### `benchledger_metadata`
 
 ```text
 benchledger_metadata
-benchmark_code_states
-benchmark_environments
-benchmark_runs
-benchmark_results
+├── key
+└── value
 ```
 
-and one latest-results view:
+#### `benchmark_code_states`
+
+```text
+benchmark_code_states
+├── id
+├── label
+├── code_date
+├── identity
+└── metadata
+```
+
+#### `benchmark_environments`
+
+```text
+benchmark_environments
+├── id
+├── label
+├── identity
+└── metadata
+```
+
+#### `benchmark_runs`
+
+```text
+benchmark_runs
+├── id
+├── code_state_id
+├── environment_id
+├── measured_at
+├── notes
+└── metadata
+```
+
+#### `benchmark_results`
+
+```text
+benchmark_results
+├── run_id
+├── benchmark_id
+├── benchmark_path
+├── benchmark_label
+├── metric_name
+├── statistic
+├── unit
+├── value
+└── better
+```
+
+#### `benchmark_results_latest`
 
 ```text
 benchmark_results_latest
+├── run_id
+├── code_state_id
+├── environment_id
+├── code_label
+├── environment_label
+├── code_date
+├── measured_at
+├── notes
+├── code_state_identity
+├── environment_identity
+├── code_state_metadata
+├── environment_metadata
+├── run_metadata
+├── benchmark_path
+├── benchmark_id
+├── benchmark_label
+├── metric_name
+├── statistic
+├── unit
+├── value
+└── better
 ```
 
-The frontend reads `benchmark_results_latest`, which now exposes:
+### benchledger.json
+
+`benchledger.json` is a manifest file outside the SQLite database. The bundled workflow writes it to `gh-pages/benchmarks/benchledger.json`, alongside the database directory that typically contains `gh-pages/benchmarks/data/benchledger.sqlite`.
 
 ```text
-run_id
-code_state_id
-code_label
-code_date
-environment_id
-environment_label
-measured_at
-notes
-code_state_metadata
-environment_metadata
-run_metadata
-benchmark_path
-benchmark_id
-benchmark_label
-metric_name
-statistic
-unit
-value
-better
-```
-
-### Metadata model
-
-Schema v4 separates three kinds of JSON metadata:
-
-- `code_state_metadata`: source revision, branch, tags, dirty state, and related code-state details
-- `environment_metadata`: runtime, OS, architecture, CPU, and execution environment details
-- `run_metadata`: writer information, one-off run annotations, and optional adapter-provided CI metadata
-
-Unknown metadata fields are preserved and shown by the frontend in raw metadata sections.
-
-The Julia template derives `environment_id` from a stable identity subset of `environment_metadata`. Descriptive fields such as `platform.kernel` are preserved in metadata but do not affect environment identity.
-
-### Example metadata: Julia
-
-```json
-{
-  "runtime": { "name": "Julia", "version": "1.12.6" },
-  "platform": {
-    "os": { "name": "ubuntu", "version": "24.04" },
-    "kernel": { "name": "linux", "version": "6.8.0" },
-    "architecture": "x86_64"
-  },
-  "hardware": {
-    "cpu": { "model": "AMD Ryzen 9", "logical_threads": 24 }
-  }
-}
-```
-
-### Example metadata: Python
-
-```json
-{
-  "runtime": { "name": "Python", "version": "3.12.4" },
-  "benchmark": {
-    "framework": { "name": "pytest-benchmark", "version": "5.1.0" }
-  },
-  "platform": {
-    "os": { "name": "ubuntu", "version": "24.04" },
-    "architecture": "x86_64"
-  }
-}
-```
-
-### Example metadata: C++ native
-
-```json
-{
-  "runtime": { "name": "native", "version": "clang++ 18" },
-  "benchmark": {
-    "framework": { "name": "google-benchmark", "version": "1.9.0" }
-  },
-  "platform": {
-    "os": { "name": "macos", "version": "15.0" },
-    "architecture": "arm64"
-  }
-}
+benchledger.json
+├── manifest_version
+├── benchledger_web_version
+├── generated_at
+├── site
+└── databases[]
 ```
 
 ## Local Preview
@@ -225,25 +217,36 @@ and refresh the UI when the database changes.
 If you instead load a database through `Choose SQLite`, the browser treats it as a one-off
 local file selection and automatic refresh is not available.
 
-## Backfill Old Versions
+## Target Modes and Backfill
 
-Sometimes BenchLedger is added after a project already has released versions.
-In that case, the provided workflow can backfill historical releases by running
-the current benchmark harness against older tags and appending the results into
-the same SQLite database.
+The bundled GitHub Actions workflow uses the same benchmark harness for three target modes:
 
-To run a backfill:
+- `current`: benchmark the source checked out for the workflow run. This is also the mode used by normal push and tag triggers.
+- `ref`: benchmark one commit, tag, or branch selected by `target_ref`. Set `target_repository` to benchmark another repository, or leave it empty to benchmark another ref from the current repository.
+- `tags`: benchmark a sequence of tags using the current benchmark harness. This is the backfill mode. It can target the current repository or another repository.
 
-1. Open your repository on GitHub.
-2. Go to the `Actions` tab.
-3. Select the `Benchmarks` workflow.
-4. Click `Run workflow`.
-5. Set the `backfill` input to `true`.
-6. Start the workflow and wait for it to finish.
+For `tags`, `tag_pattern` filters the available tags first. `tag_start` and `tag_end` then select an inclusive range in Git version-sort order. Either boundary may be left empty.
 
-The workflow will iterate through the repository's tags, benchmark each
-historical version, update the shared SQLite database, and publish the refreshed
-BenchLedger page back to `gh-pages`.
+Examples:
+
+```text
+target_mode=current
+→ benchmark the current workflow checkout
+
+target_mode=ref, target_ref=v1.2.0
+→ benchmark v1.2.0 from the current repository
+
+target_mode=ref, target_repository=OtherOrg/OtherRepo, target_ref=abc123
+→ benchmark commit abc123 from another repository
+
+target_mode=tags, tag_pattern=v*, tag_start=v1.0.0, tag_end=v2.0.0
+→ backfill the selected tag range from the current repository
+
+target_mode=tags, target_repository=OtherOrg/OtherRepo, tag_pattern=v*
+→ backfill matching tags from another repository
+```
+
+The workflow always keeps the benchmark harness in the current repository checkout and checks non-current targets out separately. The writer only receives the resulting target path and database path; checkout, branch management, commits, and pushes remain workflow responsibilities.
 
 ## License
 

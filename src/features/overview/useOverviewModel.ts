@@ -2,17 +2,10 @@ import { createElement, useEffect, useMemo, type ReactNode } from "react";
 import { FiActivity, FiClock, FiDatabase, FiGitBranch } from "react-icons/fi";
 import type { IconType } from "react-icons";
 import { formatPercent, percentageChange, unique } from "../../lib/format";
-import {
-  buildRuns,
-  defaultRunPairSortDirection,
-  metricFamilyKey,
-  runId,
-  runPairSortValue,
-  trendDisplayUnitContext,
-  type RunPairSort,
-  type RunPairSortKey
-} from "../../lib/dashboard";
-import type { BenchmarkRow, PairComparison } from "../../lib/types";
+import { defaultRunPairSortDirection, runId, runPairSortValue } from "../../lib/dashboard-data";
+import { metricFamilyKey, trendDisplayUnitContext } from "../../lib/dashboard-plotting";
+import type { RunPairSort, RunPairSortKey } from "../../lib/dashboard-settings";
+import type { BenchmarkDefinition, BenchmarkRow, BenchmarkRun, PairComparison } from "../../lib/types";
 import { benchmarkDeltaTone } from "../benchmarks/benchmarkDeltaPresentation";
 
 export type OverviewStat = {
@@ -29,6 +22,8 @@ export type OverviewStat = {
 
 type UseOverviewModelOptions = {
   rows: BenchmarkRow[];
+  benchmarksById: ReadonlyMap<string, BenchmarkDefinition>;
+  allRuns: BenchmarkRun[];
   focusRunId: string;
   onFocusRunIdChange: (runId: string) => void;
   baselineRunId: string;
@@ -44,11 +39,11 @@ type UseOverviewModelOptions = {
 };
 
 type UseOverviewModelResult = {
-  runs: ReturnType<typeof buildRuns>;
-  latestRun: ReturnType<typeof buildRuns>[number] | null;
-  filteredRuns: ReturnType<typeof buildRuns>;
-  focusRun: ReturnType<typeof buildRuns>[number] | null;
-  baselineRun: ReturnType<typeof buildRuns>[number] | null;
+  runs: BenchmarkRun[];
+  latestRun: BenchmarkRun | null;
+  filteredRuns: BenchmarkRun[];
+  focusRun: BenchmarkRun | null;
+  baselineRun: BenchmarkRun | null;
   environmentMismatch: boolean;
   sortedComparisonRows: PairComparison[];
   stats: OverviewStat[];
@@ -58,6 +53,8 @@ type UseOverviewModelResult = {
 export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewModelResult {
   const {
     rows,
+    benchmarksById,
+    allRuns,
     focusRunId,
     onFocusRunIdChange,
     baselineRunId,
@@ -72,9 +69,10 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
     timeEnd
   } = options;
 
-  const runs = useMemo(() => buildRuns(rows), [rows]);
-  const latestRun = runs[0] ?? null;
-  const filteredRuns = runs;
+  const runIds = useMemo(() => new Set(rows.map((row) => row.run_id)), [rows]);
+  const filteredRuns = useMemo(() => allRuns.filter((run) => runIds.has(run.run_id)), [allRuns, runIds]);
+  const runs = filteredRuns;
+  const latestRun = filteredRuns[0] ?? null;
   const filteredRunsById = useMemo(
     () => new Map(filteredRuns.map((run) => [run.run_id, run])),
     [filteredRuns]
@@ -126,7 +124,7 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
         const scaledBaselineValue = displayUnitContext.scaleValue(baseline.value, baseline.unit);
         return {
           benchmark_id: key,
-          benchmark_label: focus.benchmark_label,
+          benchmark_label: benchmarksById.get(key)?.label ?? key,
           focus_value: scaledFocusValue,
           baseline_value: scaledBaselineValue,
           focus_unit: focus.unit,
@@ -138,7 +136,7 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
       })
       .filter((row): row is PairComparison => row !== null)
       .sort((left, right) => Math.abs(right.delta) - Math.abs(left.delta));
-  }, [baselineByBenchmark, focusByBenchmark]);
+  }, [baselineByBenchmark, benchmarksById, focusByBenchmark]);
 
   const sortedComparisonRows = useMemo(() => {
     if (!runPairSort) return comparisonRows;

@@ -5,17 +5,16 @@ export default defineConfig({
   base: "./",
   plugins: [react()],
   build: {
-    chunkSizeWarningLimit: 5000,
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes("plotly.js-dist-min") || id.includes("react-plotly.js")) return "plotly";
-          if (id.includes("sql.js")) return "sql";
+          if (id.includes("/node_modules/plotly.js/")) return "plotly";
+          if (id.includes("/node_modules/sql.js/")) return "sql";
           if (
-            id.includes("/react/") ||
-            id.includes("/react-dom/") ||
-            id.includes("@ariakit/react") ||
-            id.includes("react-icons")
+            id.includes("/node_modules/react/") ||
+            id.includes("/node_modules/react-dom/") ||
+            id.includes("/node_modules/@ariakit/react/") ||
+            id.includes("/node_modules/react-icons/")
           ) {
             return "vendor";
           }

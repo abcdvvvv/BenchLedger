@@ -4,7 +4,7 @@ import {
   readUISettings,
   type ThemeMode,
   type UISettings
-} from "../lib/dashboard";
+} from "../lib/dashboard-settings";
 
 type UseStoredUISettingsResult = {
   settings: UISettings;

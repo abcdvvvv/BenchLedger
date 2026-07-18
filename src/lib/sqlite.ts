@@ -1,9 +1,15 @@
-import initSqlJs, { type Database, type QueryExecResult } from "sql.js";
+import initSqlJs, { type Database } from "sql.js";
 import sqlWasmUrl from "sql.js/dist/sql-wasm.wasm?url";
 import type {
+  BenchmarkCodeState,
+  BenchmarkCodeStateIdentity,
+  BenchmarkDefinition,
   BenchmarkCodeStateMetadata,
+  BenchmarkEnvironment,
+  BenchmarkEnvironmentIdentity,
   BenchmarkEnvironmentMetadata,
   BenchmarkRunMetadata,
+  BenchmarkRunRecord,
   BenchmarkRow,
   BenchLedgerManifest,
   BenchLedgerManifestDatabase,
@@ -12,7 +18,7 @@ import type {
 } from "./types";
 
 const _Default_Manifest_Url = "./benchledger.json";
-const _Compatible_Schema_Versions = new Set([4]);
+const _Supported_Schema_Version = 5;
 const _Metadata_Defaults = {
   name: "",
   description: "",
@@ -28,9 +34,7 @@ let sqlPromise: Promise<Awaited<ReturnType<typeof initSqlJs>>> | null = null;
 
 async function loadSqlJs() {
   if (!sqlPromise) {
-    sqlPromise = initSqlJs({
-      locateFile: () => sqlWasmUrl
-    });
+    sqlPromise = initSqlJs({ locateFile: () => sqlWasmUrl });
   }
   return sqlPromise;
 }
@@ -43,13 +47,13 @@ function parseJsonRecord(value: unknown, fieldName: string, context: string): Re
   if (value === null || value === undefined || value === "") return {};
   try {
     const parsed: unknown = typeof value === "string" ? JSON.parse(value) : value;
-    if (!isRecord(parsed)) {
-      throw new Error(`must be a JSON object`);
-    }
+    if (!isRecord(parsed)) throw new Error("must be a JSON object");
     return parsed;
   } catch (error: unknown) {
     const detail = error instanceof Error ? error.message : "invalid JSON";
-    throw new Error(`Invalid ${fieldName} in ${context}: ${detail}.`);
+    const wrappedError = new Error(`Invalid ${fieldName} in ${context}: ${detail}.`);
+    (wrappedError as Error & { cause?: unknown }).cause = error;
+    throw wrappedError;
   }
 }
 
@@ -67,46 +71,103 @@ export function normalizeBenchmarkPath(value: unknown): string[] {
   return parsed.filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
 }
 
-export function normalizeBenchmarkRow(values: Record<string, unknown>): BenchmarkRow {
-  const runId = String(values.run_id ?? "");
-  const benchmarkPath = normalizeBenchmarkPath(values.benchmark_path);
-  const context = runId || String(values.benchmark_id ?? "benchmark row");
-
+export function normalizeBenchmarkDefinition(values: Record<string, unknown>): BenchmarkDefinition {
+  const id = String(values.benchmark_id ?? "");
+  const label = String(values.benchmark_label ?? "");
+  const path = normalizeBenchmarkPath(values.benchmark_path);
   return {
-    run_id: runId,
-    code_state_id: String(values.code_state_id ?? ""),
-    code_label: String(values.code_label ?? ""),
-    code_date: String(values.code_date ?? ""),
-    environment_id: String(values.environment_id ?? ""),
-    environment_label: String(values.environment_label ?? ""),
-    measured_at: String(values.measured_at ?? ""),
-    notes: String(values.notes ?? ""),
-    code_state_metadata: parseJsonRecord(values.code_state_metadata, "code_state_metadata", context) as BenchmarkCodeStateMetadata,
-    environment_metadata: parseJsonRecord(values.environment_metadata, "environment_metadata", context) as BenchmarkEnvironmentMetadata,
-    run_metadata: parseJsonRecord(values.run_metadata, "run_metadata", context) as BenchmarkRunMetadata,
-    benchmark_path: benchmarkPath,
+    id,
+    path: path.length ? path : (label ? [label] : []),
+    label
+  };
+}
+
+export function normalizeBenchmarkRow(values: Record<string, unknown>): BenchmarkRow {
+  return {
+    run_id: String(values.run_id ?? ""),
     benchmark_id: String(values.benchmark_id ?? ""),
-    benchmark_label: String(values.benchmark_label ?? ""),
     metric_name: String(values.metric_name ?? ""),
     statistic: String(values.statistic ?? ""),
     unit: String(values.unit ?? ""),
     value: Number(values.value ?? 0),
-    better: values.better === "higher" || values.better === "neutral" ? values.better : "lower",
-    group: benchmarkPath[0] || "other"
+    better: values.better === "higher" || values.better === "neutral" ? values.better : "lower"
   };
 }
 
-function rowsFromResult(result: QueryExecResult | undefined): BenchmarkRow[] {
-  if (!result) return [];
-  return result.values.map((row: unknown[]) => {
-    const entry = Object.fromEntries(result.columns.map((column: string, index: number) => [column, row[index]]));
-    return normalizeBenchmarkRow(entry);
-  });
+export function normalizeBenchmarkRunRecord(values: Record<string, unknown>): BenchmarkRunRecord {
+  const id = String(values.id ?? "");
+  return {
+    id,
+    code_state_id: String(values.code_state_id ?? ""),
+    environment_id: String(values.environment_id ?? ""),
+    measured_at: String(values.measured_at ?? ""),
+    notes: String(values.notes ?? ""),
+    metadata: parseJsonRecord(values.metadata, "run metadata", id || "benchmark run") as BenchmarkRunMetadata
+  };
 }
 
-function singleResultRows(result: QueryExecResult | undefined): Record<string, unknown>[] {
-  if (!result) return [];
-  return result.values.map((row: unknown[]) => Object.fromEntries(result.columns.map((column: string, index: number) => [column, row[index]])));
+export function normalizeBenchmarkCodeState(values: Record<string, unknown>): BenchmarkCodeState {
+  const id = String(values.id ?? "");
+  return {
+    id,
+    label: String(values.label ?? ""),
+    code_date: String(values.code_date ?? ""),
+    identity: parseJsonRecord(values.identity, "code-state identity", id || "code state") as BenchmarkCodeStateIdentity,
+    metadata: parseJsonRecord(values.metadata, "code-state metadata", id || "code state") as BenchmarkCodeStateMetadata
+  };
+}
+
+export function normalizeBenchmarkEnvironment(values: Record<string, unknown>): BenchmarkEnvironment {
+  const id = String(values.id ?? "");
+  return {
+    id,
+    label: String(values.label ?? ""),
+    identity: parseJsonRecord(values.identity, "environment identity", id || "environment") as BenchmarkEnvironmentIdentity,
+    metadata: parseJsonRecord(values.metadata, "environment metadata", id || "environment") as BenchmarkEnvironmentMetadata
+  };
+}
+
+function forEachQueryRow(db: Database, query: string, visit: (row: Record<string, unknown>) => void) {
+  const statement = db.prepare(query);
+  try {
+    while (statement.step()) {
+      visit(statement.getAsObject() as Record<string, unknown>);
+    }
+  } finally {
+    statement.free();
+  }
+}
+
+function rowsFromQuery(db: Database, query: string): BenchmarkRow[] {
+  const rows: BenchmarkRow[] = [];
+  forEachQueryRow(db, query, (row) => rows.push(normalizeBenchmarkRow(row)));
+  return rows;
+}
+
+function mapFromQuery<T extends { id: string }>(db: Database, query: string, normalize: (row: Record<string, unknown>) => T): ReadonlyMap<string, T> {
+  const values = new Map<string, T>();
+  forEachQueryRow(db, query, (row) => {
+    const value = normalize(row);
+    values.set(value.id, value);
+  });
+  return values;
+}
+
+function benchmarkDefinitionsFromQuery(db: Database, query: string): ReadonlyMap<string, BenchmarkDefinition> {
+  const definitions = new Map<string, BenchmarkDefinition>();
+  forEachQueryRow(db, query, (row) => {
+    const definition = normalizeBenchmarkDefinition(row);
+    if (!definition.id) throw new Error("Invalid benchmark definition: benchmark_id must not be empty.");
+    const existing = definitions.get(definition.id);
+    if (!existing) {
+      definitions.set(definition.id, definition);
+      return;
+    }
+    if (existing.label !== definition.label || existing.path.length !== definition.path.length || existing.path.some((segment, index) => segment !== definition.path[index])) {
+      throw new Error(`Conflicting benchmark definition for benchmark_id=${definition.id}.`);
+    }
+  });
+  return definitions;
 }
 
 export function normalizeManifestDatabase(entry: Record<string, unknown>): BenchLedgerManifestDatabase | null {
@@ -167,62 +228,38 @@ function relationColumns(db: Database, relationName: string): Set<string> {
   );
 }
 
-function selectMeasurementsQuery(db: Database): string {
-  if (!relationExists(db, "benchmark_results_latest")) {
-    throw new Error("No supported benchmark table was found in this SQLite database.");
+function requireRelationColumns(db: Database, relationName: string, requiredColumns: string[]) {
+  if (!relationExists(db, relationName)) {
+    throw new Error(`Unsupported BenchLedger database: missing ${relationName}.`);
   }
-
-  const columns = relationColumns(db, "benchmark_results_latest");
-  const requiredColumns = [
-    "run_id",
-    "code_state_id",
-    "code_label",
-    "code_date",
-    "environment_id",
-    "environment_label",
-    "measured_at",
-    "notes",
-    "code_state_metadata",
-    "environment_metadata",
-    "run_metadata",
-    "benchmark_path",
-    "benchmark_id",
-    "benchmark_label",
-    "metric_name",
-    "statistic",
-    "unit",
-    "value",
-    "better"
-  ];
+  const columns = relationColumns(db, relationName);
   for (const column of requiredColumns) {
-    if (!columns.has(column)) {
-      throw new Error(`Unsupported benchmark_results_latest schema: missing ${column}.`);
-    }
+    if (!columns.has(column)) throw new Error(`Unsupported ${relationName} schema: missing ${column}.`);
   }
+}
 
+function validateDataRelations(db: Database) {
+  requireRelationColumns(db, "benchmark_results_latest", [
+    "run_id", "benchmark_path", "benchmark_id", "benchmark_label", "metric_name", "statistic", "unit", "value", "better"
+  ]);
+  requireRelationColumns(db, "benchmark_runs", ["id", "code_state_id", "environment_id", "measured_at", "notes", "metadata"]);
+  requireRelationColumns(db, "benchmark_code_states", ["id", "label", "code_date", "identity", "metadata"]);
+  requireRelationColumns(db, "benchmark_environments", ["id", "label", "identity", "metadata"]);
+}
+
+function selectMeasurementsQuery(): string {
   return `
-    SELECT
-      run_id,
-      code_state_id,
-      code_label,
-      code_date,
-      environment_id,
-      environment_label,
-      measured_at,
-      notes,
-      code_state_metadata,
-      environment_metadata,
-      run_metadata,
-      benchmark_path,
-      benchmark_id,
-      benchmark_label,
-      metric_name,
-      statistic,
-      unit,
-      value,
-      better
+    SELECT run_id, benchmark_id, metric_name, statistic, unit, value, better
     FROM benchmark_results_latest
-    ORDER BY code_date, measured_at, benchmark_label, metric_name, statistic
+    ORDER BY run_id, benchmark_id, metric_name, statistic
+  `;
+}
+
+function selectBenchmarkDefinitionsQuery(): string {
+  return `
+    SELECT DISTINCT benchmark_id, benchmark_path, benchmark_label
+    FROM benchmark_results_latest
+    ORDER BY benchmark_id, benchmark_path, benchmark_label
   `;
 }
 
@@ -246,21 +283,18 @@ export function metadataFromRaw(raw: Record<string, string>): BenchLedgerMetadat
 function readMetadata(db: Database): BenchLedgerMetadata {
   const raw: Record<string, string> = {};
   if (relationExists(db, "benchledger_metadata")) {
-    const metadataResult = db.exec("SELECT key, value FROM benchledger_metadata")[0];
-    for (const row of singleResultRows(metadataResult)) {
+    forEachQueryRow(db, "SELECT key, value FROM benchledger_metadata", (row) => {
       const key = String(row.key ?? "");
-      if (!key) continue;
-      raw[key] = String(row.value ?? "");
-    }
+      if (key) raw[key] = String(row.value ?? "");
+    });
   }
-
   return metadataFromRaw(raw);
 }
 
 export function validateSchemaVersion(metadata: BenchLedgerMetadata) {
-  if (metadata.schema_version === null) return;
-  if (_Compatible_Schema_Versions.has(metadata.schema_version)) return;
-  throw new Error(`Unsupported BenchLedger schema version: ${metadata.schema_version}. Expected 4.`);
+  if (metadata.schema_version === _Supported_Schema_Version) return;
+  const actual = metadata.schema_version === null ? "missing" : String(metadata.schema_version);
+  throw new Error(`Unsupported BenchLedger schema version: ${actual}. Expected ${_Supported_Schema_Version}.`);
 }
 
 async function loadDataset(bytes: Uint8Array, sourceLabel: string, sourceUrl: string | null): Promise<LoadedBenchmarkDataset> {
@@ -269,10 +303,32 @@ async function loadDataset(bytes: Uint8Array, sourceLabel: string, sourceUrl: st
   try {
     const metadata = readMetadata(db);
     validateSchemaVersion(metadata);
-    const query = selectMeasurementsQuery(db);
-    const result = db.exec(query);
+    validateDataRelations(db);
+
+    const rows = rowsFromQuery(db, selectMeasurementsQuery());
+    const benchmarksById = benchmarkDefinitionsFromQuery(db, selectBenchmarkDefinitionsQuery());
+    const runsById = mapFromQuery(
+      db,
+      "SELECT id, code_state_id, environment_id, measured_at, notes, metadata FROM benchmark_runs",
+      normalizeBenchmarkRunRecord
+    );
+    const codeStatesById = mapFromQuery(
+      db,
+      "SELECT id, label, code_date, identity, metadata FROM benchmark_code_states",
+      normalizeBenchmarkCodeState
+    );
+    const environmentsById = mapFromQuery(
+      db,
+      "SELECT id, label, identity, metadata FROM benchmark_environments",
+      normalizeBenchmarkEnvironment
+    );
+
     return {
-      rows: rowsFromResult(result[0]),
+      rows,
+      benchmarksById,
+      runsById,
+      codeStatesById,
+      environmentsById,
       metadata,
       source_label: sourceLabel,
       source_url: sourceUrl
@@ -300,29 +356,20 @@ export async function loadManifest(manifestUrl?: string): Promise<{ manifest: Be
   const url = manifestUrl ?? _Default_Manifest_Url;
   const response = await fetch(url, { cache: "no-store" });
   if (response.status === 404) return null;
-  if (!response.ok) {
-    throw new Error(`Failed to load benchledger.json: ${response.status}`);
-  }
-  const json = await response.json();
-  const manifest = normalizeManifest(json);
-  if (!manifest) {
-    throw new Error("benchledger.json format is invalid.");
-  }
+  if (!response.ok) throw new Error(`Failed to load benchledger.json: ${response.status}`);
+  const manifest = normalizeManifest(await response.json());
+  if (!manifest) throw new Error("benchledger.json format is invalid.");
   return { manifest, url };
 }
 
 export async function loadBenchmarkRowsFromUrl(url: string, sourceLabel = sourceLabelFromUrl(url)): Promise<LoadedBenchmarkDataset> {
   const response = await fetch(url, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`Failed to load SQLite file: ${response.status}`);
-  }
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  return loadDataset(bytes, sourceLabel, url);
+  if (!response.ok) throw new Error(`Failed to load SQLite file: ${response.status}`);
+  return loadDataset(new Uint8Array(await response.arrayBuffer()), sourceLabel, url);
 }
 
 export async function loadBenchmarkRowsFromFile(file: File): Promise<LoadedBenchmarkDataset> {
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  return loadDataset(bytes, file.name, null);
+  return loadDataset(new Uint8Array(await file.arrayBuffer()), file.name, null);
 }
 
 export async function loadBenchmarkRowsFromManifestDatabase(

@@ -3,14 +3,24 @@ import {
   buildBenchmarkOptions,
   buildBenchmarkViewIndex,
   buildGroupOptions,
-  createLRUCache,
-  filterRowsByViewState,
+  resolveBenchmarkViewBaseSlice,
+  resolveBenchmarkViewGroupSlice,
   resolveBenchmarkViewSlice
 } from "./benchmark-view";
-import { dateRangeEnd, dateRangeStart } from "./dashboard";
-import type { BenchmarkRow } from "./types";
+import { dateRangeEnd, dateRangeStart } from "./dashboard-settings";
+import type { BenchmarkDefinition, BenchmarkRow, BenchmarkRun } from "./types";
 
 const Base_Row: BenchmarkRow = {
+  run_id: "run-1",
+  benchmark_id: "bench-1",
+  metric_name: "time",
+  statistic: "median",
+  unit: "ns",
+  value: 1000,
+  better: "lower"
+};
+
+const Base_Run: BenchmarkRun = {
   run_id: "run-1",
   code_state_id: "state-1",
   code_label: "Run 1",
@@ -19,19 +29,41 @@ const Base_Row: BenchmarkRow = {
   environment_label: "Env 1",
   measured_at: "2026-01-01T00:00:00Z",
   notes: "",
-  code_state_metadata: { source: { branch: "main", tags: [], revision: "abcdef123456", dirty: false } },
-  environment_metadata: { runtime: { name: "Julia", version: "1.10" } },
-  run_metadata: {},
-  benchmark_path: ["suite", "case"],
-  benchmark_id: "bench-1",
-  benchmark_label: "bench-1",
-  metric_name: "time",
-  statistic: "median",
-  unit: "ns",
-  value: 1000,
-  better: "lower",
-  group: "suite"
+  code_state_identity: { source: { kind: "git", revision: "abcdef123456" } },
+  code_state_metadata: { source: { dirty: false } },
+  environment_identity: { runtime: { name: "Julia", version: "1.10" } },
+  environment_metadata: {},
+  run_metadata: { source: { branch: "main", tags: [] } },
+  benchmark_count: 1
 };
+
+function makeRuns(...runs: BenchmarkRun[]): ReadonlyMap<string, BenchmarkRun> {
+  return new Map(runs.map((run) => [run.run_id, run]));
+}
+
+function makeBenchmarks(...benchmarks: BenchmarkDefinition[]): ReadonlyMap<string, BenchmarkDefinition> {
+  return new Map(benchmarks.map((benchmark) => [benchmark.id, benchmark]));
+}
+
+function benchmarkMapForRows(rows: BenchmarkRow[]): ReadonlyMap<string, BenchmarkDefinition> {
+  return new Map(Array.from(new Set(rows.map((row) => row.benchmark_id))).map((id) => [id, {
+    id,
+    path: ["suite", id],
+    label: id
+  }]));
+}
+
+function resolve(rows: BenchmarkRow[], runsById: ReadonlyMap<string, BenchmarkRun>, metricKind: string) {
+  return resolveBenchmarkViewSlice(buildBenchmarkViewIndex(rows, runsById, benchmarkMapForRows(rows)), {
+    environment: "all",
+    metricKind,
+    branch: "all",
+    timeStartValue: null,
+    timeEndValue: null,
+    displayStrategy: "all",
+    group: "all"
+  });
+}
 
 describe("benchmark view filtering", () => {
   it("treats time metrics with different units as one metric family", () => {
@@ -40,17 +72,13 @@ describe("benchmark view filtering", () => {
       { ...Base_Row, run_id: "run-2", unit: "s", value: 0.002 },
       { ...Base_Row, run_id: "run-3", metric_name: "memory", unit: "bytes", value: 512 }
     ];
+    const runs = makeRuns(
+      Base_Run,
+      { ...Base_Run, run_id: "run-2" },
+      { ...Base_Run, run_id: "run-3" }
+    );
 
-    const filtered = filterRowsByViewState(rows, {
-      environment: "all",
-      metricKind: "time median",
-      branch: "all",
-      timeStartValue: null,
-      timeEndValue: null,
-      displayStrategy: "all"
-    });
-
-    expect(filtered.map((row) => row.unit)).toEqual(["ns", "s"]);
+    expect(resolve(rows, runs, "time median").filteredRows.map((row) => row.unit)).toEqual(["ns", "s"]);
   });
 
   it("keeps non-convertible unit families separate", () => {
@@ -59,27 +87,24 @@ describe("benchmark view filtering", () => {
       { ...Base_Row, run_id: "run-2", metric_name: "memory", unit: "count", value: 12 },
       { ...Base_Row, run_id: "run-3", metric_name: "memory", unit: "bytes", value: 1024 }
     ];
+    const runs = makeRuns(Base_Run, { ...Base_Run, run_id: "run-2" }, { ...Base_Run, run_id: "run-3" });
 
-    const filtered = filterRowsByViewState(rows, {
-      environment: "all",
-      metricKind: "memory median bytes",
-      branch: "all",
-      timeStartValue: null,
-      timeEndValue: null,
-      displayStrategy: "all"
-    });
-
-    expect(filtered.map((row) => row.unit)).toEqual(["bytes", "bytes"]);
+    expect(resolve(rows, runs, "memory median bytes").filteredRows.map((row) => row.unit)).toEqual(["bytes", "bytes"]);
   });
 
   it("builds environment buckets and metric options once per dataset", () => {
     const rows: BenchmarkRow[] = [
-      { ...Base_Row, run_id: "run-1", environment_id: "env-1", code_date: "2026-01-01T00:00:00Z", unit: "ns" },
-      { ...Base_Row, run_id: "run-2", environment_id: "env-1", metric_name: "memory", unit: "bytes", value: 512 },
-      { ...Base_Row, run_id: "run-3", environment_id: "env-2", code_date: "2026-01-03T00:00:00Z", metric_name: "memory", unit: "bytes", value: 1024, code_state_metadata: { source: { ...Base_Row.code_state_metadata.source, branch: "feature" } } }
+      { ...Base_Row, run_id: "run-1", unit: "ns" },
+      { ...Base_Row, run_id: "run-2", metric_name: "memory", unit: "bytes", value: 512 },
+      { ...Base_Row, run_id: "run-3", metric_name: "memory", unit: "bytes", value: 1024 }
     ];
+    const runs = makeRuns(
+      Base_Run,
+      { ...Base_Run, run_id: "run-2" },
+      { ...Base_Run, run_id: "run-3", environment_id: "env-2", environment_label: "Env 2", code_date: "2026-01-03T00:00:00Z", run_metadata: { source: { branch: "feature" } } }
+    );
 
-    const index = buildBenchmarkViewIndex(rows);
+    const index = buildBenchmarkViewIndex(rows, runs, benchmarkMapForRows(rows));
 
     expect(index.rowsByEnvironment.get("all")?.map((entry) => entry.row.run_id)).toEqual(["run-1", "run-2", "run-3"]);
     expect(index.rowsByEnvironment.get("env-1")?.map((entry) => entry.row.run_id)).toEqual(["run-1", "run-2"]);
@@ -90,13 +115,19 @@ describe("benchmark view filtering", () => {
     expect(index.datasetTimeEnd).toBe("2026-01-03");
   });
 
-  it("keeps indexed slice results aligned with previous filtering semantics", () => {
+  it("resolves indexed slices from normalized run context", () => {
     const rows: BenchmarkRow[] = [
-      { ...Base_Row, run_id: "run-1", benchmark_id: "bench-1", benchmark_label: "bench-1", code_date: "2026-01-01T00:00:00Z", code_state_metadata: { source: { ...Base_Row.code_state_metadata.source, branch: "main" } } },
-      { ...Base_Row, run_id: "run-2", benchmark_id: "bench-2", benchmark_label: "bench-2", code_date: "2026-01-02T00:00:00Z", code_state_metadata: { source: { ...Base_Row.code_state_metadata.source, branch: "main" } } },
-      { ...Base_Row, run_id: "run-3", benchmark_id: "bench-3", benchmark_label: "bench-3", code_date: "2026-01-03T00:00:00Z", metric_name: "memory", unit: "bytes", value: 512 },
-      { ...Base_Row, run_id: "run-4", benchmark_id: "bench-4", benchmark_label: "bench-4", environment_id: "env-2", environment_label: "Env 2", code_date: "2026-01-02T00:00:00Z" }
+      { ...Base_Row, run_id: "run-1", benchmark_id: "bench-1" },
+      { ...Base_Row, run_id: "run-2", benchmark_id: "bench-2" },
+      { ...Base_Row, run_id: "run-3", benchmark_id: "bench-3", metric_name: "memory", unit: "bytes", value: 512 },
+      { ...Base_Row, run_id: "run-4", benchmark_id: "bench-4" }
     ];
+    const runs = makeRuns(
+      Base_Run,
+      { ...Base_Run, run_id: "run-2", code_date: "2026-01-02T00:00:00Z" },
+      { ...Base_Run, run_id: "run-3", code_date: "2026-01-03T00:00:00Z" },
+      { ...Base_Run, run_id: "run-4", environment_id: "env-2", environment_label: "Env 2", code_date: "2026-01-02T00:00:00Z" }
+    );
     const state = {
       environment: "env-1",
       metricKind: "time median",
@@ -106,22 +137,27 @@ describe("benchmark view filtering", () => {
       displayStrategy: "all" as const,
       group: "all"
     };
-    const expectedFilteredRows = filterRowsByViewState(rows, state);
-    const resolved = resolveBenchmarkViewSlice(buildBenchmarkViewIndex(rows), state);
+    const resolved = resolveBenchmarkViewSlice(buildBenchmarkViewIndex(rows, runs, benchmarkMapForRows(rows)), state);
+    const expected = rows.slice(0, 2);
 
-    expect(resolved.filteredRows).toEqual(expectedFilteredRows);
-    expect(resolved.groupOptions).toEqual(buildGroupOptions(expectedFilteredRows));
-    expect(resolved.scopedRows).toEqual(expectedFilteredRows);
-    expect(resolved.benchmarkOptions).toEqual(buildBenchmarkOptions(expectedFilteredRows));
+    expect(resolved.filteredRows).toEqual(expected);
+    const expectedBenchmarks = [
+      benchmarkMapForRows(rows).get("bench-1")!,
+      benchmarkMapForRows(rows).get("bench-2")!
+    ];
+    expect(resolved.groupOptions).toEqual(buildGroupOptions(expectedBenchmarks));
+    expect(resolved.scopedRows).toEqual(expected);
+    expect(resolved.benchmarkOptions).toEqual(buildBenchmarkOptions(expectedBenchmarks));
   });
 
   it("falls back to the first valid metric immediately when the environment changes", () => {
     const rows: BenchmarkRow[] = [
-      { ...Base_Row, run_id: "run-1", environment_id: "env-1", environment_label: "Env 1", metric_name: "time", unit: "ns" },
-      { ...Base_Row, run_id: "run-2", environment_id: "env-2", environment_label: "Env 2", metric_name: "memory", unit: "bytes", value: 512 }
+      { ...Base_Row, run_id: "run-1", metric_name: "time", unit: "ns" },
+      { ...Base_Row, run_id: "run-2", metric_name: "memory", unit: "bytes", value: 512 }
     ];
+    const runs = makeRuns(Base_Run, { ...Base_Run, run_id: "run-2", environment_id: "env-2", environment_label: "Env 2" });
 
-    const resolved = resolveBenchmarkViewSlice(buildBenchmarkViewIndex(rows), {
+    const resolved = resolveBenchmarkViewSlice(buildBenchmarkViewIndex(rows, runs, benchmarkMapForRows(rows)), {
       environment: "env-2",
       metricKind: "time median",
       branch: "all",
@@ -136,18 +172,29 @@ describe("benchmark view filtering", () => {
     expect(resolved.metricOptions).toEqual(["memory median bytes"]);
   });
 
-  it("evicts least recently used entries from the slice cache", () => {
-    const cache = createLRUCache<string, number>(2);
+  it("resolves group scope independently from the base filters", () => {
+    const rows: BenchmarkRow[] = [
+      { ...Base_Row, benchmark_id: "bench-1" },
+      { ...Base_Row, benchmark_id: "bench-2" }
+    ];
+    const benchmarks = makeBenchmarks(
+      { id: "bench-1", path: ["suite", "group-a", "case-1"], label: "case-1" },
+      { id: "bench-2", path: ["suite", "group-b", "case-2"], label: "case-2" }
+    );
+    const index = buildBenchmarkViewIndex(rows, makeRuns(Base_Run), benchmarks);
+    const baseSlice = resolveBenchmarkViewBaseSlice(index, {
+      environment: "all",
+      metricKind: "time median",
+      branch: "all",
+      timeStartValue: null,
+      timeEndValue: null,
+      displayStrategy: "all"
+    });
+    const group = JSON.stringify(["suite", "group-a"]);
+    const groupedSlice = resolveBenchmarkViewGroupSlice(baseSlice, group);
 
-    cache.set("a", 1);
-    cache.set("b", 2);
-    expect(cache.keys()).toEqual(["a", "b"]);
-
-    expect(cache.get("a")).toBe(1);
-    expect(cache.keys()).toEqual(["b", "a"]);
-
-    cache.set("c", 3);
-    expect(cache.get("b")).toBeUndefined();
-    expect(cache.keys()).toEqual(["a", "c"]);
+    expect(groupedSlice.filteredRows).toBe(baseSlice.filteredRows);
+    expect(groupedSlice.scopedRows.map((row) => row.benchmark_id)).toEqual(["bench-1"]);
+    expect(groupedSlice.effectiveGroup).toBe(group);
   });
 });

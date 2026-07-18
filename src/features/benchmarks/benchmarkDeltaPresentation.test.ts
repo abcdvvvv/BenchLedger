@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { benchmarkDeltaColor, benchmarkDeltaDirection, benchmarkDeltaTone } from "./benchmarkDeltaPresentation";
-import type { PlotTheme } from "../../lib/dashboard";
+import type { PlotTheme } from "../../lib/dashboard-plotting";
 
 const Plot_Theme: PlotTheme = {
   paper: "#111111",

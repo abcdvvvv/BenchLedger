@@ -2,8 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   joinRelativeUrl,
   metadataFromRaw,
+  normalizeBenchmarkCodeState,
+  normalizeBenchmarkDefinition,
+  normalizeBenchmarkEnvironment,
   normalizeBenchmarkRow,
   normalizeBenchmarkPath,
+  normalizeBenchmarkRunRecord,
   normalizeManifest,
   normalizeManifestDatabase,
   validateSchemaVersion
@@ -23,14 +27,14 @@ describe("sqlite helpers", () => {
       name: "Main DB",
       description: "primary",
       url: "./bench.sqlite",
-      schema_version: 4,
+      schema_version: 5,
       metadata_preview: { description: "preview" }
     })).toEqual({
       id: "db-1",
       name: "Main DB",
       description: "primary",
       url: "./bench.sqlite",
-      schema_version: 4,
+      schema_version: 5,
       metadata_preview: { description: "preview" }
     });
 
@@ -59,20 +63,26 @@ describe("sqlite helpers", () => {
 
   it("builds metadata with defaults and validates schema versions", () => {
     const metadata = metadataFromRaw({
-      schema_version: "4",
+      schema_version: "5",
       name: "Demo",
       notes: "hello"
     });
 
     expect(metadata).toMatchObject({
-      schema_version: 4,
+      schema_version: 5,
       name: "Demo",
       description: "",
       notes: "hello"
     });
     expect(() => validateSchemaVersion(metadata)).not.toThrow();
+    expect(() => validateSchemaVersion(metadataFromRaw({ schema_version: "4" }))).toThrow(
+      "Unsupported BenchLedger schema version: 4. Expected 5."
+    );
+    expect(() => validateSchemaVersion(metadataFromRaw({}))).toThrow(
+      "Unsupported BenchLedger schema version: missing. Expected 5."
+    );
     expect(() => validateSchemaVersion(metadataFromRaw({ schema_version: "99" }))).toThrow(
-      "Unsupported BenchLedger schema version: 99. Expected 4."
+      "Unsupported BenchLedger schema version: 99. Expected 5."
     );
   });
 
@@ -85,56 +95,59 @@ describe("sqlite helpers", () => {
     );
   });
 
-  it("normalizes schema-v4 rows and preserves unknown metadata fields", () => {
-    const row = normalizeBenchmarkRow({
-      run_id: "run-1",
-      code_state_id: "state-1",
-      code_label: "abc1234",
-      code_date: "2026-06-26T00:00:00Z",
-      environment_id: "env-python",
-      environment_label: "Python 3.12 / Linux",
-      measured_at: "2026-06-26T00:10:00Z",
-      notes: "note",
-      code_state_metadata: "{\"source\":{\"kind\":\"git\",\"revision\":\"abc\",\"branch\":\"main\"},\"unknown_code\":42}",
-      environment_metadata: "{\"runtime\":{\"name\":\"Python\",\"version\":\"3.12\"},\"unknown_env\":{\"toolchain\":\"gcc\"}}",
-      run_metadata: "{\"source\":{\"branch\":\"main\"},\"unknown_run\":{\"ci\":\"custom\"}}",
+  it("normalizes v5 results and entity metadata separately", () => {
+    const definition = normalizeBenchmarkDefinition({
       benchmark_path: "[\"suite\",\"case\"]",
       benchmark_id: "bench-1",
-      benchmark_label: "suite/case",
+      benchmark_label: "suite/case"
+    });
+    const row = normalizeBenchmarkRow({
+      run_id: "run-5",
+      benchmark_id: "bench-1",
       metric_name: "time",
       statistic: "median",
       unit: "ns",
       value: 123,
       better: "lower"
     });
+    const run = normalizeBenchmarkRunRecord({
+      id: "run-5",
+      code_state_id: "code-abc",
+      environment_id: "env-5",
+      measured_at: "2026-07-18T00:10:00Z",
+      notes: "",
+      metadata: "{\"source\":{\"branch\":\"main\"}}"
+    });
+    const codeState = normalizeBenchmarkCodeState({
+      id: "code-abc",
+      label: "abc1234",
+      code_date: "2026-07-18T00:00:00Z",
+      identity: "{\"source\":{\"kind\":\"git\",\"revision\":\"abc\"}}",
+      metadata: "{\"source\":{\"dirty\":false}}"
+    });
+    const environment = normalizeBenchmarkEnvironment({
+      id: "env-5",
+      label: "linux-host",
+      identity: "{\"runtime\":{\"name\":\"Julia\",\"version\":\"1.12\"},\"hardware\":{\"cpu\":{\"model\":\"CPU\"}}}",
+      metadata: "{\"benchmark\":{\"framework\":{\"name\":\"BenchmarkTools.jl\",\"version\":\"1.6\"}}}"
+    });
 
-    expect(row.environment_metadata.runtime?.name).toBe("Python");
-    expect(row.code_state_metadata.unknown_code).toBe(42);
-    expect(row.environment_metadata.unknown_env).toEqual({ toolchain: "gcc" });
-    expect(row.run_metadata.unknown_run).toEqual({ ci: "custom" });
+    expect(definition).toEqual({ id: "bench-1", path: ["suite", "case"], label: "suite/case" });
+    expect(row).toMatchObject({ run_id: "run-5", benchmark_id: "bench-1" });
+    expect(run.metadata.source?.branch).toBe("main");
+    expect(codeState.identity.source?.revision).toBe("abc");
+    expect(codeState.metadata.source?.dirty).toBe(false);
+    expect(environment.identity.runtime?.name).toBe("Julia");
+    expect(environment.metadata.benchmark?.framework?.name).toBe("BenchmarkTools.jl");
   });
 
-  it("throws a clear error for invalid metadata JSON", () => {
-    expect(() => normalizeBenchmarkRow({
-      run_id: "run-1",
-      code_state_id: "state-1",
-      code_label: "local",
+  it("throws a clear error for invalid entity metadata JSON", () => {
+    expect(() => normalizeBenchmarkCodeState({
+      id: "code-abc",
+      label: "local",
       code_date: "2026-06-26T00:00:00Z",
-      environment_id: "env-1",
-      environment_label: "C++ native",
-      measured_at: "2026-06-26T00:10:00Z",
-      notes: "",
-      code_state_metadata: "{bad json",
-      environment_metadata: "{}",
-      run_metadata: "{}",
-      benchmark_path: "[\"suite\"]",
-      benchmark_id: "bench-1",
-      benchmark_label: "suite",
-      metric_name: "time",
-      statistic: "median",
-      unit: "ns",
-      value: 1,
-      better: "lower"
-    })).toThrow("Invalid code_state_metadata in run-1");
+      identity: "{\"source\":{\"kind\":\"git\",\"revision\":\"abc\"}}",
+      metadata: "{bad json"
+    })).toThrow("Invalid code-state metadata in code-abc");
   });
 });

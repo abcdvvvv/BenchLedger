@@ -1,6 +1,14 @@
-import { Suspense } from "react";
-import { AboutPage, DatabasesPage, BenchmarkKeysPage, OverviewPage, SettingsPage, TrendBoardPage } from "./app/pageRegistry";
+import { Suspense, useEffect, useState } from "react";
+import {
+  AboutPage,
+  BenchmarkKeysPage,
+  DatabasesPage,
+  OverviewFeature,
+  SettingsPage,
+  TrendBoardFeature
+} from "./app/pageRegistry";
 import { useBenchLedgerAppModel } from "./app/useBenchLedgerAppModel";
+import type { ActivePage } from "./lib/dashboard-settings";
 import { AppSidebar } from "./shell/AppSidebar";
 import { AppLayout } from "./shell/AppLayout";
 
@@ -22,9 +30,27 @@ function LoadingState(props: { phase: "booting" | "loading-database" }) {
 
 function App() {
   const app = useBenchLedgerAppModel();
+  const [visitedPages, setVisitedPages] = useState<Set<ActivePage>>(() => new Set([app.activePage]));
+
+  useEffect(() => {
+    setVisitedPages((current) => {
+      if (current.has(app.activePage)) return current;
+      const next = new Set(current);
+      next.add(app.activePage);
+      return next;
+    });
+  }, [app.activePage]);
 
   if (app.phase === "booting" || app.phase === "loading-database") {
     return <LoadingState phase={app.phase} />;
+  }
+
+  function shouldMount(page: ActivePage) {
+    return page === app.activePage || visitedPages.has(page);
+  }
+
+  function pageHidden(page: ActivePage) {
+    return page !== app.activePage;
   }
 
   return (
@@ -51,19 +77,36 @@ function App() {
         )}
       >
         <Suspense fallback={<PageLoadingState />}>
-          {app.activePage === "overview" ? (
-            <OverviewPage {...app.pages.overview} />
-          ) : app.activePage === "trend-board" ? (
-            <TrendBoardPage {...app.pages.trendBoard} />
-          ) : app.activePage === "benchmark-keys" ? (
-            <BenchmarkKeysPage {...app.pages.benchmarkKeys} />
-          ) : app.activePage === "settings" ? (
-            <SettingsPage {...app.pages.settings} />
-          ) : app.activePage === "about" ? (
-            <AboutPage {...app.pages.about} />
-          ) : (
-            <DatabasesPage {...app.pages.databases} />
-          )}
+          {shouldMount("overview") ? (
+            <div hidden={pageHidden("overview")}>
+              <OverviewFeature state={app.datasetState} onOpenLocalFilePicker={app.openLocalFilePicker} />
+            </div>
+          ) : null}
+          {shouldMount("trend-board") ? (
+            <div hidden={pageHidden("trend-board")}>
+              <TrendBoardFeature state={app.datasetState} />
+            </div>
+          ) : null}
+          {shouldMount("benchmark-keys") ? (
+            <div hidden={pageHidden("benchmark-keys")}>
+              <BenchmarkKeysPage {...app.pages.benchmarkKeys} />
+            </div>
+          ) : null}
+          {shouldMount("settings") ? (
+            <div hidden={pageHidden("settings")}>
+              <SettingsPage {...app.pages.settings} />
+            </div>
+          ) : null}
+          {shouldMount("about") ? (
+            <div hidden={pageHidden("about")}>
+              <AboutPage {...app.pages.about} />
+            </div>
+          ) : null}
+          {shouldMount("database-catalog") ? (
+            <div hidden={pageHidden("database-catalog")}>
+              <DatabasesPage {...app.pages.databases} />
+            </div>
+          ) : null}
         </Suspense>
       </AppLayout>
     </>
