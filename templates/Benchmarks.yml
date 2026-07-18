@@ -1,7 +1,13 @@
 # SPDX-FileCopyrightText: 2026 karei
 # SPDX-License-Identifier: MIT-0
-
 name: Benchmarks
+
+env:
+  BENCHLEDGER_VERSION: "0.6.0"
+  TARGET_REPOSITORY: ""
+  TARGET_REF: ""
+  BENCH_DB_BRANCH: "gh-pages"
+  BENCH_DB_FILE: "benchmarks/data/benchledger.sqlite"
 
 on:
   workflow_call:
@@ -48,13 +54,6 @@ permissions:
 concurrency:
   group: benchledger-database
   cancel-in-progress: false
-
-env:
-  BENCHLEDGER_VERSION: "0.5.0"
-  TARGET_REPOSITORY: ""
-  TARGET_REF: ""
-  BENCH_DB_BRANCH: "gh-pages"
-  BENCH_DB_FILE: "benchmarks/data/benchledger.sqlite"
 
 jobs:
   benchmark:
