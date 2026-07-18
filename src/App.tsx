@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useState, type ReactNode } from "react";
 import {
   AboutPage,
   BenchmarkKeysPage,
@@ -11,6 +11,17 @@ import { useBenchLedgerAppModel } from "./app/useBenchLedgerAppModel";
 import type { ActivePage } from "./lib/dashboard-settings";
 import { AppSidebar } from "./shell/AppSidebar";
 import { AppLayout } from "./shell/AppLayout";
+
+function PageSlot(props: { active: boolean; children: ReactNode }) {
+  return (
+    <div
+      aria-hidden={!props.active}
+      className={props.active ? "layout-page-slot layout-page-slot-active" : "layout-page-slot layout-page-slot-inactive"}
+    >
+      {props.children}
+    </div>
+  );
+}
 
 function PageLoadingState() {
   return (
@@ -49,10 +60,6 @@ function App() {
     return page === app.activePage || visitedPages.has(page);
   }
 
-  function pageHidden(page: ActivePage) {
-    return page !== app.activePage;
-  }
-
   return (
     <>
       <input
@@ -78,34 +85,34 @@ function App() {
       >
         <Suspense fallback={<PageLoadingState />}>
           {shouldMount("overview") ? (
-            <div hidden={pageHidden("overview")}>
+            <PageSlot active={app.activePage === "overview"}>
               <OverviewFeature state={app.datasetState} onOpenLocalFilePicker={app.openLocalFilePicker} />
-            </div>
+            </PageSlot>
           ) : null}
           {shouldMount("trend-board") ? (
-            <div hidden={pageHidden("trend-board")}>
+            <PageSlot active={app.activePage === "trend-board"}>
               <TrendBoardFeature state={app.datasetState} />
-            </div>
+            </PageSlot>
           ) : null}
           {shouldMount("benchmark-keys") ? (
-            <div hidden={pageHidden("benchmark-keys")}>
+            <PageSlot active={app.activePage === "benchmark-keys"}>
               <BenchmarkKeysPage {...app.pages.benchmarkKeys} />
-            </div>
+            </PageSlot>
           ) : null}
           {shouldMount("settings") ? (
-            <div hidden={pageHidden("settings")}>
+            <PageSlot active={app.activePage === "settings"}>
               <SettingsPage {...app.pages.settings} />
-            </div>
+            </PageSlot>
           ) : null}
           {shouldMount("about") ? (
-            <div hidden={pageHidden("about")}>
+            <PageSlot active={app.activePage === "about"}>
               <AboutPage {...app.pages.about} />
-            </div>
+            </PageSlot>
           ) : null}
           {shouldMount("database-catalog") ? (
-            <div hidden={pageHidden("database-catalog")}>
+            <PageSlot active={app.activePage === "database-catalog"}>
               <DatabasesPage {...app.pages.databases} />
-            </div>
+            </PageSlot>
           ) : null}
         </Suspense>
       </AppLayout>

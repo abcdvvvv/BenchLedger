@@ -142,12 +142,12 @@ export function defaultRunPairSortDirection(key: RunPairSortKey): SortDirection 
 }
 
 function compareRuns(left: BenchmarkRun, right: BenchmarkRun): number {
-  const leftMeasuredAt = parseDate(left.measured_at)?.valueOf() ?? 0;
-  const rightMeasuredAt = parseDate(right.measured_at)?.valueOf() ?? 0;
-  if (leftMeasuredAt !== rightMeasuredAt) return rightMeasuredAt - leftMeasuredAt;
   const leftCodeDate = parseDate(left.code_date)?.valueOf() ?? 0;
   const rightCodeDate = parseDate(right.code_date)?.valueOf() ?? 0;
   if (leftCodeDate !== rightCodeDate) return rightCodeDate - leftCodeDate;
+  const leftMeasuredAt = parseDate(left.measured_at)?.valueOf() ?? 0;
+  const rightMeasuredAt = parseDate(right.measured_at)?.valueOf() ?? 0;
+  if (leftMeasuredAt !== rightMeasuredAt) return rightMeasuredAt - leftMeasuredAt;
   return right.run_id.localeCompare(left.run_id);
 }
 

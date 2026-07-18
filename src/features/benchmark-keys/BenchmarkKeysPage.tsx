@@ -1,167 +1,221 @@
-import Plot from "../benchmarks/components/Plot";
+import { useEffect, useState } from "react";
 import { EmptyState } from "../../components/common/EmptyState";
 import { PageHeader } from "../../components/common/PageHeader";
-import { colorForBenchmark, type PlotTheme } from "../../lib/dashboard-plotting";
-import type { ThemeMode } from "../../lib/dashboard-settings";
+import { StatusBadge } from "../../components/ui/Badge";
+import { Panel } from "../../components/ui/Card";
+import {
+  DataCell,
+  DataHeadCell,
+  DataTable,
+  DataTableShell
+} from "../../components/ui/Table";
 import type { BenchmarkDefinition } from "../../lib/types";
 
 export type BenchmarkKeysPageProps = {
   benchmarks: BenchmarkDefinition[];
-  plotTheme: PlotTheme;
-  theme: ThemeMode;
 };
 
-type IcicleNode = {
+type BenchmarkKeyNode = {
   id: string;
-  parent: string;
   label: string;
-  value: number;
+  path: string[];
+  parentId: string | null;
+  childIds: string[];
   depth: number;
-  rootKey: string;
+  benchmarkCount: number;
+  kind: "group" | "benchmark";
 };
 
-function buildIcicleNodes(benchmarks: BenchmarkDefinition[]): IcicleNode[] {
-  const nodeMap = new Map<string, IcicleNode>();
+type BenchmarkKeyTree = {
+  nodesById: Map<string, BenchmarkKeyNode>;
+  rootIds: string[];
+  branchIds: string[];
+  groupCount: number;
+};
 
-  nodeMap.set("root", {
-    id: "root",
-    parent: "",
-    label: "Benchmark Keys",
-    value: 0,
-    depth: 0,
-    rootKey: "root"
-  });
+const Tree_Indent_Rem = 1.125;
+
+function compareNodeOrder(left: BenchmarkKeyNode, right: BenchmarkKeyNode): number {
+  if (left.kind !== right.kind) return left.kind === "group" ? -1 : 1;
+  return left.label.localeCompare(right.label, undefined, { sensitivity: "base", numeric: true });
+}
+
+function buildBenchmarkKeyTree(benchmarks: BenchmarkDefinition[]): BenchmarkKeyTree {
+  const nodesById = new Map<string, BenchmarkKeyNode>();
+  const rootIds: string[] = [];
+  const branchIds: string[] = [];
 
   for (const benchmark of benchmarks) {
-    const path = benchmark.path.length ? benchmark.path : [benchmark.label];
-    let parentId = "root";
-    const rootKey = path[0] ?? benchmark.id;
+    let parentId: string | null = null;
+    let groupPath: string[] = [];
 
-    for (let index = 0; index < path.length; index += 1) {
-      const segment = path[index];
-      const nodeId = `${parentId}/${segment}`;
-      if (!nodeMap.has(nodeId)) {
-        nodeMap.set(nodeId, {
+    for (const segment of benchmark.path) {
+      groupPath = [...groupPath, segment];
+      const nodeId = `group:${groupPath.join("/")}`;
+
+      if (!nodesById.has(nodeId)) {
+        nodesById.set(nodeId, {
           id: nodeId,
-          parent: parentId,
           label: segment,
-          value: 0,
-          depth: index + 1,
-          rootKey
+          path: groupPath,
+          parentId,
+          childIds: [],
+          depth: groupPath.length - 1,
+          benchmarkCount: 0,
+          kind: "group"
         });
+        if (parentId) {
+          nodesById.get(parentId)!.childIds.push(nodeId);
+        } else {
+          rootIds.push(nodeId);
+        }
+        branchIds.push(nodeId);
       }
+
       parentId = nodeId;
     }
 
-    const leafId = `${parentId}#${benchmark.id}`;
-    nodeMap.set(leafId, {
+    const leafPath = [...benchmark.path, benchmark.label];
+    const leafId = `benchmark:${benchmark.id}`;
+    nodesById.set(leafId, {
       id: leafId,
-      parent: parentId,
       label: benchmark.label,
-      value: 1,
-      depth: path.length + 1,
-      rootKey
+      path: leafPath,
+      parentId,
+      childIds: [],
+      depth: benchmark.path.length,
+      benchmarkCount: 1,
+      kind: "benchmark"
     });
+
+    if (parentId) {
+      nodesById.get(parentId)!.childIds.push(leafId);
+    } else {
+      rootIds.push(leafId);
+    }
   }
 
-  const nodes = Array.from(nodeMap.values());
-  const valueById = new Map(nodes.map((node) => [node.id, node.value]));
+  const childEntries = Array.from(nodesById.entries());
+  for (const [, node] of childEntries) {
+    node.childIds.sort((leftId, rightId) => compareNodeOrder(nodesById.get(leftId)!, nodesById.get(rightId)!));
+  }
+  rootIds.sort((leftId, rightId) => compareNodeOrder(nodesById.get(leftId)!, nodesById.get(rightId)!));
 
-  for (let index = nodes.length - 1; index >= 0; index -= 1) {
-    const node = nodes[index];
-    if (!node.parent) continue;
-    valueById.set(node.parent, (valueById.get(node.parent) ?? 0) + (valueById.get(node.id) ?? 0));
+  for (let index = branchIds.length - 1; index >= 0; index -= 1) {
+    const branch = nodesById.get(branchIds[index]);
+    if (!branch) continue;
+    branch.benchmarkCount = branch.childIds.reduce((count, childId) => count + (nodesById.get(childId)?.benchmarkCount ?? 0), 0);
   }
 
-  return nodes.map((node) => ({ ...node, value: valueById.get(node.id) ?? node.value }));
+  return {
+    nodesById,
+    rootIds,
+    branchIds,
+    groupCount: branchIds.length
+  };
 }
 
-function mixHexColors(left: string, right: string, ratio: number): string {
-  const normalizedRatio = Math.min(1, Math.max(0, ratio));
-  const normalizeHex = (value: string) => {
-    const hex = value.startsWith("#") ? value.slice(1) : value;
-    return hex.length === 3 ? hex.split("").map((entry) => `${entry}${entry}`).join("") : hex;
-  };
-  const leftHex = normalizeHex(left);
-  const rightHex = normalizeHex(right);
-  if (leftHex.length !== 6 || rightHex.length !== 6) return left;
+function flattenVisibleNodes(tree: BenchmarkKeyTree, expandedIds: ReadonlySet<string>): BenchmarkKeyNode[] {
+  const rows: BenchmarkKeyNode[] = [];
 
-  const mixChannel = (index: number) => {
-    const leftChannel = Number.parseInt(leftHex.slice(index, index + 2), 16);
-    const rightChannel = Number.parseInt(rightHex.slice(index, index + 2), 16);
-    const mixed = Math.round(leftChannel + (rightChannel - leftChannel) * normalizedRatio);
-    return mixed.toString(16).padStart(2, "0");
+  const visit = (nodeId: string) => {
+    const node = tree.nodesById.get(nodeId);
+    if (!node) return;
+    rows.push(node);
+    if (node.kind !== "group" || !expandedIds.has(node.id)) return;
+    for (const childId of node.childIds) visit(childId);
   };
 
-  return `#${mixChannel(0)}${mixChannel(2)}${mixChannel(4)}`;
-}
-
-function buildIcicleColors(nodes: IcicleNode[], theme: ThemeMode): string[] {
-  const rootOrder = new Map<string, number>();
-  for (const node of nodes) {
-    if (node.depth !== 1 || rootOrder.has(node.rootKey)) continue;
-    rootOrder.set(node.rootKey, rootOrder.size);
-  }
-
-  return nodes.map((node) => {
-    if (node.depth === 0) return theme === "dark" ? "#3f3f46" : "#44403c";
-    const rootIndex = rootOrder.get(node.rootKey) ?? 0;
-    const baseColor = colorForBenchmark(rootIndex);
-    const darkenBase = theme === "dark" ? 0.24 : 0.12;
-    const darkenStep = theme === "dark" ? 0.1 : 0.06;
-    const darkenCap = theme === "dark" ? 0.52 : 0.3;
-    const darkenRatio = Math.min(darkenBase + Math.max(node.depth - 1, 0) * darkenStep, darkenCap);
-    return mixHexColors(baseColor, "#09090b", darkenRatio);
-  });
+  for (const rootId of tree.rootIds) visit(rootId);
+  return rows;
 }
 
 export function BenchmarkKeysPage(props: BenchmarkKeysPageProps) {
-  const { benchmarks, plotTheme, theme } = props;
-  const nodes = buildIcicleNodes(benchmarks);
-  const hasKeys = benchmarks.length > 0;
-  const colors = buildIcicleColors(nodes, theme);
+  const tree = buildBenchmarkKeyTree(props.benchmarks);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set(tree.branchIds));
+
+  useEffect(() => {
+    setExpandedIds(new Set(tree.branchIds));
+  }, [props.benchmarks]);
+
+  const hasKeys = props.benchmarks.length > 0;
+  const rows = flattenVisibleNodes(tree, expandedIds);
 
   return (
     <>
       <PageHeader
         eyebrow="Benchmarking › Benchmark Keys"
         title="Benchmark Keys"
-        description="Explore the benchmark key hierarchy as an icicle chart built from the loaded dataset."
+        description="Explore the benchmark key hierarchy as a collapsible tree built from the loaded dataset."
       />
       {hasKeys ? (
-        <div className="h-[72vh] min-h-[32rem] overflow-hidden">
-          <Plot
-            useResizeHandler
-            style={{ width: "100%", height: "100%" }}
-            data={[{
-              type: "icicle",
-              ids: nodes.map((node) => node.id),
-              labels: nodes.map((node) => node.label),
-              parents: nodes.map((node) => node.parent),
-              values: nodes.map((node) => node.value),
-              branchvalues: "total",
-              tiling: { packing: "squarify" },
-              hovertemplate: "%{label}<br>%{value} benchmark keys<extra></extra>",
-              textinfo: "label+value",
-              textfont: { color: "#fafaf9", size: 14 },
-              pathbar: { textfont: { color: plotTheme.axis } },
-              marker: {
-                colors,
-                line: { color: plotTheme.grid, width: 1 }
-              }
-            }]}
-            layout={{
-              autosize: true,
-              margin: { t: 0, r: 0, b: 0, l: 0 },
-              paper_bgcolor: "rgba(0, 0, 0, 0)",
-              plot_bgcolor: "rgba(0, 0, 0, 0)",
-              font: { color: plotTheme.axis }
-            }}
-            config={{ displayModeBar: false, responsive: true }}
-          />
-        </div>
+        <Panel className="min-h-[32rem]">
+          <div className="mb-4 flex flex-wrap items-center gap-3">
+            <StatusBadge>{props.benchmarks.length} benchmark{props.benchmarks.length === 1 ? "" : "s"}</StatusBadge>
+            <StatusBadge>{tree.groupCount} group{tree.groupCount === 1 ? "" : "s"}</StatusBadge>
+            <p className="type-body-muted">Expand or collapse any group to inspect its nested benchmark keys.</p>
+          </div>
+          <DataTableShell>
+            <DataTable>
+              <thead>
+                <tr>
+                  <DataHeadCell>Key</DataHeadCell>
+                  <DataHeadCell>Kind</DataHeadCell>
+                  <DataHeadCell>Children</DataHeadCell>
+                  <DataHeadCell>Benchmarks</DataHeadCell>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((node) => {
+                  const isExpanded = expandedIds.has(node.id);
+                  const indentStyle = { paddingLeft: `${node.depth * Tree_Indent_Rem}rem` };
+
+                  return (
+                    <tr key={node.id}>
+                      <DataCell className="align-top">
+                        <div className="min-w-0" style={indentStyle}>
+                          {node.kind === "group" ? (
+                            <button
+                              type="button"
+                              className="flex min-w-0 items-start gap-2 text-left"
+                              onClick={() => {
+                                setExpandedIds((current) => {
+                                  const next = new Set(current);
+                                  if (next.has(node.id)) next.delete(node.id);
+                                  else next.add(node.id);
+                                  return next;
+                                });
+                              }}
+                            >
+                              <span className="type-meta mt-0.5 w-3 shrink-0 text-center">{isExpanded ? "▾" : "▸"}</span>
+                              <span className="type-body-strong min-w-0 truncate">{node.label}</span>
+                            </button>
+                          ) : (
+                            <div className="flex min-w-0 items-start gap-2">
+                              <span className="type-meta mt-0.5 w-3 shrink-0 text-center">•</span>
+                              <span className="type-body min-w-0 truncate">{node.label}</span>
+                            </div>
+                          )}
+                        </div>
+                      </DataCell>
+                      <DataCell tone="plain">
+                        <StatusBadge>{node.kind === "group" ? "Group" : "Benchmark"}</StatusBadge>
+                      </DataCell>
+                      <DataCell>{node.kind === "group" ? node.childIds.length : ""}</DataCell>
+                      <DataCell>{node.benchmarkCount}</DataCell>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </DataTable>
+          </DataTableShell>
+        </Panel>
       ) : (
-        <EmptyState className="surface-empty pad-empty flex min-h-[32rem] flex-col items-center justify-center text-center" title="No benchmark keys available" description="Load a benchmark database with rows to render the hierarchy." />
+        <EmptyState
+          className="surface-empty pad-empty flex min-h-[32rem] flex-col items-center justify-center text-center"
+          title="No benchmark keys available"
+          description="Load a benchmark database with rows to render the hierarchy."
+        />
       )}
     </>
   );

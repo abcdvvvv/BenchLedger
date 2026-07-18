@@ -8,7 +8,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes("/node_modules/plotly.js/")) return "plotly";
+          if (id.includes("/node_modules/plotly.js-basic-dist-min/")) return "plotly";
           if (id.includes("/node_modules/sql.js/")) return "sql";
           if (
             id.includes("/node_modules/react/") ||

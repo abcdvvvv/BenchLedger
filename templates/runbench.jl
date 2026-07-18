@@ -136,6 +136,120 @@ function detect_kernel_version()
     return ""
 end
 
+function loaded_module_by_name(name::Symbol)
+    try
+        for _module in values(Base.loaded_modules)
+            nameof(_module) == name && return _module
+        end
+    catch
+    end
+    nothing
+end
+
+function module_version_string(_module::Module)
+    try
+        version = Base.pkgversion(_module)
+        version === nothing ? "" : string(version)
+    catch
+        ""
+    end
+end
+
+function module_call_version(_module::Module, name::Symbol)
+    isdefined(_module, name) || return ""
+    try
+        string(getfield(_module, name)())
+    catch
+        ""
+    end
+end
+
+function detect_nvidia_gpu()
+    output = try
+        readchomp(`nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader,nounits`)
+    catch
+        return (gpus=Dict{String,Any}[], driver_version="")
+    end
+    isempty(strip(output)) && return (gpus=Dict{String,Any}[], driver_version="")
+
+    counts = Dict{Tuple{String,Int},Int}()
+    driver_versions = Set{String}()
+    for line in split(output, '\n'; keepempty=false)
+        fields = strip.(split(line, ','; limit=3))
+        length(fields) >= 2 || continue
+        model = fields[1]
+        memory_mib = tryparse(Int, fields[2])
+        memory_mib === nothing && continue
+        key = (model, memory_mib * 1024^2)
+        counts[key] = get(counts, key, 0) + 1
+        length(fields) == 3 && !isempty(fields[3]) && push!(driver_versions, fields[3])
+    end
+
+    gpus = Dict{String,Any}[]
+    for (model, memory_bytes) in sort!(collect(keys(counts)); by=x -> (x[1], x[2]))
+        push!(gpus, Dict{String,Any}(
+            "vendor" => "NVIDIA",
+            "model" => model,
+            "memory_bytes" => memory_bytes,
+            "count" => counts[(model, memory_bytes)],
+        ))
+    end
+    driver_version = isempty(driver_versions) ? "" : first(sort!(collect(driver_versions)))
+    (; gpus, driver_version)
+end
+
+function visible_gpu_count(detected_count::Int)
+    for name in ("CUDA_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES", "HIP_VISIBLE_DEVICES")
+        haskey(ENV, name) || continue
+        raw = strip(ENV[name])
+        isempty(raw) && return 0
+        lowercase(raw) in ("-1", "none", "nodevfiles") && return 0
+        devices = filter(!isempty, strip.(split(raw, ','; keepempty=false)))
+        return length(devices)
+    end
+    detected_count > 0 ? detected_count : nothing
+end
+
+function detect_gpu_interface()
+    for (module_name, display_name) in ((:CUDA, "CUDA.jl"), (:AMDGPU, "AMDGPU.jl"), (:Metal, "Metal.jl"), (:oneAPI, "oneAPI.jl"))
+        _module = loaded_module_by_name(module_name)
+        _module === nothing && continue
+        interface = Dict{String,Any}("name" => display_name)
+        version = module_version_string(_module)
+        !isempty(version) && (interface["version"] = version)
+        return interface
+    end
+    Dict{String,Any}()
+end
+
+function detect_gpu_runtime(nvidia_driver_version::AbstractString)
+    runtime = Dict{String,Any}()
+    cuda = loaded_module_by_name(:CUDA)
+    amdgpu = loaded_module_by_name(:AMDGPU)
+
+    if cuda !== nothing
+        runtime["backend"] = "CUDA"
+        driver_version = module_call_version(cuda, :driver_version)
+        isempty(driver_version) && (driver_version = String(nvidia_driver_version))
+        !isempty(driver_version) && (runtime["driver"] = Dict{String,Any}("version" => driver_version))
+
+        runtime_version = module_call_version(cuda, :runtime_version)
+        runtime_info = Dict{String,Any}("name" => "CUDA")
+        !isempty(runtime_version) && (runtime_info["version"] = runtime_version)
+        runtime["runtime"] = runtime_info
+    elseif amdgpu !== nothing
+        runtime["backend"] = "ROCm"
+        runtime_info = Dict{String,Any}("name" => "ROCm")
+        runtime_version = module_call_version(amdgpu, :runtime_version)
+        !isempty(runtime_version) && (runtime_info["version"] = runtime_version)
+        runtime["runtime"] = runtime_info
+    elseif !isempty(nvidia_driver_version)
+        runtime["driver"] = Dict{String,Any}("version" => String(nvidia_driver_version))
+    end
+
+    runtime
+end
+
 function normalize_code_state_id(value::AbstractString)
     startswith(value, "code-") && return String(value)
     startswith(value, "local+") && return string("code-local-", replace(String(value), "local+" => ""; count=1))
@@ -156,13 +270,17 @@ function detect_code_state_label(commit::AbstractString)
     isempty(commit) ? "local" : first(commit, min(7, ncodeunits(commit)))
 end
 
-function merge_metadata!(metadata::AbstractDict, override::AbstractDict)
+function merge_metadata!(metadata::AbstractDict, override::AbstractDict; path::AbstractString="")
     for (key, value) in pairs(override)
         key_string = String(key)
-        if haskey(metadata, key_string) && metadata[key_string] isa AbstractDict && value isa AbstractDict
-            merge_metadata!(metadata[key_string], value)
-        else
+        key_path = isempty(path) ? key_string : string(path, ".", key_string)
+
+        if !haskey(metadata, key_string)
             metadata[key_string] = value
+        elseif metadata[key_string] isa AbstractDict && value isa AbstractDict
+            merge_metadata!(metadata[key_string], value; path=key_path)
+        elseif metadata[key_string] != value
+            error("Conflicting metadata value at $(key_path): existing=$(repr(metadata[key_string])), new=$(repr(value)).")
         end
     end
     metadata
@@ -171,7 +289,7 @@ end
 function parse_object_env(name::AbstractString)
     raw = strip(get(ENV, name, ""))
     isempty(raw) && return Dict{String,Any}()
-    value = JSON.parse(raw)
+    value = JSON.parse(raw; dicttype=Dict{String,Any})
     value isa AbstractDict || error("$(name) must contain a JSON object.")
     Dict{String,Any}(String(key) => item for (key, item) in pairs(value))
 end
@@ -246,45 +364,52 @@ function make_environment()
     cpu_model = detect_cpu_model()
     os_release = detect_os_release()
     kernel_version = detect_kernel_version()
+    nvidia_gpu = detect_nvidia_gpu()
 
     os_identity = Dict{String,Any}("name" => os_release.name)
     !isempty(os_release.version) && (os_identity["version"] = os_release.version)
+    kernel_identity = Dict{String,Any}("name" => lowercase(string(Sys.KERNEL)))
+    !isempty(kernel_version) && (kernel_identity["version"] = kernel_version)
     runtime_identity = Dict{String,Any}("name" => "Julia", "version" => string(VERSION))
+
+    hardware_identity = Dict{String,Any}(
+        "cpu" => Dict{String,Any}(
+            "model" => cpu_model,
+            "logical_threads" => Sys.CPU_THREADS,
+        ),
+    )
+    !isempty(nvidia_gpu.gpus) && (hardware_identity["gpu"] = nvidia_gpu.gpus)
+
+    execution_identity = Dict{String,Any}(
+        "processes" => 1,
+        "threads" => Threads.nthreads(),
+    )
+    detected_gpu_count = sum(Int(gpu["count"]) for gpu in nvidia_gpu.gpus; init=0)
+    visible_gpus = visible_gpu_count(detected_gpu_count)
+    visible_gpus === nothing || (execution_identity["gpu_devices"] = Dict{String,Any}("visible" => visible_gpus))
+
     identity = Dict{String,Any}(
         "runtime" => runtime_identity,
         "platform" => Dict{String,Any}(
             "os" => os_identity,
+            "kernel" => kernel_identity,
             "architecture" => string(Sys.ARCH),
         ),
-        "hardware" => Dict{String,Any}(
-            "cpu" => Dict{String,Any}(
-                "model" => cpu_model,
-                "logical_threads" => Sys.CPU_THREADS,
-            ),
-        ),
-        "execution" => Dict{String,Any}(
-            "processes" => 1,
-            "threads" => Threads.nthreads(),
-        ),
+        "hardware" => hardware_identity,
+        "execution" => execution_identity,
     )
+    gpu_runtime = detect_gpu_runtime(nvidia_gpu.driver_version)
+    !isempty(gpu_runtime) && (identity["gpu_runtime"] = gpu_runtime)
+
+    # hardware.gpu, hardware.tpu, and hardware.npu are optional identity fields.
+    # TPU, NPU, and non-NVIDIA GPU details can be supplied through BENCH_ENVIRONMENT.identity.
     merge_metadata!(identity, object_field(override, "identity", "BENCH_ENVIRONMENT"))
 
-    kernel_metadata = Dict{String,Any}("name" => lowercase(string(Sys.KERNEL)))
-    !isempty(kernel_version) && (kernel_metadata["version"] = kernel_version)
-    metadata = Dict{String,Any}(
-        "benchmark" => Dict{String,Any}(
-            "framework" => Dict{String,Any}(
-                "name" => "BenchmarkTools.jl",
-                "version" => string(Base.pkgversion(BenchmarkTools)),
-            ),
-        ),
-        "platform" => Dict{String,Any}("kernel" => kernel_metadata),
-    )
-    merge_metadata!(metadata, object_field(override, "metadata", "BENCH_ENVIRONMENT"))
+    metadata = object_field(override, "metadata", "BENCH_ENVIRONMENT")
 
     identity_json = canonical_json(identity)
     id = string("env-", bytes2hex(sha256(codeunits(identity_json))))
-    label = haskey(override, "label") ? String(override["label"]) : gethostname()
+    label = haskey(override, "label") ? String(override["label"]) : string(cpu_model, " / Julia ", VERSION, " / ", Threads.nthreads(), " threads")
     (; id, label, identity=identity_json, metadata=canonical_json(metadata))
 end
 
@@ -294,11 +419,22 @@ function make_run_context(source, code_state, environment, measured_at::Abstract
     !isempty(source.branch) && (source_metadata["branch"] = source.branch)
     !isempty(source.tags) && (source_metadata["tags"] = source.tags)
     metadata = Dict{String,Any}(
+        "benchmark" => Dict{String,Any}(
+            "framework" => Dict{String,Any}(
+                "name" => "BenchmarkTools.jl",
+                "version" => string(Base.pkgversion(BenchmarkTools)),
+            ),
+        ),
+        "host" => Dict{String,Any}(
+            "hostname" => gethostname(),
+        ),
         "writer" => Dict{String,Any}(
             "name" => "BenchLedger Julia template",
             "version" => Benchledger_Schema_Version,
         ),
     )
+    gpu_interface = detect_gpu_interface()
+    !isempty(gpu_interface) && (metadata["gpu"] = Dict{String,Any}("interface" => gpu_interface))
     !isempty(source_metadata) && (metadata["source"] = source_metadata)
     merge_metadata!(metadata, object_field(override, "metadata", "BENCH_RUN"))
     return (
@@ -479,13 +615,19 @@ function validate_table_columns(db::SQLite.DB, path::AbstractString, table::Abst
 end
 
 function read_schema_version(db::SQLite.DB, path::AbstractString)
-    metadata_table = iterate(DBInterface.execute(db, "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'benchledger_metadata'"))
-    metadata_table === nothing && error("Unsupported BenchLedger database in $(path): missing benchledger_metadata.")
+    metadata_table_found = DBInterface.execute(db, "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'benchledger_metadata' LIMIT 1") do result
+        iterate(result) !== nothing
+    end
+    metadata_table_found || error("Unsupported BenchLedger database in $(path): missing benchledger_metadata.")
 
     # Avoid collect(...) here: SQLite.jl can materialize this single-column result as missing.
-    schema_iter = iterate(DBInterface.execute(db, "SELECT value FROM benchledger_metadata WHERE key = 'schema_version'"))
-    schema_iter === nothing && error("Unsupported BenchLedger database in $(path): missing benchledger_metadata.schema_version.")
-    String(schema_iter[1].value)
+    # Materialize the scalar inside the callback before the statement is closed.
+    schema_version = DBInterface.execute(db, "SELECT value FROM benchledger_metadata WHERE key = 'schema_version' LIMIT 1") do result
+        row_iter = iterate(result)
+        row_iter === nothing ? nothing : String(row_iter[1].value)
+    end
+    schema_version === nothing && error("Unsupported BenchLedger database in $(path): missing benchledger_metadata.schema_version.")
+    schema_version
 end
 
 function validate_schema_version!(db::SQLite.DB, path::AbstractString)
@@ -545,7 +687,9 @@ function split_v4_environment_metadata(metadata::AbstractDict)
     platform_identity = Dict{String,Any}()
     if platform isa AbstractDict
         os_identity = take_child_fields!(platform, "os", ("name", "version"))
+        kernel_identity = take_child_fields!(platform, "kernel", ("name", "version"))
         !isempty(os_identity) && (platform_identity["os"] = os_identity)
+        !isempty(kernel_identity) && (platform_identity["kernel"] = kernel_identity)
         haskey(platform, "architecture") && (platform_identity["architecture"] = pop!(platform, "architecture"))
         isempty(platform) && delete!(remaining, "platform")
     end
@@ -555,17 +699,34 @@ function split_v4_environment_metadata(metadata::AbstractDict)
     if hardware isa AbstractDict
         cpu_identity = take_child_fields!(hardware, "cpu", ("model", "logical_threads"))
         !isempty(cpu_identity) && (hardware_identity["cpu"] = cpu_identity)
+        haskey(hardware, "gpu") && (hardware_identity["gpu"] = pop!(hardware, "gpu"))
+        haskey(hardware, "tpu") && (hardware_identity["tpu"] = pop!(hardware, "tpu"))
+        haskey(hardware, "npu") && (hardware_identity["npu"] = pop!(hardware, "npu"))
         isempty(hardware) && delete!(remaining, "hardware")
     end
 
-    execution_identity = take_child_fields!(remaining, "execution", ("processes", "threads"))
+    execution_identity = take_child_fields!(remaining, "execution", ("processes", "threads", "gpu_devices", "tpu_devices", "npu_devices"))
+    gpu_runtime_identity = haskey(remaining, "gpu_runtime") ? pop!(remaining, "gpu_runtime") : nothing
+
+    run_metadata = Dict{String,Any}()
+    benchmark = get(remaining, "benchmark", nothing)
+    if benchmark isa AbstractDict && haskey(benchmark, "framework")
+        run_metadata["benchmark"] = Dict{String,Any}("framework" => pop!(benchmark, "framework"))
+        isempty(benchmark) && delete!(remaining, "benchmark")
+    end
+    gpu = get(remaining, "gpu", nothing)
+    if gpu isa AbstractDict && haskey(gpu, "interface")
+        run_metadata["gpu"] = Dict{String,Any}("interface" => pop!(gpu, "interface"))
+        isempty(gpu) && delete!(remaining, "gpu")
+    end
 
     identity = Dict{String,Any}()
     !isempty(runtime_identity) && (identity["runtime"] = runtime_identity)
     !isempty(platform_identity) && (identity["platform"] = platform_identity)
     !isempty(hardware_identity) && (identity["hardware"] = hardware_identity)
     !isempty(execution_identity) && (identity["execution"] = execution_identity)
-    identity, remaining
+    gpu_runtime_identity !== nothing && (identity["gpu_runtime"] = gpu_runtime_identity)
+    identity, remaining, run_metadata
 end
 
 function migrate_v4_code_state_id(old_id::AbstractString)
@@ -591,6 +752,11 @@ function migrate_v4_to_v5!(db::SQLite.DB, path::AbstractString)
     validate_v4_layout!(db, path)
     println("Migrating BenchLedger database from schema v4 to v5: $(path)")
 
+    backup_path = string(path, "_v4")
+    SQLite.execute(db, "PRAGMA wal_checkpoint(FULL)")
+    cp(path, backup_path; force=true)
+    println("Backed up schema v4 database to: $(backup_path)")
+
     SQLite.execute(db, "PRAGMA foreign_keys=OFF")
     SQLite.execute(db, "BEGIN IMMEDIATE TRANSACTION")
     try
@@ -607,21 +773,24 @@ function migrate_v4_to_v5!(db::SQLite.DB, path::AbstractString)
         for row in DBInterface.execute(db, "SELECT code_state_id, label, code_date, metadata FROM benchmark_code_states_v4")
             old_id = String(row.code_state_id)
             new_id = migrate_v4_code_state_id(old_id)
-            parsed_metadata = JSON.parse(String(row.metadata))
+            parsed_metadata = JSON.parse(String(row.metadata); dicttype=Dict{String,Any})
             identity, metadata = split_v4_code_state_metadata(parsed_metadata)
             persist_labeled_entity!(db, "benchmark_code_states", new_id, canonical_json(identity), canonical_json(metadata), String(row.label); code_date=String(row.code_date))
             code_state_id_map[old_id] = new_id
         end
 
         environment_id_map = Dict{String,String}()
+        environment_run_metadata = Dict{String,Dict{String,Any}}()
         for row in DBInterface.execute(db, "SELECT environment_id, label, metadata FROM benchmark_environments_v4")
             old_id = String(row.environment_id)
-            parsed_metadata = JSON.parse(String(row.metadata))
-            identity, metadata = split_v4_environment_metadata(parsed_metadata)
+            parsed_metadata = JSON.parse(String(row.metadata); dicttype=Dict{String,Any})
+            identity, metadata, run_metadata = split_v4_environment_metadata(parsed_metadata)
             identity_json = canonical_json(identity)
             new_id = string("env-", bytes2hex(sha256(codeunits(identity_json))))
             persist_labeled_entity!(db, "benchmark_environments", new_id, identity_json, canonical_json(metadata), String(row.label))
             environment_id_map[old_id] = new_id
+            run_metadata["host"] = Dict{String,Any}("hostname" => String(row.label))
+            environment_run_metadata[old_id] = run_metadata
         end
 
         for row in DBInterface.execute(db, "SELECT run_id, code_state_id, environment_id, measured_at, notes, metadata FROM benchmark_runs_v4")
@@ -629,16 +798,19 @@ function migrate_v4_to_v5!(db::SQLite.DB, path::AbstractString)
             old_environment_id = String(row.environment_id)
             haskey(code_state_id_map, old_code_state_id) || error("Missing migrated code state for $(old_code_state_id).")
             haskey(environment_id_map, old_environment_id) || error("Missing migrated environment for $(old_environment_id).")
+            run_metadata = deepcopy(environment_run_metadata[old_environment_id])
+            merge_metadata!(run_metadata, JSON.parse(String(row.metadata); dicttype=Dict{String,Any}))
             DBInterface.execute(db,
                 "INSERT INTO benchmark_runs (id, code_state_id, environment_id, measured_at, notes, metadata) VALUES (?, ?, ?, ?, ?, ?)",
-                (String(row.run_id), code_state_id_map[old_code_state_id], environment_id_map[old_environment_id], String(row.measured_at), String(row.notes), String(row.metadata)))
+                (String(row.run_id), code_state_id_map[old_code_state_id], environment_id_map[old_environment_id], String(row.measured_at), String(row.notes), canonical_json(run_metadata)))
         end
 
-        SQLite.execute(db, """
-INSERT INTO benchmark_results (run_id, benchmark_id, benchmark_path, benchmark_label, metric_name, statistic, unit, value, better)
-SELECT run_id, benchmark_id, benchmark_path, benchmark_label, metric_name, statistic, unit, value, better
-FROM benchmark_results_v4
-""")
+        SQLite.execute(db,
+            """
+            INSERT INTO benchmark_results (run_id, benchmark_id, benchmark_path, benchmark_label, metric_name, statistic, unit, value, better)
+            SELECT run_id, benchmark_id, benchmark_path, benchmark_label, metric_name, statistic, unit, value, better
+            FROM benchmark_results_v4
+            """)
 
         SQLite.execute(db, "DROP TABLE benchmark_results_v4")
         SQLite.execute(db, "DROP TABLE benchmark_runs_v4")
@@ -653,8 +825,10 @@ FROM benchmark_results_v4
         SQLite.execute(db, "PRAGMA foreign_keys=ON")
     end
 
-    fk_violation = iterate(DBInterface.execute(db, "PRAGMA foreign_key_check"))
-    fk_violation === nothing || error("Foreign-key validation failed after migrating $(path) from schema v4 to v5.")
+    fk_violation = DBInterface.execute(db, "PRAGMA foreign_key_check") do result
+        iterate(result) !== nothing
+    end
+    fk_violation && error("Foreign-key validation failed after migrating $(path) from schema v4 to v5.")
     validate_schema_version!(db, path)
     println("BenchLedger schema migration v4 -> v5 completed.")
 end
@@ -792,22 +966,26 @@ function benchmark_result_row(run_id::AbstractString, row::BenchmarkMetricRow)
 end
 
 function persist_labeled_entity!(db::SQLite.DB, table::AbstractString, id_value::AbstractString, identity::AbstractString, metadata::AbstractString, label::AbstractString; code_date::Union{Nothing,AbstractString}=nothing)
-    code_date === nothing ?
-        DBInterface.execute(db, "INSERT INTO $(table) (id, label, identity, metadata) VALUES (?, ?, ?, ?) ON CONFLICT (id) DO NOTHING", (id_value, label, identity, metadata)) :
-        DBInterface.execute(db, "INSERT INTO $(table) (id, label, code_date, identity, metadata) VALUES (?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING", (id_value, label, code_date, identity, metadata))
+    code_date === nothing ? DBInterface.execute(db, "INSERT INTO $(table) (id, label, identity, metadata) VALUES (?, ?, ?, ?) ON CONFLICT (id) DO NOTHING", (id_value, label, identity, metadata)) :
+    DBInterface.execute(db, "INSERT INTO $(table) (id, label, code_date, identity, metadata) VALUES (?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING", (id_value, label, code_date, identity, metadata))
 
-    row_iter = iterate(DBInterface.execute(db, code_date === nothing ? "SELECT label, identity, metadata FROM $(table) WHERE id = ?" : "SELECT label, code_date, identity, metadata FROM $(table) WHERE id = ?", (id_value,)))
-    row_iter === nothing && error("Failed to persist $(table) $(id_value).")
-    row = row_iter[1]
-    code_date === nothing || String(row.code_date) == code_date || error("Conflicting code_date for id=$(id_value) in $(table).")
-    String(row.identity) == identity || error("Conflicting identity for id=$(id_value) in $(table).")
+    row = DBInterface.execute(db, code_date === nothing ? "SELECT label, identity, metadata FROM $(table) WHERE id = ? LIMIT 1" : "SELECT label, code_date, identity, metadata FROM $(table) WHERE id = ? LIMIT 1", (id_value,)) do result
+        row_iter = iterate(result)
+        row_iter === nothing && return nothing
+        value = row_iter[1]
+        code_date === nothing ? (label=String(value.label), identity=String(value.identity), metadata=String(value.metadata)) :
+        (label=String(value.label), code_date=String(value.code_date), identity=String(value.identity), metadata=String(value.metadata))
+    end
+    row === nothing && error("Failed to persist $(table) $(id_value).")
+    code_date === nothing || row.code_date == code_date || error("Conflicting code_date for id=$(id_value) in $(table).")
+    row.identity == identity || error("Conflicting identity for id=$(id_value) in $(table).")
 
     # Identity is immutable. Metadata is descriptive/extensible, so merge new values
     # into the stored object instead of making metadata part of entity identity.
-    merged_metadata = JSON.parse(String(row.metadata))
-    merge_metadata!(merged_metadata, JSON.parse(metadata))
+    merged_metadata = JSON.parse(row.metadata; dicttype=Dict{String,Any})
+    merge_metadata!(merged_metadata, JSON.parse(metadata; dicttype=Dict{String,Any}))
     merged_metadata_json = canonical_json(merged_metadata)
-    if String(row.label) != label || String(row.metadata) != merged_metadata_json
+    if row.label != label || row.metadata != merged_metadata_json
         DBInterface.execute(db, "UPDATE $(table) SET label = ?, metadata = ? WHERE id = ?", (label, merged_metadata_json, id_value))
     end
 end

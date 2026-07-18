@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildRuns,
   clampTrendBoardColumns,
   buildTrendTrace,
   commitAxisLayout,
@@ -16,7 +17,13 @@ import {
   trendDisplayUnitContext,
   type TrendPlotRow
 } from "./dashboard";
-import type { BenchmarkRow } from "./types";
+import type {
+  BenchmarkCodeState,
+  BenchmarkEnvironment,
+  BenchmarkRow,
+  BenchmarkRunRecord,
+  LoadedBenchmarkDataset
+} from "./types";
 
 const Base_Row: BenchmarkRow = {
   run_id: "run-1",
@@ -134,6 +141,84 @@ describe("dashboard helpers", () => {
     expect(series.map((entry) => entry.environmentId)).toEqual(["env-a", "env-b"]);
     expect(series[0].rows).toHaveLength(1);
     expect(series[1].rows).toHaveLength(2);
+  });
+
+  it("sorts runs by code date before measured time", () => {
+    const rows: BenchmarkRow[] = [
+      { ...Base_Row, run_id: "run-older-measured-later", benchmark_id: "bench-a" },
+      { ...Base_Row, run_id: "run-newer-measured-earlier", benchmark_id: "bench-b" }
+    ];
+    const runsById = new Map<string, BenchmarkRunRecord>([
+      ["run-older-measured-later", {
+        id: "run-older-measured-later",
+        code_state_id: "state-older",
+        environment_id: "env-1",
+        measured_at: "2026-06-20T00:00:00Z",
+        notes: "",
+        metadata: {}
+      }],
+      ["run-newer-measured-earlier", {
+        id: "run-newer-measured-earlier",
+        code_state_id: "state-newer",
+        environment_id: "env-1",
+        measured_at: "2026-06-19T00:00:00Z",
+        notes: "",
+        metadata: {}
+      }]
+    ]);
+    const codeStatesById = new Map<string, BenchmarkCodeState>([
+      ["state-older", {
+        id: "state-older",
+        label: "Older",
+        code_date: "2026-06-10T00:00:00Z",
+        identity: {},
+        metadata: {}
+      }],
+      ["state-newer", {
+        id: "state-newer",
+        label: "Newer",
+        code_date: "2026-06-11T00:00:00Z",
+        identity: {},
+        metadata: {}
+      }]
+    ]);
+    const environmentsById = new Map<string, BenchmarkEnvironment>([
+      ["env-1", {
+        id: "env-1",
+        label: "Env 1",
+        identity: {},
+        metadata: {}
+      }]
+    ]);
+    const dataset: LoadedBenchmarkDataset = {
+      rows,
+      benchmarksById: new Map([
+        ["bench-a", { id: "bench-a", path: ["suite", "bench-a"], label: "bench-a" }],
+        ["bench-b", { id: "bench-b", path: ["suite", "bench-b"], label: "bench-b" }]
+      ]),
+      runsById,
+      codeStatesById,
+      environmentsById,
+      metadata: {
+        schema_version: 5,
+        name: "",
+        description: "",
+        project_url: "",
+        logo_url: "",
+        logo_url_dark: "",
+        created_at: "",
+        updated_at: "",
+        notes: "",
+        raw: {}
+      },
+      source_label: "test.sqlite",
+      source_url: null
+    };
+
+    expect(buildRuns(dataset).map((run) => run.run_id)).toEqual([
+      "run-newer-measured-earlier",
+      "run-older-measured-later"
+    ]);
   });
 
   it("builds commit axis category order from code-date-sorted trend rows", () => {

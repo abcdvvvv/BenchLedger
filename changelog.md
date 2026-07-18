@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.6.1] - 2026-07-18
+
+### Fixed
+- Fixed the frontend dev server so Plotly no longer leaves the app on a blank screen when running in the browser.
+- Fixed page keep-alive wrappers so Dashboard and Trend Board preserve their intended page spacing after navigation.
+- Reduced return-to-page latency for already-visited pages by keeping inactive pages mounted without forcing Plotly to fully relayout on every revisit.
+
+### Changed
+- `runbench.jl` now records richer environment and run context by default, including kernel details, BenchmarkTools version, hostname, GPU inventory/runtime/interface metadata, and a more descriptive default environment label.
+- Hardened `runbench.jl` schema migration and entity persistence by backing up Schema v4 databases before migration, preserving migrated run metadata, and rejecting conflicting metadata merges instead of silently overwriting values.
+
 ## [0.6.0] — 2026-07-18
 BenchLedger 0.6.0 introduces a cleaner benchmark data model, a more efficient frontend, and a substantially simpler benchmark workflow.
 
@@ -134,7 +145,8 @@ The bundled GitHub Actions workflow now supports three target modes through one 
 
 Initial usable release of BenchLedger.
 
-[Unreleased]: https://github.com/abcdvvvv/BenchLedger/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/abcdvvvv/BenchLedger/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/abcdvvvv/BenchLedger/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/abcdvvvv/BenchLedger/compare/v0.5.4...v0.6.0
 [0.5.4]: https://github.com/abcdvvvv/BenchLedger/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/abcdvvvv/BenchLedger/compare/v0.5.2...v0.5.3

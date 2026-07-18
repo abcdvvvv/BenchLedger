@@ -8,15 +8,12 @@ export function buildAppPages(state: BenchmarkDatasetState, openLocalFilePicker:
     settings,
     setSetting,
     benchmarkDefinitions,
-    plotTheme,
     databaseCatalog
   } = state;
 
   return {
     benchmarkKeys: {
-      benchmarks: benchmarkDefinitions,
-      plotTheme,
-      theme: settings.theme
+      benchmarks: benchmarkDefinitions
     },
     settings: {
       trendLineShape: settings.trendLineShape,
