@@ -648,6 +648,37 @@ end
 # ║ open_database below.                                                       ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 
+function canonicalize_code_date(value::AbstractString)
+    text = strip(String(value))
+    matched = match(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:\d{2})$", text)
+    matched === nothing && return text
+
+    datetime = try
+        DateTime(matched.captures[1], dateformat"yyyy-mm-ddTHH:MM:SS")
+    catch
+        return text
+    end
+
+    fraction = something(matched.captures[2], "")
+    if !isempty(fraction)
+        milliseconds = parse(Int, first(string(fraction, "000"), 3))
+        datetime += Millisecond(milliseconds)
+    end
+
+    timezone = matched.captures[3]
+    if timezone != "Z"
+        offset_hours = parse(Int, timezone[2:3])
+        offset_minutes = parse(Int, timezone[5:6])
+        if startswith(timezone, "+")
+            datetime -= Hour(offset_hours) + Minute(offset_minutes)
+        else
+            datetime += Hour(offset_hours) + Minute(offset_minutes)
+        end
+    end
+
+    Dates.format(datetime, dateformat"yyyy-mm-ddTHH:MM:SS.sss") * "Z"
+end
+
 function validate_v4_layout!(db::SQLite.DB, path::AbstractString)
     validate_table_columns(db, path, "benchmark_code_states", ("code_state_id", "label", "code_date", "metadata"))
     validate_table_columns(db, path, "benchmark_environments", ("environment_id", "label", "metadata"))
@@ -775,7 +806,8 @@ function migrate_v4_to_v5!(db::SQLite.DB, path::AbstractString)
             new_id = migrate_v4_code_state_id(old_id)
             parsed_metadata = JSON.parse(String(row.metadata); dicttype=Dict{String,Any})
             identity, metadata = split_v4_code_state_metadata(parsed_metadata)
-            persist_labeled_entity!(db, "benchmark_code_states", new_id, canonical_json(identity), canonical_json(metadata), String(row.label); code_date=String(row.code_date))
+            code_date = canonicalize_code_date(String(row.code_date))
+            persist_labeled_entity!(db, "benchmark_code_states", new_id, canonical_json(identity), canonical_json(metadata), String(row.label); code_date=code_date)
             code_state_id_map[old_id] = new_id
         end
 
