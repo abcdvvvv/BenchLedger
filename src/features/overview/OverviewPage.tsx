@@ -257,21 +257,21 @@ export function OverviewPage(props: OverviewPageProps) {
           <>
             <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:min-w-[30rem]">
               <Field>
-                <FieldLabel>Focus run</FieldLabel>
-                <RunSelectMenu
-                  disabled={!header.filteredRuns.length}
-                  runs={header.filteredRuns}
-                  selectedRunId={header.focusRunId}
-                  onSelect={header.onFocusRunChange}
-                />
-              </Field>
-              <Field>
                 <FieldLabel>Baseline run</FieldLabel>
                 <RunSelectMenu
                   disabled={!header.filteredRuns.length}
                   runs={header.filteredRuns}
                   selectedRunId={header.baselineRunId}
                   onSelect={header.onBaselineRunChange}
+                />
+              </Field>
+              <Field>
+                <FieldLabel>Focus run</FieldLabel>
+                <RunSelectMenu
+                  disabled={!header.filteredRuns.length}
+                  runs={header.filteredRuns}
+                  selectedRunId={header.focusRunId}
+                  onSelect={header.onFocusRunChange}
                 />
               </Field>
             </div>

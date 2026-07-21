@@ -14,6 +14,7 @@ export type TrendPlotRow = BenchmarkRow & {
   run_axis_label: string;
   run_headline: string;
   run_tone: "tag" | "master" | "branch";
+  run_identity_title: string;
 };
 
 export type MetricDescriptor = {
@@ -438,7 +439,8 @@ export function buildTrendTrace(
         row.run_axis_label,
         row.code_date,
         row.measured_at,
-        displayUnitContext.formatValue(row.value, row.unit)
+        displayUnitContext.formatValue(row.value, row.unit),
+        row.run_identity_title
       ]),
       line: {
         color,
@@ -457,9 +459,7 @@ export function buildTrendTrace(
         type: "vertical",
         colorscale
       },
-      hovertemplate: axisMode === "commit"
-        ? `%{customdata[0]}<br>Code date: %{customdata[1]}<br>Measured: %{customdata[2]}<br>Value: %{customdata[3]}<br>Unit: ${unit || "n/a"}<extra></extra>`
-        : `%{x}<br>Measured: %{customdata[2]}<br>Value: %{customdata[3]}<br>Unit: ${unit || "n/a"}<extra></extra>`,
+      hovertemplate: `%{customdata[4]}<br>Code date: %{customdata[1]}<br>Measured: %{customdata[2]}<br>Value: %{customdata[3]}<br>Unit: ${unit || "n/a"}<extra></extra>`,
       showlegend: showLegend
     }
   ];

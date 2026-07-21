@@ -1,6 +1,6 @@
 import { Menu, MenuButton, MenuItem, MenuProvider } from "@ariakit/react";
 import { FiCheck } from "react-icons/fi";
-import { runHeadline } from "../../../lib/dashboard-data";
+import { runHeadline, runIdentityTitle } from "../../../lib/dashboard-data";
 import { formatDate, formatDateOnly } from "../../../lib/format";
 import type { BenchmarkRun } from "../../../lib/types";
 import { cn } from "../../../components/ui/cn";
@@ -23,7 +23,7 @@ export function RunSelectMenu(props: RunSelectMenuProps) {
       <MenuButton
         className={cn(menuTriggerClassName({ disabled }))}
         disabled={disabled}
-        title={selectedRun ? formatDate(selectedRun.measured_at) : undefined}
+        title={selectedRun ? `${runIdentityTitle(selectedRun)}\nMeasured: ${formatDate(selectedRun.measured_at)}` : undefined}
       >
         <DisclosureTriggerContent contentClassName="font-mono">{selectedLabel}</DisclosureTriggerContent>
       </MenuButton>
@@ -43,7 +43,7 @@ export function RunSelectMenu(props: RunSelectMenuProps) {
                 menuItemRowClassName({ state: isSelected ? "selected" : "default" })
               )}
               onClick={() => onSelect(run.run_id)}
-              title={formatDate(run.measured_at)}
+              title={`${runIdentityTitle(run)}\nMeasured: ${formatDate(run.measured_at)}`}
             >
               <span className="flex size-4 items-center justify-center" aria-hidden="true">
                 {isSelected ? <FiCheck className="size-4" /> : null}

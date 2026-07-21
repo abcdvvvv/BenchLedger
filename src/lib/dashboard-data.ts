@@ -100,19 +100,26 @@ function _codeStateRevision(run: Pick<BenchmarkRun, "code_state_identity">): str
   return _metadataString(_codeStateIdentitySource(run), "revision");
 }
 
+function _dirtyRunSuffix(run: BenchmarkRun): string {
+  if (run.code_state_metadata.source?.dirty !== true) return "";
+  const digest = _metadataString(_codeStateIdentitySource(run), "diff_digest");
+  return ` (${digest ? digest.slice(0, 6) : "dirty"})`;
+}
+
 export function runId(row: Pick<BenchmarkRow, "run_id">): string {
   return row.run_id;
 }
 
 export function runHeadline(run: BenchmarkRun): string {
+  const suffix = _dirtyRunSuffix(run);
   const tags = _runTags(run);
-  if (tags.length) return tags[0];
-  if (run.code_label) return run.code_label;
+  if (tags.length) return `${tags[0]}${suffix}`;
+  if (run.code_label) return `${run.code_label}${suffix}`;
   const revision = _codeStateRevision(run);
-  if (revision) return shortCommit(revision);
+  if (revision) return `${shortCommit(revision)}${suffix}`;
   const branch = _runBranch(run);
-  if (branch) return branch;
-  return run.environment_label || "local";
+  if (branch) return `${branch}${suffix}`;
+  return `${run.environment_label || "local"}${suffix}`;
 }
 
 export function runTone(run: BenchmarkRun): "tag" | "master" | "branch" {
@@ -123,12 +130,19 @@ export function runTone(run: BenchmarkRun): "tag" | "master" | "branch" {
 }
 
 export function runAxisLabel(run: BenchmarkRun): string {
+  const suffix = _dirtyRunSuffix(run);
   const tags = _runTags(run);
-  if (tags.length) return tags[0];
-  if (run.code_label) return run.code_label;
+  if (tags.length) return `${tags[0]}${suffix}`;
+  if (run.code_label) return `${run.code_label}${suffix}`;
   const revision = _codeStateRevision(run);
-  if (revision) return shortCommit(revision);
-  return run.environment_label || "local";
+  if (revision) return `${shortCommit(revision)}${suffix}`;
+  return `${run.environment_label || "local"}${suffix}`;
+}
+
+export function runIdentityTitle(run: BenchmarkRun, separator = "\n"): string {
+  const digest = _metadataString(_codeStateIdentitySource(run), "diff_digest");
+  return [`Run: ${runHeadline(run)}`, `Tag: ${_runTags(run).join(", ") || "n/a"}`, `Branch: ${_runBranch(run) || "n/a"}`,
+    `Revision: ${_codeStateRevision(run) || "n/a"}`, `Dirty: ${run.code_state_metadata.source?.dirty === true}`, `Diff digest: ${digest || "n/a"}`].join(separator);
 }
 
 

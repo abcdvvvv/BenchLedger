@@ -1,5 +1,5 @@
 import { parseDate } from "./format";
-import { comparePath, runAxisLabel, runHeadline, runTone } from "./dashboard-data";
+import { comparePath, runAxisLabel, runHeadline, runIdentityTitle, runTone } from "./dashboard-data";
 import { metricFamilyLabel, type TrendPlotRow } from "./dashboard-plotting";
 import { dateInputValue, type DisplayStrategy } from "./dashboard-settings";
 import type { BenchmarkDefinition, BenchmarkRow, BenchmarkRun } from "./types";
@@ -256,7 +256,8 @@ export function buildTrendRowsByBenchmark(
       date_value: dateValue,
       run_axis_label: runAxisLabel(run),
       run_headline: runHeadline(run),
-      run_tone: runTone(run)
+      run_tone: runTone(run),
+      run_identity_title: runIdentityTitle(run, "<br>")
     };
     const bucket = rowsByBenchmark.get(row.benchmark_id);
     if (bucket) {

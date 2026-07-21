@@ -14,6 +14,9 @@ import {
   metricLabel,
   metadataDescription,
   metadataTitle,
+  runAxisLabel,
+  runHeadline,
+  runIdentityTitle,
   splitTrendRowsByEnvironment,
   trendDisplayUnitContext,
   type TrendPlotRow
@@ -22,6 +25,7 @@ import type {
   BenchmarkCodeState,
   BenchmarkEnvironment,
   BenchmarkRow,
+  BenchmarkRun,
   BenchmarkRunRecord,
   LoadedBenchmarkDataset
 } from "./types";
@@ -48,11 +52,50 @@ function makeTrendRow(overrides: Partial<TrendPlotRow>): TrendPlotRow {
     run_axis_label: "2026-01-01",
     run_headline: "Run 1",
     run_tone: "branch",
+    run_identity_title: "Run: Run 1",
+    ...overrides
+  };
+}
+
+function makeRun(overrides: Partial<BenchmarkRun> = {}): BenchmarkRun {
+  return {
+    run_id: "run-1",
+    code_state_id: "state-1",
+    code_label: "",
+    code_date: "2026-01-01T00:00:00Z",
+    environment_id: "env-1",
+    environment_label: "Environment 1",
+    measured_at: "2026-01-01T00:00:00Z",
+    notes: "",
+    code_state_identity: { source: { kind: "git", revision: "abcdef1234567890" } },
+    code_state_metadata: { source: { dirty: false } },
+    environment_identity: {},
+    environment_metadata: {},
+    run_metadata: { source: { branch: "main", tags: [] } },
+    benchmark_count: 1,
     ...overrides
   };
 }
 
 describe("dashboard helpers", () => {
+  it("distinguishes dirty code states with a short diff digest", () => {
+    const dirtyTagged = makeRun({
+      code_state_identity: { source: { kind: "git", revision: "abcdef1234567890", diff_digest: "4f2a9c8e1234" } },
+      code_state_metadata: { source: { dirty: true } },
+      run_metadata: { source: { branch: "main", tags: ["v0.1.6"] } }
+    });
+    const dirtyUntagged = makeRun({
+      code_state_identity: { source: { kind: "git", revision: "abcdef1234567890", diff_digest: "9b8c7d6e5432" } },
+      code_state_metadata: { source: { dirty: true } }
+    });
+
+    expect(runHeadline(dirtyTagged)).toBe("v0.1.6 (4f2a9c)");
+    expect(runAxisLabel(dirtyTagged)).toBe("v0.1.6 (4f2a9c)");
+    expect(runHeadline(dirtyUntagged)).toBe("abcdef1 (9b8c7d)");
+    expect(runIdentityTitle(dirtyTagged)).toContain("Revision: abcdef1234567890");
+    expect(runIdentityTitle(dirtyTagged)).toContain("Diff digest: 4f2a9c8e1234");
+  });
+
   it("clamps trend board columns", () => {
     expect(clampTrendBoardColumns(Number.NaN)).toBe(3);
     expect(clampTrendBoardColumns(0)).toBe(1);
@@ -353,8 +396,8 @@ describe("dashboard helpers", () => {
 
     expect(traces[1]?.x).toEqual([0.5, 1]);
     expect(traces[1]?.customdata).toEqual([
-      ["af73b09", "2026-06-08T00:00:00Z", "2026-06-20T00:00:00Z", "20 ns"],
-      ["00a99b7", "2026-06-20T00:00:00Z", "2026-06-21T00:00:00Z", "10 ns"]
+      ["af73b09", "2026-06-08T00:00:00Z", "2026-06-20T00:00:00Z", "20 ns", "Run: Run 1"],
+      ["00a99b7", "2026-06-20T00:00:00Z", "2026-06-21T00:00:00Z", "10 ns", "Run: Run 1"]
     ]);
   });
 
