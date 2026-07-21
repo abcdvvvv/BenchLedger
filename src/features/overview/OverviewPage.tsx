@@ -446,11 +446,15 @@ export function OverviewPage(props: OverviewPageProps) {
                   {pagedComparisonRows.map((row) => (
                     <tr key={row.benchmark_id}>
                       <DataCell code className="align-top">{row.benchmark_label}</DataCell>
-                      <DataCell className="whitespace-nowrap">{formatMetricValue(row.baseline_value, row.unit)}</DataCell>
-                      <DataCell className="whitespace-nowrap">{formatMetricValue(row.focus_value, row.unit)}</DataCell>
+                      <DataCell className="whitespace-nowrap">
+                        {row.baseline_value === null ? "—" : formatMetricValue(row.baseline_value, row.unit)}
+                      </DataCell>
+                      <DataCell className="whitespace-nowrap">
+                        {row.focus_value === null ? "—" : formatMetricValue(row.focus_value, row.unit)}
+                      </DataCell>
                       <DataCell tone="plain" className="whitespace-nowrap">
-                        <StatusBadge tone={benchmarkDeltaTone(row.delta, row.better)}>
-                          {formatPercent(row.delta)}
+                        <StatusBadge tone={row.status === "matched" ? benchmarkDeltaTone(row.delta, row.better) : "neutral"}>
+                          {row.status === "matched" ? formatPercent(row.delta) : row.status === "focus-only" ? "Added" : "Removed"}
                         </StatusBadge>
                       </DataCell>
                     </tr>

@@ -1,7 +1,12 @@
 # Changelog
 
-## [0.6.1] - 2026-07-18
+## [Unreleased]
+### Fixed
+- Prevented inactive keep-alive pages, including hidden Plotly charts, from intercepting pointer and keyboard interaction.
+- Updated Benchmark Diff to retain benchmark keys present in only one selected run, displaying missing values as `—` and labeling them as `Added` or `Removed` instead of silently omitting them.
+- Excluded `Added` and `Removed` rows from percentage-delta summaries and improvement/regression counts.
 
+## [0.6.1] - 2026-07-18
 ### Fixed
 - Fixed the frontend dev server so Plotly no longer leaves the app on a blank screen when running in the browser.
 - Fixed page keep-alive wrappers so Dashboard and Trend Board preserve their intended page spacing after navigation.

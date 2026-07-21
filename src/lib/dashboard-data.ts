@@ -1,8 +1,10 @@
-import { formatDate, parseDate, shortCommit } from "./format";
+import { formatDate, parseDate, percentageChange, shortCommit, unique } from "./format";
+import { metricFamilyKey, trendDisplayUnitContext } from "./dashboard-plotting";
 import type { RunPairSortKey, SortDirection } from "./dashboard-settings";
 import type {
   BenchmarkRow,
   BenchmarkRun,
+  BenchmarkDefinition,
   BenchLedgerManifestDatabase,
   BenchLedgerMetadata,
   LoadedBenchmarkDataset,
@@ -130,7 +132,84 @@ export function runAxisLabel(run: BenchmarkRun): string {
 }
 
 
-export function runPairSortValue(row: PairComparison, key: RunPairSortKey): string | number {
+export function buildRunPairComparisons(
+  focusRows: BenchmarkRow[],
+  baselineRows: BenchmarkRow[],
+  benchmarksById: ReadonlyMap<string, BenchmarkDefinition>
+): PairComparison[] {
+  const focusByBenchmark = new Map(focusRows.map((row) => [row.benchmark_id, row]));
+  const baselineByBenchmark = new Map(baselineRows.map((row) => [row.benchmark_id, row]));
+  const keys = unique([...focusByBenchmark.keys(), ...baselineByBenchmark.keys()]).sort();
+
+  return keys
+    .map((key): PairComparison | null => {
+      const focus = focusByBenchmark.get(key);
+      const baseline = baselineByBenchmark.get(key);
+      const benchmark_label = benchmarksById.get(key)?.label ?? key;
+
+      if (focus && baseline) {
+        if (metricFamilyKey(focus) !== metricFamilyKey(baseline)) return null;
+        const displayUnitContext = trendDisplayUnitContext([
+          { value: focus.value, unit: focus.unit },
+          { value: baseline.value, unit: baseline.unit }
+        ]);
+        const focus_value = displayUnitContext.scaleValue(focus.value, focus.unit);
+        const baseline_value = displayUnitContext.scaleValue(baseline.value, baseline.unit);
+        return {
+          status: "matched",
+          benchmark_id: key,
+          benchmark_label,
+          focus_value,
+          baseline_value,
+          focus_unit: focus.unit,
+          baseline_unit: baseline.unit,
+          delta: percentageChange(focus_value, baseline_value),
+          unit: displayUnitContext.unit || focus.unit,
+          better: focus.better
+        };
+      }
+
+      if (focus) {
+        return {
+          status: "focus-only",
+          benchmark_id: key,
+          benchmark_label,
+          focus_value: focus.value,
+          baseline_value: null,
+          focus_unit: focus.unit,
+          baseline_unit: null,
+          delta: null,
+          unit: focus.unit,
+          better: focus.better
+        };
+      }
+
+      if (!baseline) return null;
+      return {
+        status: "baseline-only",
+        benchmark_id: key,
+        benchmark_label,
+        focus_value: null,
+        baseline_value: baseline.value,
+        focus_unit: null,
+        baseline_unit: baseline.unit,
+        delta: null,
+        unit: baseline.unit,
+        better: baseline.better
+      };
+    })
+    .filter((row): row is PairComparison => row !== null)
+    .sort((left, right) => {
+      if (left.status === "matched" && right.status === "matched") {
+        return Math.abs(right.delta) - Math.abs(left.delta);
+      }
+      if (left.status === "matched") return -1;
+      if (right.status === "matched") return 1;
+      return left.benchmark_label.localeCompare(right.benchmark_label);
+    });
+}
+
+export function runPairSortValue(row: PairComparison, key: RunPairSortKey): string | number | null {
   if (key === "benchmark") return row.benchmark_label;
   if (key === "focus") return row.focus_value;
   if (key === "baseline") return row.baseline_value;

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildRuns,
+  buildRunPairComparisons,
   clampTrendBoardColumns,
   buildTrendTrace,
   commitAxisLayout,
@@ -64,6 +65,35 @@ describe("dashboard helpers", () => {
     expect(comparePath(["a"], ["a", "b"])).toBeLessThan(0);
     expect(comparePath(["b"], ["a", "z"])).toBeGreaterThan(0);
     expect(comparePath(["a", "b"], ["a", "b"])).toBe(0);
+  });
+
+  it("keeps focus-only and baseline-only benchmarks in run diffs", () => {
+    const focusRows: BenchmarkRow[] = [
+      { ...Base_Row, benchmark_id: "shared", value: 84.2 },
+      { ...Base_Row, benchmark_id: "added", value: 68.3 }
+    ];
+    const baselineRows: BenchmarkRow[] = [
+      { ...Base_Row, run_id: "run-2", benchmark_id: "shared", value: 91.4 },
+      { ...Base_Row, run_id: "run-2", benchmark_id: "removed", value: 73.1 }
+    ];
+    const benchmarksById = new Map([
+      ["shared", { id: "shared", path: ["enabled", "clog"], label: "enabled / clog" }],
+      ["added", { id: "added", path: ["registry", "get_logger"], label: "registry / get_logger" }],
+      ["removed", { id: "removed", path: ["filtered", "old_path"], label: "filtered / old_path" }]
+    ]);
+
+    const rows = buildRunPairComparisons(focusRows, baselineRows, benchmarksById);
+
+    expect(rows).toHaveLength(3);
+    expect(rows.find((row) => row.benchmark_id === "shared")).toEqual(
+      expect.objectContaining({ status: "matched", baseline_value: 91.4, focus_value: 84.2 })
+    );
+    expect(rows.find((row) => row.benchmark_id === "added")).toEqual(
+      expect.objectContaining({ status: "focus-only", baseline_value: null, focus_value: 68.3, delta: null })
+    );
+    expect(rows.find((row) => row.benchmark_id === "removed")).toEqual(
+      expect.objectContaining({ status: "baseline-only", baseline_value: 73.1, focus_value: null, delta: null })
+    );
   });
 
   it("chooses a readable display unit for trend values", () => {

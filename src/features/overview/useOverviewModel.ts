@@ -1,9 +1,8 @@
 import { createElement, useEffect, useMemo, type ReactNode } from "react";
 import { FiActivity, FiClock, FiDatabase, FiGitBranch } from "react-icons/fi";
 import type { IconType } from "react-icons";
-import { formatPercent, percentageChange, unique } from "../../lib/format";
-import { defaultRunPairSortDirection, runId, runPairSortValue } from "../../lib/dashboard-data";
-import { metricFamilyKey, trendDisplayUnitContext } from "../../lib/dashboard-plotting";
+import { formatPercent, unique } from "../../lib/format";
+import { buildRunPairComparisons, defaultRunPairSortDirection, runId, runPairSortValue } from "../../lib/dashboard-data";
 import type { RunPairSort, RunPairSortKey } from "../../lib/dashboard-settings";
 import type { BenchmarkDefinition, BenchmarkRow, BenchmarkRun, PairComparison } from "../../lib/types";
 import { benchmarkDeltaTone } from "../benchmarks/benchmarkDeltaPresentation";
@@ -105,44 +104,18 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
     [baselineRun, rows]
   );
 
-  const focusByBenchmark = useMemo(() => new Map(focusRows.map((row) => [row.benchmark_id, row])), [focusRows]);
-  const baselineByBenchmark = useMemo(() => new Map(baselineRows.map((row) => [row.benchmark_id, row])), [baselineRows]);
-
-  const comparisonRows = useMemo<PairComparison[]>(() => {
-    const keys = unique([...focusByBenchmark.keys(), ...baselineByBenchmark.keys()]).sort();
-    return keys
-      .map((key) => {
-        const focus = focusByBenchmark.get(key);
-        const baseline = baselineByBenchmark.get(key);
-        if (!focus || !baseline) return null;
-        if (metricFamilyKey(focus) !== metricFamilyKey(baseline)) return null;
-        const displayUnitContext = trendDisplayUnitContext([
-          { value: focus.value, unit: focus.unit },
-          { value: baseline.value, unit: baseline.unit }
-        ]);
-        const scaledFocusValue = displayUnitContext.scaleValue(focus.value, focus.unit);
-        const scaledBaselineValue = displayUnitContext.scaleValue(baseline.value, baseline.unit);
-        return {
-          benchmark_id: key,
-          benchmark_label: benchmarksById.get(key)?.label ?? key,
-          focus_value: scaledFocusValue,
-          baseline_value: scaledBaselineValue,
-          focus_unit: focus.unit,
-          baseline_unit: baseline.unit,
-          delta: percentageChange(scaledFocusValue, scaledBaselineValue),
-          unit: displayUnitContext.unit || focus.unit,
-          better: focus.better
-        };
-      })
-      .filter((row): row is PairComparison => row !== null)
-      .sort((left, right) => Math.abs(right.delta) - Math.abs(left.delta));
-  }, [baselineByBenchmark, benchmarksById, focusByBenchmark]);
+  const comparisonRows = useMemo<PairComparison[]>(
+    () => buildRunPairComparisons(focusRows, baselineRows, benchmarksById),
+    [baselineRows, benchmarksById, focusRows]
+  );
 
   const sortedComparisonRows = useMemo(() => {
     if (!runPairSort) return comparisonRows;
     return [...comparisonRows].sort((left, right) => {
       const leftValue = runPairSortValue(left, runPairSort.key);
       const rightValue = runPairSortValue(right, runPairSort.key);
+      if (leftValue === null) return rightValue === null ? 0 : 1;
+      if (rightValue === null) return -1;
       const order = typeof leftValue === "string"
         ? leftValue.localeCompare(String(rightValue))
         : leftValue - Number(rightValue);
@@ -185,14 +158,18 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
     );
   }, [branch, environment, group, metricKind, timeEnd, timeStart]);
 
-  const largestDeltaRow = comparisonRows[0] ?? null;
-  const improvedCount = useMemo(
-    () => comparisonRows.filter((row) => benchmarkDeltaTone(row.delta, row.better) === "positive").length,
+  const matchedComparisonRows = useMemo(
+    () => comparisonRows.filter((row): row is Extract<PairComparison, { status: "matched" }> => row.status === "matched"),
     [comparisonRows]
   );
+  const largestDeltaRow = matchedComparisonRows[0] ?? null;
+  const improvedCount = useMemo(
+    () => matchedComparisonRows.filter((row) => benchmarkDeltaTone(row.delta, row.better) === "positive").length,
+    [matchedComparisonRows]
+  );
   const regressedCount = useMemo(
-    () => comparisonRows.filter((row) => benchmarkDeltaTone(row.delta, row.better) === "negative").length,
-    [comparisonRows]
+    () => matchedComparisonRows.filter((row) => benchmarkDeltaTone(row.delta, row.better) === "negative").length,
+    [matchedComparisonRows]
   );
   const largestDeltaLabel = useMemo(() => {
     if (!largestDeltaRow?.benchmark_label) return "";

@@ -152,17 +152,41 @@ export type BenchmarkRun = {
   benchmark_count: number;
 };
 
-export type PairComparison = {
+type PairComparisonBase = {
   benchmark_id: string;
   benchmark_label: string;
-  focus_value: number;
-  baseline_value: number;
-  focus_unit: string;
-  baseline_unit: string;
-  delta: number;
-  unit: string;
   better: "lower" | "higher" | "neutral";
 };
+
+export type PairComparison = PairComparisonBase & (
+  | {
+      status: "matched";
+      focus_value: number;
+      baseline_value: number;
+      focus_unit: string;
+      baseline_unit: string;
+      delta: number;
+      unit: string;
+    }
+  | {
+      status: "focus-only";
+      focus_value: number;
+      baseline_value: null;
+      focus_unit: string;
+      baseline_unit: null;
+      delta: null;
+      unit: string;
+    }
+  | {
+      status: "baseline-only";
+      focus_value: null;
+      baseline_value: number;
+      focus_unit: null;
+      baseline_unit: string;
+      delta: null;
+      unit: string;
+    }
+);
 
 export type BenchLedgerManifestDatabase = {
   id: string;

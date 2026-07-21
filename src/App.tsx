@@ -16,6 +16,7 @@ function PageSlot(props: { active: boolean; children: ReactNode }) {
   return (
     <div
       aria-hidden={!props.active}
+      inert={!props.active}
       className={props.active ? "layout-page-slot layout-page-slot-active" : "layout-page-slot layout-page-slot-inactive"}
     >
       {props.children}
