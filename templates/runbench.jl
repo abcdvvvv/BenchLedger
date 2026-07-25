@@ -1,12 +1,9 @@
 # SPDX-FileCopyrightText: 2026 karei
 # SPDX-License-Identifier: MIT-0
-import Pkg
-Pkg.activate(@__DIR__)
+import Pkg; Pkg.activate(@__DIR__)
 const Target_Package_Path = abspath(get(ENV, "BENCH_TARGET_PATH", joinpath(@__DIR__, "..")))
-if haskey(ENV, "BENCH_TARGET_PATH")
-    Pkg.develop(path=Target_Package_Path)
-    Pkg.instantiate()
-end
+Pkg.develop(path=Target_Package_Path)
+Pkg.instantiate()
 
 using BenchmarkTools, Dates, SHA, JSON, UUIDs
 using DBInterface, SQLite
