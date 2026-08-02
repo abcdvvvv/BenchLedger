@@ -262,7 +262,7 @@ export function defaultRunPairSortDirection(key: RunPairSortKey): SortDirection 
 function environmentPairLabel(hardware: BenchmarkRun["hardware_environment_identity"], software: BenchmarkRun["software_environment_identity"], hardwareFallback: string, softwareFallback: string): string {
   const model = (hardware.cpu?.model?.trim() || hardwareFallback).replace(/\s+Processor$/i, "");
   const cores = hardware.cpu?.physical_cores;
-  const hardwareLabel = `${model}${cores && !model.includes(`${cores}-Core`) ? ` ${cores}-Core` : ""}`;
+  const hardwareLabel = `${model}${cores && !/\b\d+-Core\b/i.test(model) ? ` ${cores}-Core` : ""}`;
   const named = (value?: { name?: string; version?: string }) => [value?.name, value?.version].filter(Boolean).join(" ");
   const threads = software.execution?.threads;
   const softwareLabel = [named(software.platform?.os), named(software.runtime), threads ? `${threads} thread${threads === 1 ? "" : "s"}` : ""].filter(Boolean).join(" / ");

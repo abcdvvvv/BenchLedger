@@ -153,7 +153,7 @@ describe("dashboard helpers", () => {
       ["state-new", { id: "state-new", label: "New", code_date: "2026-06-11T00:00:00Z", identity: {}, metadata: {} }]
     ]);
     const hardwareEnvironmentsById = new Map<string, BenchmarkHardwareEnvironment>([
-      ["hardware-1", { id: "hardware-1", label: "Hardware", identity: {}, metadata: {} }]
+      ["hardware-1", { id: "hardware-1", label: "Hardware", identity: { cpu: { model: "AMD EPYC 9V74 80-Core Processor", physical_cores: 2 } }, metadata: {} }]
     ]);
     const softwareEnvironmentsById = new Map<string, BenchmarkSoftwareEnvironment>([
       ["software-1", { id: "software-1", label: "Software", identity: {}, metadata: {} }]
@@ -179,6 +179,7 @@ describe("dashboard helpers", () => {
     const runs = buildRuns(dataset);
 
     expect(runs.map((run) => run.run_id)).toEqual(["run-new", "run-old"]);
+    expect(runs[0]?.environment_pair_label).toBe("AMD EPYC 9V74 80-Core / Software");
     expect(buildDatabaseCatalogStats(dataset, rows, runs)!.latestRunDate).toBe("2026-06-20T00:00:00Z");
   });
 

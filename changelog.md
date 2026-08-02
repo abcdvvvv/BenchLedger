@@ -1,14 +1,8 @@
 # Changelog
 
 ## [Unreleased]
-
-## [0.7.1] - 2026-08-02
-### Changed
-- `benchledger-probe` now targets C++23 instead of C++26, so more compilers can build it without full C++26 support.
-- Floating-point JSON number parsing in `benchledger-probe` now uses classic-locale stream parsing instead of `std::from_chars` with `chars_format::general`, improving portability across standard libraries.
-
-### Fixed
-- Cleaned up the probe JSON floating-point parser by removing an unused include and an unnecessary `noskipws` extraction flag.
+## Fixed
+- Fixed environment labels that could display conflicting CPU core counts when a processor model already included its own core-count designation.
 
 ## [0.7.0] - 2026-08-02
 ### Breaking

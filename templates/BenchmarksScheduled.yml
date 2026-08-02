@@ -1,6 +1,5 @@
 # SPDX-FileCopyrightText: 2026 karei
 # SPDX-License-Identifier: MIT-0
-
 name: Benchmarks Scheduled
 
 on:
