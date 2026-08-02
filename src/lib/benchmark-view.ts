@@ -1,8 +1,9 @@
+import { aggregateBenchmarkRows, runConfigurationKey } from "./benchmark-aggregation";
 import { parseDate } from "./format";
 import { comparePath, runAxisLabel, runHeadline, runIdentityTitle, runTone } from "./dashboard-data";
 import { metricFamilyLabel, type TrendPlotRow } from "./dashboard-plotting";
 import { dateInputValue, type DisplayStrategy } from "./dashboard-settings";
-import type { BenchmarkDefinition, BenchmarkRow, BenchmarkRun } from "./types";
+import type { BenchmarkDefinition, BenchmarkRow, BenchmarkRun, BenchmarkRunRecord } from "./types";
 
 export type BenchmarkViewGroupOption = {
   value: string;
@@ -16,7 +17,7 @@ export type BenchmarkViewBenchmarkOption = {
 };
 
 export type BenchmarkViewFilterState = {
-  environment: string;
+  environmentPair: string;
   metricKind: string;
   branch: string;
   timeStartValue: number | null;
@@ -27,7 +28,7 @@ export type BenchmarkViewFilterState = {
 export type BenchmarkViewIndexedRow = {
   row: BenchmarkRow;
   benchmark: BenchmarkDefinition;
-  environmentId: string;
+  environmentPairKey: string;
   codeDate: string;
   metricKind: string;
   branch: string;
@@ -37,15 +38,15 @@ export type BenchmarkViewIndexedRow = {
 };
 
 export type BenchmarkViewIndex = {
-  rowsByEnvironment: ReadonlyMap<string, BenchmarkViewIndexedRow[]>;
-  metricOptionsByEnvironment: ReadonlyMap<string, string[]>;
+  rowsByEnvironmentPair: ReadonlyMap<string, BenchmarkViewIndexedRow[]>;
+  metricOptionsByEnvironmentPair: ReadonlyMap<string, string[]>;
   branchOptions: string[];
   datasetTimeStart: string;
   datasetTimeEnd: string;
 };
 
 export type BenchmarkViewBaseSlice = {
-  effectiveEnvironment: string;
+  effectiveEnvironmentPair: string;
   effectiveMetricKind: string;
   effectiveBranch: string;
   metricOptions: string[];
@@ -67,11 +68,11 @@ export type BenchmarkViewResolvedSlice = BenchmarkViewBaseSlice & {
 export function buildBenchmarkViewIndex(
   rows: BenchmarkRow[],
   runsById: ReadonlyMap<string, BenchmarkRun>,
-  benchmarksById: ReadonlyMap<string, BenchmarkDefinition>
+  benchmarksByKey: ReadonlyMap<string, BenchmarkDefinition>
 ): BenchmarkViewIndex {
   const allRows: BenchmarkViewIndexedRow[] = [];
-  const rowsByEnvironment = new Map<string, BenchmarkViewIndexedRow[]>([["all", allRows]]);
-  const metricOptionsByEnvironment = new Map<string, Set<string>>([["all", new Set<string>()]]);
+  const rowsByEnvironmentPair = new Map<string, BenchmarkViewIndexedRow[]>([["all", allRows]]);
+  const metricOptionsByEnvironmentPair = new Map<string, Set<string>>([["all", new Set<string>()]]);
   const branchOptions = new Set<string>();
   let earliestCodeDateValue = Number.POSITIVE_INFINITY;
   let earliestCodeDate = "";
@@ -79,23 +80,17 @@ export function buildBenchmarkViewIndex(
   let latestCodeDate = "";
 
   for (const row of rows) {
-    const indexedRow = _indexRow(row, runsById.get(row.run_id), benchmarksById.get(row.benchmark_id));
+    const indexedRow = _indexRow(row, runsById.get(row.run_id), benchmarksByKey.get(row.benchmark_key));
     allRows.push(indexedRow);
-    metricOptionsByEnvironment.get("all")!.add(indexedRow.metricKind);
+    metricOptionsByEnvironmentPair.get("all")!.add(indexedRow.metricKind);
 
-    const environmentRows = rowsByEnvironment.get(indexedRow.environmentId);
-    if (environmentRows) {
-      environmentRows.push(indexedRow);
-    } else {
-      rowsByEnvironment.set(indexedRow.environmentId, [indexedRow]);
-    }
+    const pairRows = rowsByEnvironmentPair.get(indexedRow.environmentPairKey);
+    if (pairRows) pairRows.push(indexedRow);
+    else rowsByEnvironmentPair.set(indexedRow.environmentPairKey, [indexedRow]);
 
-    const environmentMetricOptions = metricOptionsByEnvironment.get(indexedRow.environmentId);
-    if (environmentMetricOptions) {
-      environmentMetricOptions.add(indexedRow.metricKind);
-    } else {
-      metricOptionsByEnvironment.set(indexedRow.environmentId, new Set([indexedRow.metricKind]));
-    }
+    const pairMetricOptions = metricOptionsByEnvironmentPair.get(indexedRow.environmentPairKey);
+    if (pairMetricOptions) pairMetricOptions.add(indexedRow.metricKind);
+    else metricOptionsByEnvironmentPair.set(indexedRow.environmentPairKey, new Set([indexedRow.metricKind]));
 
     if (indexedRow.branch) branchOptions.add(indexedRow.branch);
 
@@ -111,21 +106,23 @@ export function buildBenchmarkViewIndex(
   }
 
   return {
-    rowsByEnvironment,
-    metricOptionsByEnvironment: new Map(Array.from(metricOptionsByEnvironment.entries()).map(([environment, metricOptions]) => [
-      environment,
-      Array.from(metricOptions).sort()
-    ])),
+    rowsByEnvironmentPair,
+    metricOptionsByEnvironmentPair: new Map(
+      Array.from(metricOptionsByEnvironmentPair.entries()).map(([pair, metricOptions]) => [
+        pair,
+        Array.from(metricOptions).sort()
+      ])
+    ),
     branchOptions: ["all", ...Array.from(branchOptions).sort()],
     datasetTimeStart: dateInputValue(earliestCodeDate),
     datasetTimeEnd: dateInputValue(latestCodeDate)
   };
 }
 
-export function buildGroupOptions(benchmarks: Iterable<BenchmarkDefinition>): BenchmarkViewGroupOption[] {
+function buildGroupOptions(benchmarks: Iterable<BenchmarkDefinition>): BenchmarkViewGroupOption[] {
   const optionsByValue = new Map<string, BenchmarkViewGroupOption>();
   for (const benchmark of benchmarks) {
-    for (let depth = 1; depth <= benchmark.path.length; depth += 1) {
+    for (let depth = 1; depth < benchmark.path.length; depth += 1) {
       const path = benchmark.path.slice(0, depth);
       const value = JSON.stringify(path);
       if (optionsByValue.has(value)) continue;
@@ -135,12 +132,14 @@ export function buildGroupOptions(benchmarks: Iterable<BenchmarkDefinition>): Be
   return Array.from(optionsByValue.values()).sort((left, right) => comparePath(left.path, right.path));
 }
 
-export function buildBenchmarkOptions(benchmarks: Iterable<BenchmarkDefinition>): BenchmarkViewBenchmarkOption[] {
+function buildBenchmarkOptions(benchmarks: Iterable<BenchmarkDefinition>): BenchmarkViewBenchmarkOption[] {
   return Array.from(benchmarks, (benchmark) => ({
-    value: benchmark.id,
+    value: benchmark.key,
     label: benchmark.label,
     path: benchmark.path
-  })).sort((left, right) => comparePath(left.path, right.path) || left.label.localeCompare(right.label) || left.value.localeCompare(right.value));
+  })).sort((left, right) =>
+    comparePath(left.path, right.path) || left.label.localeCompare(right.label) || left.value.localeCompare(right.value)
+  );
 }
 
 function benchmarkMatchesGroup(benchmark: BenchmarkDefinition, selectedGroupPath: string[] | null): boolean {
@@ -152,28 +151,30 @@ export function resolveBenchmarkViewBaseSlice(
   index: BenchmarkViewIndex,
   state: BenchmarkViewFilterState
 ): BenchmarkViewBaseSlice {
-  const effectiveEnvironment = index.rowsByEnvironment.has(state.environment) ? state.environment : "all";
-  const metricOptions = index.metricOptionsByEnvironment.get(effectiveEnvironment) ?? [];
+  const effectiveEnvironmentPair = index.rowsByEnvironmentPair.has(state.environmentPair)
+    ? state.environmentPair
+    : "all";
+  const metricOptions = index.metricOptionsByEnvironmentPair.get(effectiveEnvironmentPair) ?? [];
   const effectiveMetricKind = metricOptions.includes(state.metricKind) ? state.metricKind : (metricOptions[0] ?? "");
   const effectiveBranch = index.branchOptions.includes(state.branch) ? state.branch : "all";
   const filteredRows: BenchmarkRow[] = [];
-  const filteredBenchmarksById = new Map<string, BenchmarkDefinition>();
+  const filteredBenchmarksByKey = new Map<string, BenchmarkDefinition>();
 
   if (effectiveMetricKind) {
-    for (const indexedRow of index.rowsByEnvironment.get(effectiveEnvironment) ?? []) {
+    for (const indexedRow of index.rowsByEnvironmentPair.get(effectiveEnvironmentPair) ?? []) {
       if (indexedRow.metricKind !== effectiveMetricKind) continue;
       if (effectiveBranch !== "all" && indexedRow.branch !== effectiveBranch) continue;
       if (!rowMatchesDisplayStrategyFromFacts(indexedRow, state.displayStrategy)) continue;
       if (state.timeStartValue !== null && (indexedRow.codeDateValue === null || indexedRow.codeDateValue < state.timeStartValue)) continue;
       if (state.timeEndValue !== null && (indexedRow.codeDateValue === null || indexedRow.codeDateValue > state.timeEndValue)) continue;
       filteredRows.push(indexedRow.row);
-      filteredBenchmarksById.set(indexedRow.benchmark.id, indexedRow.benchmark);
+      filteredBenchmarksByKey.set(indexedRow.benchmark.key, indexedRow.benchmark);
     }
   }
 
-  const filteredBenchmarks = Array.from(filteredBenchmarksById.values());
+  const filteredBenchmarks = Array.from(filteredBenchmarksByKey.values());
   return {
-    effectiveEnvironment,
+    effectiveEnvironmentPair,
     effectiveMetricKind,
     effectiveBranch,
     metricOptions,
@@ -200,8 +201,8 @@ export function resolveBenchmarkViewGroupSlice(
     : baseSlice.filteredBenchmarks;
   const scopedRows = selectedGroupPath
     ? (() => {
-        const scopedBenchmarkIds = new Set(scopedBenchmarks.map((benchmark) => benchmark.id));
-        return baseSlice.filteredRows.filter((row) => scopedBenchmarkIds.has(row.benchmark_id));
+        const scopedBenchmarkKeys = new Set(scopedBenchmarks.map((benchmark) => benchmark.key));
+        return baseSlice.filteredRows.filter((row) => scopedBenchmarkKeys.has(row.benchmark_key));
       })()
     : baseSlice.filteredRows;
 
@@ -214,69 +215,97 @@ export function resolveBenchmarkViewGroupSlice(
   };
 }
 
-export function resolveBenchmarkViewSlice(
-  index: BenchmarkViewIndex,
-  state: BenchmarkViewFilterState & { group: string }
-): BenchmarkViewResolvedSlice {
-  return resolveBenchmarkViewGroupSlice(resolveBenchmarkViewBaseSlice(index, state), state.group);
-}
-
-export function normalizeSelectedBenchmarkIds(
-  selectedBenchmarkIds: string[],
+export function normalizeSelectedBenchmarkKeys(
+  selectedBenchmarkKeys: string[],
   benchmarkOptions: BenchmarkViewBenchmarkOption[]
 ): string[] {
   const availableValues = new Set(benchmarkOptions.map((option) => option.value));
-  const normalized = selectedBenchmarkIds.filter((value) => availableValues.has(value));
-  return normalized.length === selectedBenchmarkIds.length ? selectedBenchmarkIds : normalized;
+  const normalized = selectedBenchmarkKeys.filter((value) => availableValues.has(value));
+  return normalized.length === selectedBenchmarkKeys.length ? selectedBenchmarkKeys : normalized;
 }
 
 export function buildTrendRowsByBenchmark(
-  rows: BenchmarkRow[],
+  rows: readonly BenchmarkRow[],
+  runRecordsById: ReadonlyMap<string, BenchmarkRunRecord>,
   runsById: ReadonlyMap<string, BenchmarkRun>,
-  selectedBenchmarkIds: string[]
+  selectedBenchmarkKeys: readonly string[]
 ): Map<string, TrendPlotRow[]> {
   const rowsByBenchmark = new Map<string, TrendPlotRow[]>();
-  if (!selectedBenchmarkIds.length) return rowsByBenchmark;
+  if (!selectedBenchmarkKeys.length) return rowsByBenchmark;
 
-  const selectedBenchmarkIdSet = new Set(selectedBenchmarkIds);
+  const selectedBenchmarkKeySet = new Set(selectedBenchmarkKeys);
+  const selectedRows = rows.filter((row) => selectedBenchmarkKeySet.has(row.benchmark_key));
+  const representativeRunsByAggregate = new Map<string, BenchmarkRun>();
 
-  for (const row of rows) {
-    if (!selectedBenchmarkIdSet.has(row.benchmark_id)) continue;
+  for (const row of selectedRows) {
+    const runRecord = runRecordsById.get(row.run_id);
     const run = runsById.get(row.run_id);
+    if (!runRecord || !run) continue;
+    const configurationKey = runConfigurationKey(runRecord);
+    const aggregateKey = _trendAggregateKey(configurationKey, row);
+    const current = representativeRunsByAggregate.get(aggregateKey);
+    if (!current || _compareRepresentativeRuns(run, current) < 0) {
+      representativeRunsByAggregate.set(aggregateKey, run);
+    }
+  }
+
+  for (const aggregate of aggregateBenchmarkRows(selectedRows, runRecordsById)) {
+    const run = representativeRunsByAggregate.get(_trendAggregateKey(aggregate.configuration_key, aggregate));
     if (!run) continue;
     const dateValue = parseDate(run.code_date);
     if (!dateValue) continue;
+    const aggregateLabel = aggregate.run_count === 1
+      ? "1 contributing run"
+      : `${aggregate.run_count.toLocaleString()} contributing runs averaged`;
     const entry: TrendPlotRow = {
-      ...row,
-      code_state_id: run.code_state_id,
+      run_id: run.run_id,
+      benchmark_key: aggregate.benchmark_key,
+      metric_name: aggregate.metric_name,
+      statistic: aggregate.statistic,
+      unit: aggregate.unit,
+      value: aggregate.value,
+      better: aggregate.better,
+      configuration_key: aggregate.configuration_key,
+      code_state_id: aggregate.code_state_id,
       code_date: run.code_date,
-      environment_id: run.environment_id,
-      environment_label: run.environment_label,
+      environment_pair_key: run.environment_pair_key,
+      environment_pair_label: run.environment_pair_label,
       measured_at: run.measured_at,
       date_value: dateValue,
       run_axis_label: runAxisLabel(run),
       run_headline: runHeadline(run),
       run_tone: runTone(run),
-      run_identity_title: runIdentityTitle(run, "<br>")
+      run_identity_title: `${aggregateLabel}<br>${runIdentityTitle(run, "<br>")}`,
+      run_count: aggregate.run_count
     };
-    const bucket = rowsByBenchmark.get(row.benchmark_id);
-    if (bucket) {
-      bucket.push(entry);
-      continue;
-    }
-    rowsByBenchmark.set(row.benchmark_id, [entry]);
+    const bucket = rowsByBenchmark.get(aggregate.benchmark_key);
+    if (bucket) bucket.push(entry);
+    else rowsByBenchmark.set(aggregate.benchmark_key, [entry]);
   }
 
-  for (const entries of rowsByBenchmark.values()) {
-    entries.sort(_compareTrendRowsByDate);
-  }
-
+  for (const entries of rowsByBenchmark.values()) entries.sort(_compareTrendRowsByDate);
   return rowsByBenchmark;
 }
 
+function _trendAggregateKey(
+  configurationKey: string,
+  row: Pick<BenchmarkRow, "benchmark_key" | "metric_name" | "statistic">
+): string {
+  return JSON.stringify([configurationKey, row.benchmark_key, row.metric_name, row.statistic]);
+}
+
+function _compareRepresentativeRuns(left: BenchmarkRun, right: BenchmarkRun): number {
+  const leftMeasuredAt = parseDate(left.measured_at)?.valueOf() ?? Number.NEGATIVE_INFINITY;
+  const rightMeasuredAt = parseDate(right.measured_at)?.valueOf() ?? Number.NEGATIVE_INFINITY;
+  if (leftMeasuredAt !== rightMeasuredAt) return rightMeasuredAt - leftMeasuredAt;
+  return right.run_id.localeCompare(left.run_id);
+}
 
 function _compareTrendRowsByDate(left: TrendPlotRow, right: TrendPlotRow): number {
-  return left.date_value!.valueOf() - right.date_value!.valueOf();
+  return left.date_value!.valueOf() - right.date_value!.valueOf() ||
+    left.code_state_id.localeCompare(right.code_state_id) ||
+    left.environment_pair_key.localeCompare(right.environment_pair_key) ||
+    left.configuration_key.localeCompare(right.configuration_key);
 }
 
 function _indexRow(
@@ -290,8 +319,8 @@ function _indexRow(
 
   return {
     row,
-    benchmark: benchmark ?? { id: row.benchmark_id, path: [], label: row.benchmark_id },
-    environmentId: run?.environment_id ?? "",
+    benchmark: benchmark ?? { key: row.benchmark_key, path: [], label: row.benchmark_key },
+    environmentPairKey: run?.environment_pair_key ?? "",
     codeDate,
     metricKind: metricFamilyLabel(row),
     branch,

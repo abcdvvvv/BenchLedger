@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import {
-  loadBenchmarkRowsFromFile,
-  loadBenchmarkRowsFromManifestDatabase,
-  loadBenchmarkRowsFromUrl,
+  loadBenchmarkDatasetFromFile,
+  loadBenchmarkDatasetFromManifestDatabase,
+  loadBenchmarkDatasetFromUrl,
   loadManifest
 } from "./sqlite";
 import type {
@@ -15,7 +15,7 @@ import type { AppPhase } from "./dashboard-settings";
 
 type UseBenchmarkDataSourceOptions = {
   selectedDatabaseId: string;
-  onSelectedDatabaseIdChange: (databaseId: string) => void;
+  onSourceStateChange: (databaseId: string, resetDatasetScope: boolean) => void;
 };
 
 const EMPTY_BENCHMARK_ROWS: BenchmarkRow[] = [];
@@ -28,11 +28,19 @@ type UseBenchmarkDataSourceResult = {
   error: string;
   handleDatabaseSelection: (databaseId: string) => Promise<void>;
   handleLocalFileChange: (event: ChangeEvent<HTMLInputElement>) => Promise<void>;
+  sourceRevision: number;
 };
 
 function isLocalHost(): boolean {
   const hostname = window.location.hostname;
   return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+}
+
+export function selectInitialManifestDatabase(
+  databases: readonly BenchLedgerManifestDatabase[],
+  selectedDatabaseId: string
+): BenchLedgerManifestDatabase | null {
+  return databases.find((database) => database.id === selectedDatabaseId) ?? databases[0] ?? null;
 }
 
 function datasetSignature(sourceDataset: LoadedBenchmarkDataset): string {
@@ -42,7 +50,7 @@ function datasetSignature(sourceDataset: LoadedBenchmarkDataset): string {
     sourceDataset.rows.length,
     lastRow?.run_id ?? "",
     lastRow ? sourceDataset.runsById.get(lastRow.run_id)?.measured_at ?? "" : "",
-    lastRow?.benchmark_id ?? "",
+    lastRow?.benchmark_key ?? "",
     lastRow?.value ?? ""
   ].join("|");
 }
@@ -50,13 +58,15 @@ function datasetSignature(sourceDataset: LoadedBenchmarkDataset): string {
 export function useBenchmarkDataSource(
   options: UseBenchmarkDataSourceOptions
 ): UseBenchmarkDataSourceResult {
-  const { selectedDatabaseId, onSelectedDatabaseIdChange } = options;
+  const { selectedDatabaseId, onSourceStateChange } = options;
   const [dataset, setDataset] = useState<LoadedBenchmarkDataset | null>(null);
   const [manifest, setManifest] = useState<BenchLedgerManifest | null>(null);
   const [manifestUrl, setManifestUrl] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [phase, setPhase] = useState<AppPhase>("booting");
+  const [sourceRevision, setSourceRevision] = useState(0);
   const loadGenerationRef = useRef(0);
+  const loadedSourceKeyRef = useRef(selectedDatabaseId ? `manifest:${selectedDatabaseId}` : "");
 
   function beginLoadRequest(): number {
     loadGenerationRef.current += 1;
@@ -75,16 +85,23 @@ export function useBenchmarkDataSource(
     setPhase("loading-database");
     setError("");
     try {
-      const loadedDataset = await loadBenchmarkRowsFromManifestDatabase(database, activeManifestUrl);
+      const loadedDataset = await loadBenchmarkDatasetFromManifestDatabase(database, activeManifestUrl);
       if (!isCurrentLoadRequest(generation)) return;
+      const sourceKey = `manifest:${database.id}`;
+      const sourceChanged = loadedSourceKeyRef.current !== sourceKey;
+      loadedSourceKeyRef.current = sourceKey;
+      onSourceStateChange(database.id, sourceChanged);
       setDataset(loadedDataset);
-      onSelectedDatabaseIdChange(database.id);
+      setSourceRevision((current) => current + 1);
       setPhase("ready");
     } catch (loadError: unknown) {
       if (!isCurrentLoadRequest(generation)) return;
-      setDataset(null);
       setError(loadError instanceof Error ? loadError.message : "Failed to load the selected database.");
-      setPhase("select-source");
+      if (dataset) setPhase("ready");
+      else {
+        onSourceStateChange("", false);
+        setPhase("select-source");
+      }
     }
   }
 
@@ -103,15 +120,17 @@ export function useBenchmarkDataSource(
     setPhase("loading-database");
     setError("");
     try {
-      const loadedDataset = await loadBenchmarkRowsFromFile(file);
+      const loadedDataset = await loadBenchmarkDatasetFromFile(file);
       if (!isCurrentLoadRequest(generation)) return;
+      loadedSourceKeyRef.current = `local:${generation}`;
+      onSourceStateChange("", true);
       setDataset(loadedDataset);
+      setSourceRevision((current) => current + 1);
       setPhase("ready");
     } catch (loadError: unknown) {
       if (!isCurrentLoadRequest(generation)) return;
-      setDataset(null);
       setError(loadError instanceof Error ? loadError.message : "Failed to load the selected SQLite file.");
-      setPhase("select-source");
+      setPhase(dataset ? "ready" : "select-source");
     } finally {
       event.target.value = "";
     }
@@ -129,6 +148,7 @@ export function useBenchmarkDataSource(
         if (!manifestEntry) {
           setManifest(null);
           setManifestUrl(null);
+          onSourceStateChange("", false);
           setPhase("select-source");
           return;
         }
@@ -136,20 +156,16 @@ export function useBenchmarkDataSource(
         setManifestUrl(manifestEntry.url);
         const databases = manifestEntry.manifest.databases;
         if (!databases.length) {
+          onSourceStateChange("", false);
           setPhase("select-source");
           return;
         }
-        const savedDatabase = databases.find((database) => database.id === selectedDatabaseId);
-        if (savedDatabase) {
-          await selectManifestDatabase(savedDatabase, manifestEntry.url, generation);
+        const initialDatabase = selectInitialManifestDatabase(databases, selectedDatabaseId);
+        if (!initialDatabase) {
+          setPhase("select-source");
           return;
         }
-        if (databases.length === 1) {
-          await selectManifestDatabase(databases[0], manifestEntry.url, generation);
-          return;
-        }
-        onSelectedDatabaseIdChange(databases[0].id);
-        setPhase("select-source");
+        await selectManifestDatabase(initialDatabase, manifestEntry.url, generation);
       } catch (loadError: unknown) {
         if (!isCurrentLoadRequest(generation)) return;
         setError(loadError instanceof Error ? loadError.message : "Failed to initialize BenchLedger.");
@@ -164,37 +180,26 @@ export function useBenchmarkDataSource(
   }, []);
 
   useEffect(() => {
-    if (!dataset?.source_url) return;
-    if (phase !== "ready") return;
-    if (!isLocalHost()) return;
+    if (!dataset?.source_url || phase !== "ready" || !isLocalHost()) return;
 
     let cancelled = false;
-    let refreshGeneration = 0;
-    const sourceGeneration = loadGenerationRef.current;
-
-    const refreshInterval = window.setInterval(() => {
-      const currentRefreshGeneration = ++refreshGeneration;
-      void (async () => {
-        try {
-          const loadedDataset = await loadBenchmarkRowsFromUrl(dataset.source_url!, dataset.source_label);
-          if (cancelled) return;
-          if (!isCurrentLoadRequest(sourceGeneration)) return;
-          if (currentRefreshGeneration !== refreshGeneration) return;
-          if (datasetSignature(loadedDataset) === datasetSignature(dataset)) return;
+    let refreshing = false;
+    const refresh = async () => {
+      if (refreshing) return;
+      refreshing = true;
+      try {
+        const loadedDataset = await loadBenchmarkDatasetFromUrl(dataset.source_url!, dataset.source_label);
+        if (!cancelled && datasetSignature(loadedDataset) !== datasetSignature(dataset)) {
           setDataset(loadedDataset);
           setError("");
-        } catch (refreshError) {
-          if (
-            !cancelled &&
-            isCurrentLoadRequest(sourceGeneration) &&
-            currentRefreshGeneration === refreshGeneration
-          ) {
-            console.warn("BenchLedger auto-refresh failed:", refreshError);
-          }
         }
-      })();
-    }, 10000);
-
+      } catch (refreshError) {
+        if (!cancelled) console.warn("BenchLedger auto-refresh failed:", refreshError);
+      } finally {
+        refreshing = false;
+      }
+    };
+    const refreshInterval = window.setInterval(() => void refresh(), 10000);
     return () => {
       cancelled = true;
       window.clearInterval(refreshInterval);
@@ -208,6 +213,7 @@ export function useBenchmarkDataSource(
     phase,
     error,
     handleDatabaseSelection,
-    handleLocalFileChange
+    handleLocalFileChange,
+    sourceRevision
   };
 }

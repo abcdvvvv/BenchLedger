@@ -175,12 +175,29 @@
   textarea {
     font: inherit;
   }
+
+  summary:focus-visible,
+  a:focus-visible {
+    outline: 2px solid var(--color-text-theme-brand);
+    outline-offset: 3px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      scroll-behavior: auto !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 }
 
 @layer components {
   .type-page-title {
     color: var(--color-text-theme-strong);
-    font-size: var(--text-theme-3xl);
+    font-size: clamp(1.75rem, 4vw, var(--text-theme-3xl));
     font-weight: var(--font-weight-theme-semibold);
     letter-spacing: -0.02em;
     line-height: var(--text-theme-3xl--line-height);
@@ -191,7 +208,7 @@
     color: var(--color-text-theme-strong);
     font-size: var(--text-theme-lg);
     font-weight: var(--font-weight-theme-semibold);
-    line-height: var(--text-theme-xs--line-height);
+    line-height: var(--text-theme-lg--line-height);
   }
 
   .type-body {
@@ -290,20 +307,8 @@
     border-radius: var(--radius-theme);
   }
 
-  .radius-theme-pill {
-    border-radius: var(--radius-theme-pill);
-  }
-
   .border-theme {
     border-width: var(--border-width-theme);
-  }
-
-  .border-theme-t {
-    border-top-width: var(--border-width-theme);
-  }
-
-  .border-theme-r {
-    border-right-width: var(--border-width-theme);
   }
 
   .border-theme-b {
@@ -353,7 +358,7 @@
   }
 
   .control-surface-primary {
-    @apply border-brand-600 bg-brand-600 text-white hover:border-brand-700 hover:bg-brand-700 dark:border-brand-500 dark:bg-brand-500 dark:hover:border-brand-400 dark:hover:bg-brand-400;
+    @apply border-amber-700 bg-amber-700 text-white hover:border-amber-800 hover:bg-amber-800 dark:border-amber-400 dark:bg-amber-400 dark:text-stone-950 dark:hover:border-amber-300 dark:hover:bg-amber-300;
   }
 
   .control-surface-success {
@@ -368,20 +373,8 @@
     @apply border-error-600 bg-error-600 text-white hover:border-error-700 hover:bg-error-700 dark:border-error-500 dark:bg-error-500 dark:hover:border-error-400 dark:hover:bg-error-400;
   }
 
-  .shadow-theme-control {
-    box-shadow: var(--shadow-theme-control);
-  }
-
-  .shadow-theme-surface {
-    box-shadow: var(--shadow-theme-surface);
-  }
-
   .shadow-theme-tooltip {
     box-shadow: var(--shadow-theme-tooltip);
-  }
-
-  .shadow-theme-floating {
-    box-shadow: var(--shadow-theme-floating);
   }
 
   .surface-card {
@@ -416,12 +409,6 @@
     border-width: var(--border-width-theme);
     box-shadow: var(--shadow-theme-surface);
     @apply border-warning-300 bg-warning-25 dark:border-warning-500/35 dark:bg-warning-500/10;
-  }
-
-  .surface-subtle {
-    border-radius: var(--radius-theme);
-    border-width: var(--border-width-theme);
-    @apply border-stone-200 bg-stone-100 dark:border-[#2f2f33] dark:bg-[#27272a];
   }
 
   .surface-plot {

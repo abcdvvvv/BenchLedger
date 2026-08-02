@@ -60,6 +60,7 @@ type BenchmarkKeyCascadeFilterProps = {
   className?: string;
   placeholder?: string;
   stretchWidth?: boolean;
+  ariaLabel?: string;
 };
 
 type BenchmarkKeyMenuStore = ReturnType<typeof useMenuStore>;
@@ -285,7 +286,8 @@ export function BenchmarkKeyCascadeFilter(props: BenchmarkKeyCascadeFilterProps)
     disabled = false,
     className = "",
     placeholder = "Please select benchmark",
-    stretchWidth = false
+    stretchWidth = false,
+    ariaLabel = "Benchmark keys"
   } = props;
   const [open, setOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
@@ -394,7 +396,7 @@ export function BenchmarkKeyCascadeFilter(props: BenchmarkKeyCascadeFilterProps)
           className="type-menu min-w-0 flex-1 border-0 bg-transparent outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500"
           placeholder={inputPlaceholder}
           autoComplete="off"
-          aria-label="Search benchmark keys"
+          aria-label={open ? `Search ${ariaLabel.toLocaleLowerCase()}` : ariaLabel}
           onClick={() => {
             if (!open) openMenu();
           }}
@@ -443,7 +445,7 @@ export function BenchmarkKeyCascadeFilter(props: BenchmarkKeyCascadeFilterProps)
         overflowPadding={8}
         unmountOnHide
         className={Root_Menu_Classes}
-        aria-label="Benchmark keys"
+        aria-label={ariaLabel}
       >
         {filteredTree.length ? (
           filteredTree.map((node) => (

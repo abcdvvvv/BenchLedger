@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from "react";
 import {
   buildTrendRowsByBenchmark,
-  normalizeSelectedBenchmarkIds,
+  normalizeSelectedBenchmarkKeys,
   type BenchmarkViewBenchmarkOption
 } from "../../lib/benchmark-view";
 import {
@@ -10,17 +10,18 @@ import {
   commitAxisLayout,
   colorForBenchmark,
   colorWithAlpha,
-  splitTrendRowsByEnvironment,
+  splitTrendRowsByEnvironmentPair,
   trendDisplayUnitContext,
+  trendValueExtent,
   type PlotAxisTickLabels,
   type PlotTheme
 } from "../../lib/dashboard-plotting";
 import type { ThemeMode, TrendAxisMode, TrendLineShape, TrendMarkerFillMode } from "../../lib/dashboard-settings";
 import type { TrendMarkerSymbol } from "../../lib/trend-marker-symbols";
-import type { BenchmarkRow, BenchmarkRun } from "../../lib/types";
+import type { BenchmarkRow, BenchmarkRun, BenchmarkRunRecord } from "../../lib/types";
 
 export type TrendBoardCard = {
-  benchmarkId: string;
+  benchmarkKey: string;
   label: string;
   path: string[];
   metricLabel: string;
@@ -37,10 +38,11 @@ export type TrendBoardCombinedChart = {
 
 type UseTrendBoardModelOptions = {
   rows: BenchmarkRow[];
+  runRecordsById: ReadonlyMap<string, BenchmarkRunRecord>;
   runsById: ReadonlyMap<string, BenchmarkRun>;
   benchmarkOptions: BenchmarkViewBenchmarkOption[];
-  selectedBenchmarkIds: string[];
-  onSelectedBenchmarkIdsChange: (values: string[]) => void;
+  selectedBenchmarkKeys: string[];
+  onSelectedBenchmarkKeysChange: (values: string[]) => void;
   metricKind: string;
   trendAxisMode: TrendAxisMode;
   trendLineShape: TrendLineShape;
@@ -54,15 +56,17 @@ type UseTrendBoardModelResult = {
   trendBoardCards: TrendBoardCard[];
   combinedTrendChart: TrendBoardCombinedChart | null;
   trendPlotMargin: { t: number; r: number; b: number; l: number };
+  hasTrendRows: boolean;
 };
 
 export function useTrendBoardModel(options: UseTrendBoardModelOptions): UseTrendBoardModelResult {
   const {
     rows,
+    runRecordsById,
     runsById,
     benchmarkOptions,
-    selectedBenchmarkIds,
-    onSelectedBenchmarkIdsChange,
+    selectedBenchmarkKeys,
+    onSelectedBenchmarkKeysChange,
     metricKind,
     trendAxisMode,
     trendLineShape,
@@ -73,21 +77,21 @@ export function useTrendBoardModel(options: UseTrendBoardModelOptions): UseTrend
   } = options;
 
   useEffect(() => {
-    onSelectedBenchmarkIdsChange(normalizeSelectedBenchmarkIds(selectedBenchmarkIds, benchmarkOptions));
-  }, [benchmarkOptions, onSelectedBenchmarkIdsChange, selectedBenchmarkIds]);
+    onSelectedBenchmarkKeysChange(normalizeSelectedBenchmarkKeys(selectedBenchmarkKeys, benchmarkOptions));
+  }, [benchmarkOptions, onSelectedBenchmarkKeysChange, selectedBenchmarkKeys]);
 
-  const benchmarkOptionsById = useMemo(
+  const benchmarkOptionsByKey = useMemo(
     () => new Map(benchmarkOptions.map((option) => [option.value, option])),
     [benchmarkOptions]
   );
   const trendBoardRowsByBenchmark = useMemo(
-    () => buildTrendRowsByBenchmark(rows, runsById, selectedBenchmarkIds),
-    [rows, runsById, selectedBenchmarkIds]
+    () => buildTrendRowsByBenchmark(rows, runRecordsById, runsById, selectedBenchmarkKeys),
+    [rows, runRecordsById, runsById, selectedBenchmarkKeys]
   );
 
   const trendBoardRows = useMemo(
-    () => benchmarkOptions.flatMap((option) => trendBoardRowsByBenchmark.get(option.value) ?? []),
-    [benchmarkOptions, trendBoardRowsByBenchmark]
+    () => selectedBenchmarkKeys.flatMap((benchmarkKey) => trendBoardRowsByBenchmark.get(benchmarkKey) ?? []),
+    [selectedBenchmarkKeys, trendBoardRowsByBenchmark]
   );
   const trendPlotMargin = trendBoardRows.length ? { t: 2, r: 12, b: 50, l: 52 } : { t: 2, r: 12, b: 50, l: 20 };
   const combinedDisplayUnitContext = useMemo(
@@ -98,40 +102,42 @@ export function useTrendBoardModel(options: UseTrendBoardModelOptions): UseTrend
     () => trendAxisMode === "commit" ? commitAxisLayout(trendBoardRows) : undefined,
     [trendAxisMode, trendBoardRows]
   );
-  const combinedYValues = trendBoardRows.map((row) => combinedDisplayUnitContext.scaleValue(row.value, row.unit));
-  const combinedYMin = combinedYValues.length ? Math.min(...combinedYValues) : 0;
-  const combinedYMax = combinedYValues.length ? Math.max(...combinedYValues) : 0;
-  const combinedYSpan = combinedYMax - combinedYMin;
+  const combinedYExtent = useMemo(
+    () => trendValueExtent(trendBoardRows, combinedDisplayUnitContext),
+    [combinedDisplayUnitContext, trendBoardRows]
+  );
+  const combinedYMin = combinedYExtent?.min ?? 0;
+  const combinedYSpan = combinedYExtent ? combinedYExtent.max - combinedYExtent.min : 0;
   const combinedYPadding = combinedYSpan > 0
     ? combinedYSpan * Trend_Y_Padding_Ratio
     : Math.max(Math.abs(combinedYMin) * Trend_Y_Padding_Ratio, 1);
 
   const trendBoardCards = useMemo<TrendBoardCard[]>(() => {
-    return selectedBenchmarkIds.flatMap((benchmarkKey, index) => {
+    return selectedBenchmarkKeys.flatMap((benchmarkKey, index) => {
       const cardRows = trendBoardRowsByBenchmark.get(benchmarkKey) ?? [];
       if (!cardRows.length) return [];
       const displayUnitContext = trendDisplayUnitContext(cardRows);
-      const option = benchmarkOptionsById.get(benchmarkKey);
+      const option = benchmarkOptionsByKey.get(benchmarkKey);
       const path = option?.path?.length ? option.path : [option?.label ?? benchmarkKey];
       const label = path.length > 1 ? path.slice(0, -1).join(" | ") : path[0] ?? benchmarkKey;
-      const yValues = cardRows.map((row) => displayUnitContext.scaleValue(row.value, row.unit));
-      const yMin = Math.min(...yValues);
-      const yMax = Math.max(...yValues);
-      const ySpan = yMax - yMin;
+      const yExtent = trendValueExtent(cardRows, displayUnitContext);
+      if (!yExtent) return [];
+      const yMin = yExtent.min;
+      const ySpan = yExtent.max - yExtent.min;
       const yPadding = ySpan > 0
         ? ySpan * Trend_Y_Padding_Ratio
         : Math.max(Math.abs(yMin) * Trend_Y_Padding_Ratio, 1);
       const commitAxis = trendAxisMode === "commit" ? commitAxisLayout(cardRows) : undefined;
 
       return [{
-        benchmarkId: benchmarkKey,
+        benchmarkKey: benchmarkKey,
         label,
         path,
         metricLabel: displayUnitContext.formatMetricLabel(metricKind),
         commitAxisLabels: commitAxis?.tickLabels,
-        traces: splitTrendRowsByEnvironment(cardRows).flatMap((series, environmentIndex, environmentSeries) => {
-          const color = colorForBenchmark(index * Math.max(environmentSeries.length, 1) + environmentIndex);
-          const seriesLabel = environmentSeries.length > 1 ? series.environmentLabel : label;
+        traces: splitTrendRowsByEnvironmentPair(cardRows).flatMap((series, environmentPairIndex, environmentPairSeries) => {
+          const color = colorForBenchmark(index * Math.max(environmentPairSeries.length, 1) + environmentPairIndex);
+          const seriesLabel = environmentPairSeries.length > 1 ? series.environmentPairLabel : label;
 
           return buildTrendTrace(series.rows, {
             axisMode: trendAxisMode,
@@ -146,7 +152,7 @@ export function useTrendBoardModel(options: UseTrendBoardModelOptions): UseTrend
             theme,
             yMin,
             yPadding,
-            showLegend: environmentSeries.length > 1,
+            showLegend: environmentPairSeries.length > 1,
             fillGradientScale: [
               [0, colorWithAlpha(color, 0)],
               [1, colorWithAlpha(color, 0.2)]
@@ -156,10 +162,10 @@ export function useTrendBoardModel(options: UseTrendBoardModelOptions): UseTrend
       }];
     });
   }, [
-    benchmarkOptionsById,
+    benchmarkOptionsByKey,
     metricKind,
     plotTheme,
-    selectedBenchmarkIds,
+    selectedBenchmarkKeys,
     theme,
     trendAxisMode,
     trendBoardRowsByBenchmark,
@@ -169,24 +175,24 @@ export function useTrendBoardModel(options: UseTrendBoardModelOptions): UseTrend
   ]);
 
   const combinedTrendChart = useMemo<TrendBoardCombinedChart | null>(() => {
-    if (!selectedBenchmarkIds.length) return null;
+    if (!selectedBenchmarkKeys.length) return null;
 
     let showLegend = false;
-    const traces = selectedBenchmarkIds.flatMap((benchmarkKey, index) => {
+    const traces = selectedBenchmarkKeys.flatMap((benchmarkKey, index) => {
       const traceRows = trendBoardRowsByBenchmark.get(benchmarkKey) ?? [];
       if (!traceRows.length) return [];
-      const benchmarkLabel = benchmarkOptionsById.get(benchmarkKey)?.label ?? benchmarkKey;
-      const environmentSeries = splitTrendRowsByEnvironment(traceRows);
+      const benchmarkLabel = benchmarkOptionsByKey.get(benchmarkKey)?.label ?? benchmarkKey;
+      const environmentPairSeries = splitTrendRowsByEnvironmentPair(traceRows);
 
-      if (selectedBenchmarkIds.length > 1 || environmentSeries.length > 1) {
+      if (selectedBenchmarkKeys.length > 1 || environmentPairSeries.length > 1) {
         showLegend = true;
       }
 
-      return environmentSeries.flatMap((series, environmentIndex) => {
-        const label = environmentSeries.length > 1
-          ? `${benchmarkLabel} · ${series.environmentLabel}`
+      return environmentPairSeries.flatMap((series, environmentPairIndex) => {
+        const label = environmentPairSeries.length > 1
+          ? `${benchmarkLabel} · ${series.environmentPairLabel}`
           : benchmarkLabel;
-        const color = colorForBenchmark(index * Math.max(environmentSeries.length, 1) + environmentIndex);
+        const color = colorForBenchmark(index * Math.max(environmentPairSeries.length, 1) + environmentPairIndex);
 
         return buildTrendTrace(series.rows, {
           axisMode: trendAxisMode,
@@ -201,7 +207,7 @@ export function useTrendBoardModel(options: UseTrendBoardModelOptions): UseTrend
           theme,
           yMin: combinedYMin,
           yPadding: combinedYPadding,
-          showLegend: selectedBenchmarkIds.length > 1 || environmentSeries.length > 1
+          showLegend: selectedBenchmarkKeys.length > 1 || environmentPairSeries.length > 1
         });
       });
     });
@@ -214,14 +220,14 @@ export function useTrendBoardModel(options: UseTrendBoardModelOptions): UseTrend
       showLegend
     };
   }, [
-    benchmarkOptionsById,
+    benchmarkOptionsByKey,
     combinedCommitAxis,
     combinedDisplayUnitContext,
     combinedYMin,
     combinedYPadding,
     metricKind,
     plotTheme,
-    selectedBenchmarkIds,
+    selectedBenchmarkKeys,
     theme,
     trendAxisMode,
     trendBoardRowsByBenchmark,
@@ -233,6 +239,7 @@ export function useTrendBoardModel(options: UseTrendBoardModelOptions): UseTrend
   return {
     trendBoardCards,
     combinedTrendChart,
-    trendPlotMargin
+    trendPlotMargin,
+    hasTrendRows: trendBoardRows.length > 0
   };
 }

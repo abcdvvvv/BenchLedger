@@ -1,4 +1,6 @@
+import { FaGithub } from "react-icons/fa";
 import { PageHeader } from "../../components/common/PageHeader";
+import { IconButton } from "../../components/ui/IconButton";
 
 export type AboutPageProps = {
   applicationName: string;
@@ -17,29 +19,20 @@ export function AboutPage(props: AboutPageProps) {
         description="Basic information about this BenchLedger frontend."
       />
 
-      <dl className="grid max-w-3xl gap-x-6 gap-y-3 sm:grid-cols-[9rem_minmax(0,1fr)] sm:items-start">
-        <dt className="text-[1rem] leading-6 font-semibold text-[var(--color-text-theme-strong)]">Software</dt>
-        <dd className="min-w-0 text-[1rem] leading-6 text-[var(--color-text-theme-strong)] sm:m-0">
-          {applicationName}
-        </dd>
-
-        <dt className="text-[1rem] leading-6 font-semibold text-[var(--color-text-theme-strong)]">Version</dt>
-        <dd className="min-w-0 font-mono text-[0.98rem] leading-6 text-[var(--color-text-theme-strong)] sm:m-0">
-          {version}
-        </dd>
-
-        <dt className="text-[1rem] leading-6 font-semibold text-[var(--color-text-theme-strong)]">Repository</dt>
-        <dd className="min-w-0 text-[1rem] leading-6 sm:m-0">
-          <a
-            className="text-theme-brand underline underline-offset-2"
-            href={repositoryUrl}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {repositoryUrl}
-          </a>
-        </dd>
-      </dl>
+      <div className="inline-flex items-center gap-2 text-[1rem] leading-6 text-[var(--color-text-theme-strong)]">
+        <span className="font-semibold">{applicationName}</span>
+        <span className="font-mono text-[0.98rem]">v{version}</span>
+        <IconButton
+          href={repositoryUrl}
+          target="_blank"
+          rel="noreferrer"
+          label="Open repository on GitHub"
+          variant="ghost"
+          className="size-8"
+        >
+          <FaGithub className="size-5" aria-hidden="true" />
+        </IconButton>
+      </div>
     </>
   );
 }

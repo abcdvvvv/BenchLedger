@@ -76,23 +76,25 @@ Then edit:
 
 After that, commit the two files, push to your default branch, and let GitHub Actions run the current target and update the configured benchmark database. With the default `gh-pages` database branch, the workflow also installs and publishes the BenchLedger viewer.
 
-The generic `runbench.jl` writer only reads `BENCH_*` inputs plus local system and git state. Platform-specific adapters such as `Benchmarks.yml` are responsible for translating CI-specific context into this small input surface.
+The generic `runbench.jl` writer reads `BENCH_*` inputs plus local Git and Julia state. Stable hardware and platform facts come from the separately packaged `benchledger-probe`; the bundled workflow downloads the matching Linux amd64 probe bundle automatically. For local runs, place `benchledger-probe` beside `benchmark/runbench.jl`, put it on `PATH`, or set `BENCH_PROBE_PATH` explicitly. Each probe bundle already contains the matching Fastfetch executable.
 
 ### Common `BENCH_*` inputs
 
-The bundled writer understands five public inputs:
+The bundled writer understands seven public inputs:
 
 - `BENCH_DB_PATH`: required SQLite database file to update
 - `BENCH_TARGET_PATH`: optional target project path to benchmark; defaults to the project containing the benchmark directory
-- `BENCH_CODE_STATE`: optional JSON object with `id`, `label`, `code_date`, `identity`, and `metadata` overrides
-- `BENCH_ENVIRONMENT`: optional JSON object with `label`, `identity`, and `metadata` overrides
-- `BENCH_RUN`: optional JSON object with `notes` and `metadata` overrides
+- `BENCH_PROBE_PATH`: optional path to `benchledger-probe`; otherwise the writer checks beside `runbench.jl` and then `PATH`
+- `BENCH_CODE_STATE`: optional JSON object with `id`, `label`, `code_date`, `identity`, and `metadata`
+- `BENCH_HARDWARE_ENVIRONMENT`: optional JSON object with `label`, `identity`, and `metadata`
+- `BENCH_SOFTWARE_ENVIRONMENT`: optional JSON object with `label`, `identity`, and `metadata`
+- `BENCH_RUN`: optional JSON object with `notes` and `metadata`
 
-Git revision, tags, branch, code date, platform, runtime, hardware, and execution context are detected automatically when available. Use the three JSON objects only when you need to override detected entity fields or attach additional metadata.
+Git revision, tags, branch, and code date are detected by the Julia writer. The writer also records the Julia runtime, thread count, BenchmarkTools version, and loaded Julia GPU interface. CPU, memory, GPU inventory, architecture, OS, kernel, and GPU drivers come from `benchledger-probe`. Probe diagnostics and collector information are stored in run metadata and do not participate in hardware or software environment identity.
 
 ## Data Layout
 
-### Schema v5
+### Schema v6
 
 #### `benchledger_metadata`
 
@@ -102,10 +104,10 @@ benchledger_metadata
 └── value
 ```
 
-#### `benchmark_code_states`
+#### `code_states`
 
 ```text
-benchmark_code_states
+code_states
 ├── id
 ├── label
 ├── code_date
@@ -113,25 +115,35 @@ benchmark_code_states
 └── metadata
 ```
 
-#### `benchmark_environments`
+#### `hardware_environments`
 
 ```text
-benchmark_environments
+hardware_environments
 ├── id
 ├── label
 ├── identity
 └── metadata
 ```
 
-#### `benchmark_runs`
+#### `software_environments`
 
 ```text
-benchmark_runs
+software_environments
+├── id
+├── label
+├── identity
+└── metadata
+```
+
+#### `runs`
+
+```text
+runs
 ├── id
 ├── code_state_id
-├── environment_id
+├── hardware_environment_id
+├── software_environment_id
 ├── measured_at
-├── notes
 └── metadata
 ```
 
@@ -140,9 +152,7 @@ benchmark_runs
 ```text
 benchmark_results
 ├── run_id
-├── benchmark_id
-├── benchmark_path
-├── benchmark_label
+├── benchmark_key
 ├── metric_name
 ├── statistic
 ├── unit
@@ -150,32 +160,11 @@ benchmark_results
 └── better
 ```
 
-#### `benchmark_results_latest`
+`benchmark_key` is a canonical JSON array of nonempty string segments. Each run references one code state, one hardware environment, and one software environment, while repeated runs remain separate measurement batches. Overview uses raw rows for direct run-to-run comparison; Trend Board and Compare use configuration aggregates keyed by code state, hardware environment, software environment, benchmark key, metric, and statistic. Repeated runs contribute their arithmetic mean after compatible time-unit normalization, missing results are excluded rather than treated as zero, and each aggregate records its contributing `run_count`. Trend Board applies its active filters before aggregation, while page and Compare sharing state is stored in the URL and durable display preferences remain in `localStorage`.
 
-```text
-benchmark_results_latest
-├── run_id
-├── code_state_id
-├── environment_id
-├── code_label
-├── environment_label
-├── code_date
-├── measured_at
-├── notes
-├── code_state_identity
-├── environment_identity
-├── code_state_metadata
-├── environment_metadata
-├── run_metadata
-├── benchmark_path
-├── benchmark_id
-├── benchmark_label
-├── metric_name
-├── statistic
-├── unit
-├── value
-└── better
-```
+### Compare
+
+Compare provides field-level orthogonal comparisons against an existing code/hardware/software configuration. Uncheck the identity fields that may vary; all checked fields must match the baseline, and only one of Code, Hardware, or Software can vary at a time. Identity arrays are compared without relying on element order while preserving relationships inside arrays of objects. Charts and tables use repeated-run aggregates, show `run_count`, exclude missing or incompatible results from delta calculations, list each baseline-to-candidate identity change, and restore the selected baseline, fields, benchmark, and metric from shared URLs.
 
 ### benchledger.json
 
@@ -183,12 +172,13 @@ benchmark_results_latest
 
 ```text
 benchledger.json
-├── manifest_version
 ├── benchledger_web_version
 ├── generated_at
 ├── site
 └── databases[]
 ```
+
+Each `databases[]` entry describes how to locate and verify a database file (`id`, optional display metadata, `url`, `sha256`, `size_bytes`, `packed_at`, and `metadata_preview`). The database schema version is not duplicated in the manifest; the frontend reads and validates the authoritative `benchledger_metadata.schema_version` value from SQLite after loading the verified file.
 
 ## Local Preview
 
@@ -205,10 +195,12 @@ cd ../yourpkg-gh-pages/benchmarks
 npx serve . # or python3 -m http.server 8000
 ```
 
-Then, in a separate terminal from your package repository:
+Then, in a separate terminal from your package repository, point the writer at the platform-specific Probe bundle when it is not already beside `runbench.jl` or on `PATH`:
 
 ```bash
-BENCH_DB_PATH="$(pwd)/../yourpkg-gh-pages/benchmarks/data/benchledger.sqlite" julia --project=benchmark benchmark/runbench.jl
+BENCH_DB_PATH="$(pwd)/../yourpkg-gh-pages/benchmarks/data/benchledger.sqlite" \
+BENCH_PROBE_PATH="/path/to/BenchLedger-probe/benchledger-probe" \
+julia --project=benchmark benchmark/runbench.jl
 ```
 
 In this setup, BenchLedger on `localhost` will automatically poll the current SQLite URL
@@ -216,6 +208,20 @@ and refresh the UI when the database changes.
 
 If you instead load a database through `Choose SQLite`, the browser treats it as a one-off
 local file selection and automatic refresh is not available.
+
+## Local Validation
+
+Before creating a BenchLedger release, run the checks that are available on your platform:
+
+```bash
+npm run check
+cmake -S probe -B probe/build -DCMAKE_BUILD_TYPE=Release
+cmake --build probe/build
+ctest --test-dir probe/build --output-on-failure
+python3 -m unittest discover -s probe/packaging/tests -v
+```
+
+`npm run check` runs lint, frontend tests, TypeScript checking, and the production Vite build. The release workflow repeats these checks, builds the selected native Probe targets, pins one Fastfetch release, validates every checksum and bundle manifest, and publishes only after the complete selected artifact set is present.
 
 ## Target Modes and Backfill
 

@@ -21,7 +21,7 @@ export type OverviewStat = {
 
 type UseOverviewModelOptions = {
   rows: BenchmarkRow[];
-  benchmarksById: ReadonlyMap<string, BenchmarkDefinition>;
+  benchmarksByKey: ReadonlyMap<string, BenchmarkDefinition>;
   allRuns: BenchmarkRun[];
   focusRunId: string;
   onFocusRunIdChange: (runId: string) => void;
@@ -29,7 +29,7 @@ type UseOverviewModelOptions = {
   onBaselineRunIdChange: (runId: string) => void;
   runPairSort: RunPairSort | null;
   onRunPairSortChange: (sort: RunPairSort | null) => void;
-  environment: string;
+  environmentPair: string;
   metricKind: string;
   group: string;
   branch: string;
@@ -52,7 +52,7 @@ type UseOverviewModelResult = {
 export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewModelResult {
   const {
     rows,
-    benchmarksById,
+    benchmarksByKey,
     allRuns,
     focusRunId,
     onFocusRunIdChange,
@@ -60,7 +60,7 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
     onBaselineRunIdChange,
     runPairSort,
     onRunPairSortChange,
-    environment,
+    environmentPair,
     metricKind,
     group,
     branch,
@@ -72,6 +72,12 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
   const filteredRuns = useMemo(() => allRuns.filter((run) => runIds.has(run.run_id)), [allRuns, runIds]);
   const runs = filteredRuns;
   const latestRun = filteredRuns[0] ?? null;
+  const latestRunSliceRowCount = useMemo(
+    () => latestRun
+      ? rows.reduce((count, row) => count + (row.run_id === latestRun.run_id ? 1 : 0), 0)
+      : 0,
+    [latestRun, rows]
+  );
   const filteredRunsById = useMemo(
     () => new Map(filteredRuns.map((run) => [run.run_id, run])),
     [filteredRuns]
@@ -93,7 +99,7 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
 
   const focusRun = filteredRunsById.get(focusRunId) ?? filteredRuns[0] ?? null;
   const baselineRun = filteredRunsById.get(baselineRunId) ?? filteredRuns[1] ?? filteredRuns[0] ?? null;
-  const environmentMismatch = Boolean(focusRun && baselineRun && focusRun.environment_id !== baselineRun.environment_id);
+  const environmentMismatch = Boolean(focusRun && baselineRun && focusRun.environment_pair_key !== baselineRun.environment_pair_key);
 
   const focusRows = useMemo(
     () => (focusRun ? rows.filter((row) => runId(row) === focusRun.run_id) : []),
@@ -105,8 +111,8 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
   );
 
   const comparisonRows = useMemo<PairComparison[]>(
-    () => buildRunPairComparisons(focusRows, baselineRows, benchmarksById),
-    [baselineRows, benchmarksById, focusRows]
+    () => buildRunPairComparisons(focusRows, baselineRows, benchmarksByKey),
+    [baselineRows, benchmarksByKey, focusRows]
   );
 
   const sortedComparisonRows = useMemo(() => {
@@ -133,7 +139,7 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
 
   const capturedRunsDetail = useMemo(() => {
     const filterStates = [
-      { label: "Environment", enabled: environment !== "all" },
+      { label: "Hardware + Software", enabled: environmentPair !== "all" },
       { label: "Metric", enabled: Boolean(metricKind) },
       { label: "Group", enabled: group !== "all" },
       { label: "Branch", enabled: branch !== "all" },
@@ -156,7 +162,7 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
           : null
       ))
     );
-  }, [branch, environment, group, metricKind, timeEnd, timeStart]);
+  }, [branch, environmentPair, group, metricKind, timeEnd, timeStart]);
 
   const matchedComparisonRows = useMemo(
     () => comparisonRows.filter((row): row is Extract<PairComparison, { status: "matched" }> => row.status === "matched"),
@@ -183,9 +189,9 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
       Icon: FiDatabase,
       label: "Benchmark Rows",
       value: rows.length.toLocaleString(),
-      delta: latestRun ? `+${latestRun.benchmark_count.toLocaleString()}` : "",
-      deltaTone: latestRun?.benchmark_count ? "positive" : "neutral",
-      detail: `${unique(rows.map((row) => row.benchmark_id)).length.toLocaleString()} benchmarks in slice`
+      delta: latestRun ? `+${latestRunSliceRowCount.toLocaleString()}` : "",
+      deltaTone: latestRunSliceRowCount ? "positive" : "neutral",
+      detail: `${unique(rows.map((row) => row.benchmark_key)).length.toLocaleString()} benchmarks in slice`
     },
     {
       Icon: FiActivity,
@@ -214,7 +220,7 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
       deltaTone: "neutral",
       detail: latestRun?.code_state_metadata.source?.dirty ? "Latest run was recorded from a dirty worktree" : "Latest run is clean"
     }
-  ], [capturedRunsDetail, filteredRuns, improvedCount, largestDeltaLabel, largestDeltaRow, latestRun, regressedCount, rows]);
+  ], [capturedRunsDetail, filteredRuns, improvedCount, largestDeltaLabel, largestDeltaRow, latestRun, latestRunSliceRowCount, regressedCount, rows]);
 
   return {
     runs,

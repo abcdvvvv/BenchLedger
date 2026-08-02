@@ -1,15 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { FiFolder } from "react-icons/fi";
 import { FiChevronLeft, FiChevronRight } from "react-icons/fi";
-import { TimeRangePopover } from "../benchmarks/components/TimeRangePopover";
-import { GroupCascadeMenu, type GroupMenuOption } from "../benchmarks/components/GroupCascadeMenu";
 import { RunSelectMenu } from "../benchmarks/components/RunSelectMenu";
 import { Button } from "../../components/ui/Button";
 import { IconButton } from "../../components/ui/IconButton";
 import { StatusBadge } from "../../components/ui/Badge";
 import { Banner } from "../../components/common/Banner";
 import { EmptyState } from "../../components/common/EmptyState";
-import { Field, FieldLabel, SelectField, Toolbar, ToolbarGrid } from "../../components/ui/Field";
+import { Field, FieldLabel } from "../../components/ui/Field";
 import { Panel, SectionTitle } from "../../components/ui/Card";
 import { PageHeader } from "../../components/common/PageHeader";
 import { StatCard } from "../../components/common/StatCard";
@@ -18,7 +16,6 @@ import { runHeadline, runPairTableColumns } from "../../lib/dashboard-data";
 import {
   Benchmark_Diff_Page_Size_Options,
   type BenchmarkDiffPageSize,
-  type DisplayStrategy,
   type RunPairSort,
   type RunPairSortKey
 } from "../../lib/dashboard-settings";
@@ -27,54 +24,11 @@ import {
   formatMetricValue,
   formatPercent
 } from "../../lib/format";
-import { cn } from "../../components/ui/cn";
+import { SegmentedToggle } from "../../components/ui/SegmentedToggle";
 import { benchmarkDeltaTone } from "../benchmarks/benchmarkDeltaPresentation";
 import type { OverviewStat } from "./useOverviewModel";
 import type { BenchmarkRun, PairComparison } from "../../lib/types";
-
-function SegmentedToggle(props: {
-  value: string;
-  options: Array<{ value: string; label: string }>;
-  onChange: (value: string) => void;
-  ariaLabel: string;
-}) {
-  const activeIndex = props.options.findIndex((option) => option.value === props.value);
-  const optionCount = Math.max(props.options.length, 1);
-  const activeStyle = {
-    width: `calc((100% - 0.4rem) / ${optionCount})`,
-    transform: `translateX(calc(${activeIndex} * 100%))`
-  };
-
-  return (
-    <div
-      className="control-frame surface-control relative inline-grid min-h-[2.3rem] min-w-[10rem] grid-cols-3 place-items-stretch overflow-hidden p-[0.2rem] shadow-none"
-      role="group"
-      aria-label={props.ariaLabel}
-    >
-      <span
-        aria-hidden="true"
-        className="radius-theme absolute top-[0.2rem] bottom-[0.2rem] left-[0.2rem] z-0 transition-transform"
-        style={{ ...activeStyle, backgroundColor: "var(--color-text-theme-brand)" }}
-      />
-      {props.options.map((option) => {
-        const active = option.value === props.value;
-        return (
-          <button
-            key={option.value}
-            type="button"
-            className={cn(
-              "radius-theme relative z-10 flex h-full w-full items-center justify-center border-0 bg-transparent px-0 text-center text-[0.82rem] leading-none font-semibold tabular-nums transition",
-              active ? "text-stone-950" : "text-stone-500 dark:text-stone-400"
-            )}
-            onClick={() => props.onChange(option.value)}
-          >
-            {option.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
+import { BenchmarkFilterToolbar, type BenchmarkFilterToolbarProps } from "../benchmarks/components/BenchmarkFilterToolbar";
 
 export type OverviewPageProps = {
   header: {
@@ -94,30 +48,7 @@ export type OverviewPageProps = {
     hasDataset: boolean;
     error: string;
   };
-  filters: {
-    environment: string;
-    environmentOptions: { value: string; label: string }[];
-    onEnvironmentChange: (environment: string) => void;
-    metricKind: string;
-    metricOptions: string[];
-    onMetricKindChange: (metricKind: string) => void;
-    group: string;
-    groupOptions: GroupMenuOption[];
-    selectedGroupLabel: string;
-    onGroupChange: (group: string) => void;
-    branch: string;
-    branchOptions: string[];
-    onBranchChange: (branch: string) => void;
-    timeRangeLabel: string;
-    timeStart: string;
-    timeEnd: string;
-    datasetTimeStart: string;
-    datasetTimeEnd: string;
-    onTimeStartChange: (value: string) => void;
-    onTimeEndChange: (value: string) => void;
-    displayStrategy: DisplayStrategy;
-    onDisplayStrategyChange: (strategy: DisplayStrategy) => void;
-  };
+  filters: Omit<BenchmarkFilterToolbarProps, "hasDataset">;
   stats: OverviewStat[];
   comparison: {
     focusRun: BenchmarkRun | null;
@@ -135,11 +66,22 @@ function DatasetBanner(props: Pick<OverviewPageProps, "datasetState" | "header">
   const { datasetState, header } = props;
   if (datasetState.hasDataset && !datasetState.error) return null;
 
+  const title = datasetState.error
+    ? "Database load failed"
+    : datasetState.hasLoadedDatabase
+      ? "No benchmark rows found"
+      : "No database is loaded";
+  const description = datasetState.error || (
+    datasetState.hasLoadedDatabase
+      ? "The loaded SQLite database does not contain benchmark result rows."
+      : "Choose a local SQLite file to inspect benchmark history."
+  );
+
   return (
     <Banner
       tone={!datasetState.hasLoadedDatabase || Boolean(datasetState.error) ? "warning" : "default"}
-      title={datasetState.hasLoadedDatabase ? "No benchmark rows found" : "No database is loaded"}
-      description={datasetState.error || "Choose a local SQLite file to inspect benchmark history."}
+      title={title}
+      description={description}
       action={
         <Button variant="primary" onClick={header.onOpenLocalFilePicker}>
           Choose Local SQLite
@@ -151,17 +93,26 @@ function DatasetBanner(props: Pick<OverviewPageProps, "datasetState" | "header">
 
 function RunContextPanel(props: { focusRun: BenchmarkRun | null }) {
   const { focusRun } = props;
-  const runtimeName = focusRun?.environment_identity.runtime?.name || "";
-  const runtimeVersion = focusRun?.environment_identity.runtime?.version || "";
-  const cpuModel = focusRun?.environment_identity.hardware?.cpu?.model || "";
-  const cpuThreads = focusRun?.environment_identity.hardware?.cpu?.logical_threads;
-  const osName = focusRun?.environment_identity.platform?.os?.name || "";
-  const osVersion = focusRun?.environment_identity.platform?.os?.version || "";
-  const architecture = focusRun?.environment_identity.platform?.architecture || "";
+  const runtimeName = focusRun?.software_environment_identity.runtime?.name || "";
+  const runtimeVersion = focusRun?.software_environment_identity.runtime?.version || "";
+  const cpuModel = focusRun?.hardware_environment_identity.cpu?.model || "";
+  const cpuThreads = focusRun?.hardware_environment_identity.cpu?.logical_threads;
+  const osName = focusRun?.software_environment_identity.platform?.os?.name || "";
+  const osVersion = focusRun?.software_environment_identity.platform?.os?.version || "";
+  const architecture = focusRun?.hardware_environment_identity.architecture || "";
   const revision = focusRun?.code_state_identity.source?.revision || "";
   const branch = focusRun?.run_metadata.source?.branch || "";
   const tags = focusRun?.run_metadata.source?.tags || [];
   const dirty = typeof focusRun?.code_state_metadata.source?.dirty === "boolean" ? String(focusRun.code_state_metadata.source.dirty) : "n/a";
+  const rawSections: ReadonlyArray<readonly [string, unknown]> = focusRun ? [
+    ["Code State Identity", focusRun.code_state_identity],
+    ["Code State Metadata", focusRun.code_state_metadata],
+    ["Hardware Environment Identity", focusRun.hardware_environment_identity],
+    ["Hardware Environment Metadata", focusRun.hardware_environment_metadata],
+    ["Software Environment Identity", focusRun.software_environment_identity],
+    ["Software Environment Metadata", focusRun.software_environment_metadata],
+    ["Run Metadata", focusRun.run_metadata]
+  ] : [];
   const rows = [
     ["Run", focusRun ? runHeadline(focusRun) : "n/a"],
     ["Code Date", focusRun ? formatDate(focusRun.code_date) : "n/a"],
@@ -169,8 +120,10 @@ function RunContextPanel(props: { focusRun: BenchmarkRun | null }) {
     ["Branch", branch || "n/a"],
     ["Tags", tags.length ? tags.join(", ") : "n/a"],
     ["Revision", revision || "n/a"],
-    ["Environment", focusRun?.environment_label || "n/a"],
-    ["Environment ID", focusRun?.environment_id || "n/a"],
+    ["Hardware", focusRun?.hardware_environment_label || "n/a"],
+    ["Hardware ID", focusRun?.hardware_environment_id || "n/a"],
+    ["Software", focusRun?.software_environment_label || "n/a"],
+    ["Software ID", focusRun?.software_environment_id || "n/a"],
     ["Runtime", [runtimeName, runtimeVersion].filter(Boolean).join(" ") || "n/a"],
     ["CPU", cpuModel || "n/a"],
     ["Threads", typeof cpuThreads === "number" ? cpuThreads.toLocaleString() : "n/a"],
@@ -183,10 +136,11 @@ function RunContextPanel(props: { focusRun: BenchmarkRun | null }) {
       <SectionTitle title="Run Context" description="Execution metadata for the current focus run." />
       <div className="mt-5 overflow-x-auto">
         <table className="type-body min-w-full border-separate border-spacing-0 text-left">
+          <caption className="visually-hidden">Current focus run identity and metadata</caption>
           <tbody>
             {rows.map(([label, value]) => (
               <tr key={label}>
-                <th className="type-table-head border-theme-b border-stone-200 pad-data-cell text-left dark:border-[#2f2f33]">
+                <th scope="row" className="type-table-head border-theme-b border-stone-200 pad-data-cell text-left dark:border-[#2f2f33]">
                   {label}
                 </th>
                 <td className="type-body border-theme-b border-stone-200 pad-data-cell dark:border-[#2f2f33]">
@@ -201,26 +155,12 @@ function RunContextPanel(props: { focusRun: BenchmarkRun | null }) {
         <details className="mt-5">
           <summary className="type-body-strong cursor-pointer">Raw Identity & Metadata</summary>
           <div className="mt-3 grid gap-3">
-            <div>
-              <div className="type-table-head mb-2">Code State Identity</div>
-              <pre className="surface-inset pad-field type-table overflow-x-auto whitespace-pre-wrap break-words">{JSON.stringify(focusRun.code_state_identity, null, 2)}</pre>
-            </div>
-            <div>
-              <div className="type-table-head mb-2">Code State Metadata</div>
-              <pre className="surface-inset pad-field type-table overflow-x-auto whitespace-pre-wrap break-words">{JSON.stringify(focusRun.code_state_metadata, null, 2)}</pre>
-            </div>
-            <div>
-              <div className="type-table-head mb-2">Environment Identity</div>
-              <pre className="surface-inset pad-field type-table overflow-x-auto whitespace-pre-wrap break-words">{JSON.stringify(focusRun.environment_identity, null, 2)}</pre>
-            </div>
-            <div>
-              <div className="type-table-head mb-2">Environment Metadata</div>
-              <pre className="surface-inset pad-field type-table overflow-x-auto whitespace-pre-wrap break-words">{JSON.stringify(focusRun.environment_metadata, null, 2)}</pre>
-            </div>
-            <div>
-              <div className="type-table-head mb-2">Run Metadata</div>
-              <pre className="surface-inset pad-field type-table overflow-x-auto whitespace-pre-wrap break-words">{JSON.stringify(focusRun.run_metadata, null, 2)}</pre>
-            </div>
+            {rawSections.map(([label, value]) => (
+              <div key={label}>
+                <div className="type-table-head mb-2">{label}</div>
+                <pre className="surface-inset pad-field type-table overflow-x-auto whitespace-pre-wrap break-words">{JSON.stringify(value, null, 2)}</pre>
+              </div>
+            ))}
           </div>
         </details>
       ) : null}
@@ -244,6 +184,10 @@ export function OverviewPage(props: OverviewPageProps) {
   }, [benchmarkDiffPage, comparison.benchmarkDiffPageSize, comparison.sortedComparisonRows]);
 
   useEffect(() => {
+    setBenchmarkDiffPage(1);
+  }, [comparison.baselineRun?.run_id, comparison.focusRun?.run_id, comparison.sortedComparisonRows]);
+
+  useEffect(() => {
     setBenchmarkDiffPage((currentPage) => Math.min(currentPage, benchmarkDiffTotalPages));
   }, [benchmarkDiffTotalPages]);
 
@@ -263,6 +207,7 @@ export function OverviewPage(props: OverviewPageProps) {
                   runs={header.filteredRuns}
                   selectedRunId={header.baselineRunId}
                   onSelect={header.onBaselineRunChange}
+                  ariaLabel="Baseline run"
                 />
               </Field>
               <Field>
@@ -272,6 +217,7 @@ export function OverviewPage(props: OverviewPageProps) {
                   runs={header.filteredRuns}
                   selectedRunId={header.focusRunId}
                   onSelect={header.onFocusRunChange}
+                  ariaLabel="Focus run"
                 />
               </Field>
             </div>
@@ -296,63 +242,7 @@ export function OverviewPage(props: OverviewPageProps) {
 
       <DatasetBanner datasetState={datasetState} header={header} />
 
-      <Toolbar variant="plain">
-        <ToolbarGrid>
-          <Field>
-            <FieldLabel>Environment</FieldLabel>
-            <SelectField value={filters.environment} onChange={(event) => filters.onEnvironmentChange(event.target.value)} disabled={!datasetState.hasDataset}>
-              {filters.environmentOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </SelectField>
-          </Field>
-          <Field>
-            <FieldLabel>Metric</FieldLabel>
-            <SelectField value={filters.metricKind} onChange={(event) => filters.onMetricKindChange(event.target.value)} disabled={!filters.metricOptions.length}>
-              {filters.metricOptions.map((option) => <option key={option} value={option}>{option}</option>)}
-            </SelectField>
-          </Field>
-          <Field>
-            <FieldLabel>Group</FieldLabel>
-            <GroupCascadeMenu
-              disabled={!datasetState.hasDataset}
-              options={filters.groupOptions}
-              selectedValue={filters.group}
-              selectedLabel={filters.selectedGroupLabel}
-              onSelect={filters.onGroupChange}
-            />
-          </Field>
-          <Field>
-            <FieldLabel>Branch</FieldLabel>
-            <SelectField value={filters.branch} onChange={(event) => filters.onBranchChange(event.target.value)} disabled={!filters.branchOptions.length}>
-              {filters.branchOptions.map((option) => <option key={option} value={option}>{option === "all" ? "All branches" : option}</option>)}
-            </SelectField>
-          </Field>
-          <Field>
-            <FieldLabel>Time Range</FieldLabel>
-            <TimeRangePopover
-              disabled={!datasetState.hasDataset}
-              label={filters.timeRangeLabel}
-              timeStart={filters.timeStart}
-              timeEnd={filters.timeEnd}
-              datasetTimeStart={filters.datasetTimeStart}
-              datasetTimeEnd={filters.datasetTimeEnd}
-              onTimeStartChange={filters.onTimeStartChange}
-              onTimeEndChange={filters.onTimeEndChange}
-            />
-          </Field>
-          <Field>
-            <FieldLabel>Display Strategy</FieldLabel>
-            <SelectField
-              value={filters.displayStrategy}
-              onChange={(event) => filters.onDisplayStrategyChange(event.target.value as DisplayStrategy)}
-              disabled={!datasetState.hasDataset}
-            >
-              <option value="all">All records</option>
-              <option value="tagged-only">Tagged only</option>
-              <option value="tagged-main">Tagged + main/master</option>
-            </SelectField>
-          </Field>
-        </ToolbarGrid>
-      </Toolbar>
+      <BenchmarkFilterToolbar {...filters} hasDataset={datasetState.hasDataset} />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {stats.map((stat) => (
@@ -385,6 +275,8 @@ export function OverviewPage(props: OverviewPageProps) {
                     setBenchmarkDiffPage(1);
                   }}
                   ariaLabel="Benchmark diff rows per page"
+                  className="min-w-[10rem] place-items-stretch"
+                  buttonClassName="flex h-full w-full items-center justify-center px-0 leading-none tabular-nums"
                 />
                 <div className="type-table-head text-stone-500 dark:text-stone-400">
                   {benchmarkDiffPage} / {benchmarkDiffTotalPages}
@@ -414,13 +306,14 @@ export function OverviewPage(props: OverviewPageProps) {
             <Banner
               className="mt-4"
               tone="warning"
-              title="Comparing different environments"
-              description={`Focus run uses ${comparison.focusRun?.environment_label || "n/a"}, while baseline uses ${comparison.baselineRun?.environment_label || "n/a"}.`}
+              title="Comparing different hardware/software pairs"
+              description={`Focus run uses ${comparison.focusRun?.environment_pair_label || "n/a"}, while baseline uses ${comparison.baselineRun?.environment_pair_label || "n/a"}.`}
             />
           ) : null}
           {comparison.sortedComparisonRows.length ? (
-            <DataTableShell className="mt-2">
+            <DataTableShell label="Run comparison results" className="mt-2">
               <DataTable className="table-fixed">
+                <caption className="visually-hidden">Benchmark values for the selected baseline and focus runs</caption>
                 <colgroup>
                   <col style={{ width: "64%" }} />
                   <col style={{ width: "12%" }} />
@@ -430,7 +323,12 @@ export function OverviewPage(props: OverviewPageProps) {
                 <thead>
                   <tr>
                     {runPairTableColumns.map((column) => (
-                      <DataHeadCell key={column.key}>
+                      <DataHeadCell
+                        key={column.key}
+                        aria-sort={comparison.runPairSort?.key === column.key
+                          ? comparison.runPairSort.direction === "asc" ? "ascending" : "descending"
+                          : "none"}
+                      >
                         <SortButton
                           active={comparison.runPairSort?.key === column.key}
                           onClick={() => comparison.onToggleRunPairSort(column.key)}
@@ -444,7 +342,7 @@ export function OverviewPage(props: OverviewPageProps) {
                 </thead>
                 <tbody>
                   {pagedComparisonRows.map((row) => (
-                    <tr key={row.benchmark_id}>
+                    <tr key={row.benchmark_key}>
                       <DataCell code className="align-top">{row.benchmark_label}</DataCell>
                       <DataCell className="whitespace-nowrap">
                         {row.baseline_value === null ? "—" : formatMetricValue(row.baseline_value, row.unit)}

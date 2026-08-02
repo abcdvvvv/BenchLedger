@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { EmptyState } from "../../components/common/EmptyState";
+import { Button } from "../../components/ui/Button";
 import { PageHeader } from "../../components/common/PageHeader";
 import { StatusBadge } from "../../components/ui/Badge";
 import { Panel } from "../../components/ui/Card";
@@ -10,136 +11,31 @@ import {
   DataTableShell
 } from "../../components/ui/Table";
 import type { BenchmarkDefinition } from "../../lib/types";
+import {
+  buildBenchmarkKeyTree,
+  flattenVisibleBenchmarkKeyNodes,
+  initiallyExpandedBenchmarkGroupIds
+} from "./benchmark-key-tree";
 
 export type BenchmarkKeysPageProps = {
   benchmarks: BenchmarkDefinition[];
 };
 
-type BenchmarkKeyNode = {
-  id: string;
-  label: string;
-  path: string[];
-  parentId: string | null;
-  childIds: string[];
-  depth: number;
-  benchmarkCount: number;
-  kind: "group" | "benchmark";
-};
-
-type BenchmarkKeyTree = {
-  nodesById: Map<string, BenchmarkKeyNode>;
-  rootIds: string[];
-  branchIds: string[];
-  groupCount: number;
-};
-
 const Tree_Indent_Rem = 1.125;
 
-function compareNodeOrder(left: BenchmarkKeyNode, right: BenchmarkKeyNode): number {
-  if (left.kind !== right.kind) return left.kind === "group" ? -1 : 1;
-  return left.label.localeCompare(right.label, undefined, { sensitivity: "base", numeric: true });
-}
-
-function buildBenchmarkKeyTree(benchmarks: BenchmarkDefinition[]): BenchmarkKeyTree {
-  const nodesById = new Map<string, BenchmarkKeyNode>();
-  const rootIds: string[] = [];
-  const branchIds: string[] = [];
-
-  for (const benchmark of benchmarks) {
-    let parentId: string | null = null;
-    let groupPath: string[] = [];
-
-    for (const segment of benchmark.path) {
-      groupPath = [...groupPath, segment];
-      const nodeId = `group:${groupPath.join("/")}`;
-
-      if (!nodesById.has(nodeId)) {
-        nodesById.set(nodeId, {
-          id: nodeId,
-          label: segment,
-          path: groupPath,
-          parentId,
-          childIds: [],
-          depth: groupPath.length - 1,
-          benchmarkCount: 0,
-          kind: "group"
-        });
-        if (parentId) {
-          nodesById.get(parentId)!.childIds.push(nodeId);
-        } else {
-          rootIds.push(nodeId);
-        }
-        branchIds.push(nodeId);
-      }
-
-      parentId = nodeId;
-    }
-
-    const leafPath = [...benchmark.path, benchmark.label];
-    const leafId = `benchmark:${benchmark.id}`;
-    nodesById.set(leafId, {
-      id: leafId,
-      label: benchmark.label,
-      path: leafPath,
-      parentId,
-      childIds: [],
-      depth: benchmark.path.length,
-      benchmarkCount: 1,
-      kind: "benchmark"
-    });
-
-    if (parentId) {
-      nodesById.get(parentId)!.childIds.push(leafId);
-    } else {
-      rootIds.push(leafId);
-    }
-  }
-
-  const childEntries = Array.from(nodesById.entries());
-  for (const [, node] of childEntries) {
-    node.childIds.sort((leftId, rightId) => compareNodeOrder(nodesById.get(leftId)!, nodesById.get(rightId)!));
-  }
-  rootIds.sort((leftId, rightId) => compareNodeOrder(nodesById.get(leftId)!, nodesById.get(rightId)!));
-
-  for (let index = branchIds.length - 1; index >= 0; index -= 1) {
-    const branch = nodesById.get(branchIds[index]);
-    if (!branch) continue;
-    branch.benchmarkCount = branch.childIds.reduce((count, childId) => count + (nodesById.get(childId)?.benchmarkCount ?? 0), 0);
-  }
-
-  return {
-    nodesById,
-    rootIds,
-    branchIds,
-    groupCount: branchIds.length
-  };
-}
-
-function flattenVisibleNodes(tree: BenchmarkKeyTree, expandedIds: ReadonlySet<string>): BenchmarkKeyNode[] {
-  const rows: BenchmarkKeyNode[] = [];
-
-  const visit = (nodeId: string) => {
-    const node = tree.nodesById.get(nodeId);
-    if (!node) return;
-    rows.push(node);
-    if (node.kind !== "group" || !expandedIds.has(node.id)) return;
-    for (const childId of node.childIds) visit(childId);
-  };
-
-  for (const rootId of tree.rootIds) visit(rootId);
-  return rows;
-}
-
 export function BenchmarkKeysPage(props: BenchmarkKeysPageProps) {
-  const tree = buildBenchmarkKeyTree(props.benchmarks);
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set(tree.branchIds));
+  const tree = useMemo(() => buildBenchmarkKeyTree(props.benchmarks), [props.benchmarks]);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => initiallyExpandedBenchmarkGroupIds(tree));
 
   useEffect(() => {
-    setExpandedIds(new Set(tree.branchIds));
-  }, [props.benchmarks]);
+    setExpandedIds(initiallyExpandedBenchmarkGroupIds(tree));
+  }, [tree]);
 
   const hasKeys = props.benchmarks.length > 0;
-  const rows = flattenVisibleNodes(tree, expandedIds);
+  const rows = useMemo(
+    () => flattenVisibleBenchmarkKeyNodes(tree, expandedIds),
+    [expandedIds, tree]
+  );
 
   return (
     <>
@@ -151,12 +47,27 @@ export function BenchmarkKeysPage(props: BenchmarkKeysPageProps) {
       {hasKeys ? (
         <Panel className="min-h-[32rem]">
           <div className="mb-4 flex flex-wrap items-center gap-3">
-            <StatusBadge>{props.benchmarks.length} benchmark{props.benchmarks.length === 1 ? "" : "s"}</StatusBadge>
-            <StatusBadge>{tree.groupCount} group{tree.groupCount === 1 ? "" : "s"}</StatusBadge>
-            <p className="type-body-muted">Expand or collapse any group to inspect its nested benchmark keys.</p>
+            <StatusBadge>{props.benchmarks.length.toLocaleString()} benchmark{props.benchmarks.length === 1 ? "" : "s"}</StatusBadge>
+            <StatusBadge>{tree.groupCount.toLocaleString()} group{tree.groupCount === 1 ? "" : "s"}</StatusBadge>
+            <p className="type-body-muted mr-auto">Expand or collapse any group to inspect its nested benchmark keys.</p>
+            <Button
+              variant="secondary"
+              onClick={() => setExpandedIds(new Set(tree.branchIds))}
+              disabled={expandedIds.size === tree.branchIds.length}
+            >
+              Expand all
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => setExpandedIds(new Set())}
+              disabled={expandedIds.size === 0}
+            >
+              Collapse all
+            </Button>
           </div>
-          <DataTableShell>
+          <DataTableShell label="Benchmark key hierarchy">
             <DataTable>
+              <caption className="visually-hidden">Benchmark key groups and leaf benchmarks</caption>
               <thead>
                 <tr>
                   <DataHeadCell>Key</DataHeadCell>
@@ -177,7 +88,8 @@ export function BenchmarkKeysPage(props: BenchmarkKeysPageProps) {
                           {node.kind === "group" ? (
                             <button
                               type="button"
-                              className="flex min-w-0 items-start gap-2 text-left"
+                              className="flex min-w-0 items-start gap-2 text-left focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-500/15"
+                              aria-expanded={isExpanded}
                               onClick={() => {
                                 setExpandedIds((current) => {
                                   const next = new Set(current);

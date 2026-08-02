@@ -1,0 +1,4 @@
+[
+  {"type": "CPU", "error": "CPU detection failed"},
+  {"type": "Kernel", "result": {"architecture": "x86_64", "name": "Linux", "release": "6.8", "version": "", "pageSize": 4096}}
+]

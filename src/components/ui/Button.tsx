@@ -1,4 +1,4 @@
-import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from "react";
+import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode, Ref } from "react";
 import { cn } from "./cn";
 
 type CommonProps = {
@@ -11,6 +11,7 @@ type CommonProps = {
 
 type ButtonProps = CommonProps & ButtonHTMLAttributes<HTMLButtonElement> & {
   href?: never;
+  buttonRef?: Ref<HTMLButtonElement>;
 };
 
 type LinkButtonProps = CommonProps & AnchorHTMLAttributes<HTMLAnchorElement> & {
@@ -74,6 +75,6 @@ export function Button(props: ButtonProps | LinkButtonProps) {
     return <a {...linkProps} className={classes}>{children}</a>;
   }
 
-  const buttonProps = rest as ButtonHTMLAttributes<HTMLButtonElement>;
-  return <button {...buttonProps} className={classes}>{children}</button>;
+  const { buttonRef, ...buttonProps } = rest as ButtonHTMLAttributes<HTMLButtonElement> & { buttonRef?: Ref<HTMLButtonElement> };
+  return <button {...buttonProps} ref={buttonRef} className={classes}>{children}</button>;
 }

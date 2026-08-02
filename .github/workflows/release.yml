@@ -1,0 +1,324 @@
+name: Release BenchLedger
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing BenchLedger tag at the selected workflow commit (for example v0.7.0)
+        required: true
+        type: string
+      build_windows_amd64:
+        description: Build Windows amd64 probe bundle
+        required: true
+        type: boolean
+        default: true
+      build_linux_amd64:
+        description: Build Linux amd64 probe bundle
+        required: true
+        type: boolean
+        default: true
+      build_linux_aarch64:
+        description: Build Linux aarch64 probe bundle
+        required: true
+        type: boolean
+        default: false
+      build_macos_amd64:
+        description: Build macOS Intel probe bundle
+        required: true
+        type: boolean
+        default: true
+      build_macos_aarch64:
+        description: Build macOS Apple Silicon probe bundle
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+  cancel-in-progress: false
+
+# Defaults used for automatic tag releases. Manual runs expose the same five switches in the Actions UI.
+env:
+  AUTO_BUILD_WINDOWS_AMD64: "true"
+  AUTO_BUILD_LINUX_AMD64: "true"
+  AUTO_BUILD_LINUX_AARCH64: "false"
+  AUTO_BUILD_MACOS_AMD64: "true"
+  AUTO_BUILD_MACOS_AARCH64: "false"
+  PYTHONUTF8: "1"
+
+jobs:
+  prepare:
+    name: Prepare immutable release plan
+    runs-on: ubuntu-24.04
+    outputs:
+      release_tag: ${{ steps.plan.outputs.release_tag }}
+      targets_json: ${{ steps.plan.outputs.targets_json }}
+    steps:
+      - name: Resolve BenchLedger tag
+        id: tag
+        shell: bash
+        env:
+          MANUAL_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            tag="${MANUAL_TAG}"
+          else
+            tag="${GITHUB_REF_NAME}"
+          fi
+          [[ "${tag}" == v* ]] || { echo "Release tag must start with v" >&2; exit 1; }
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify tag and release tooling
+        id: source
+        shell: bash
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git show-ref --verify --quiet "refs/tags/${TAG}"
+          commit="$(git rev-list -n 1 "${TAG}^{commit}")"
+          [[ "${commit}" =~ ^[0-9a-f]{40}$ ]]
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${commit}" != "${GITHUB_WORKFLOW_SHA}" ]]; then
+            echo "Manual releases must select the workflow commit referenced by ${TAG}; rerun the original tag workflow for older releases" >&2
+            exit 1
+          fi
+          echo "commit=${commit}" >> "${GITHUB_OUTPUT}"
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          tag = os.environ["TAG"]
+          package_version = json.loads(Path("package.json").read_text(encoding="utf-8"))["version"]
+          package_lock = json.loads(Path("package-lock.json").read_text(encoding="utf-8"))
+          declarations = {
+              "release tag": tag.removeprefix("v"),
+              "package.json": package_version,
+              "package-lock.json": package_lock.get("version"),
+              "package-lock.json packages root": package_lock.get("packages", {}).get("", {}).get("version"),
+          }
+          patterns = {
+              "templates/Benchmarks.yml": r'BENCHLEDGER_VERSION:\s*"([^"]+)"',
+          }
+          for path, pattern in patterns.items():
+              match = re.search(pattern, Path(path).read_text(encoding="utf-8"))
+              if match is None:
+                  raise SystemExit(f"Cannot find version declaration in {path}")
+              declarations[path] = match.group(1)
+          if len(set(declarations.values())) != 1:
+              details = ", ".join(f"{name}={value}" for name, value in declarations.items())
+              raise SystemExit(f"BenchLedger version declarations do not match: {details}")
+          PY
+          python3 -m unittest discover -s probe/packaging/tests -v
+
+      - name: Select probe targets
+        id: plan
+        shell: bash
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          COMMIT: ${{ steps.source.outputs.commit }}
+          INPUT_WINDOWS_AMD64: ${{ inputs.build_windows_amd64 }}
+          INPUT_LINUX_AMD64: ${{ inputs.build_linux_amd64 }}
+          INPUT_LINUX_AARCH64: ${{ inputs.build_linux_aarch64 }}
+          INPUT_MACOS_AMD64: ${{ inputs.build_macos_amd64 }}
+          INPUT_MACOS_AARCH64: ${{ inputs.build_macos_aarch64 }}
+        run: |
+          set -euo pipefail
+          enabled=()
+
+          select_target() {
+            local target="$1"
+            local manual_value="$2"
+            local automatic_value="$3"
+            local selected
+            if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+              selected="${manual_value}"
+            else
+              selected="${automatic_value}"
+            fi
+            case "${selected}" in
+              true) enabled+=(--enable "${target}") ;;
+              false) ;;
+              *) echo "Invalid switch value for ${target}: ${selected}" >&2; exit 1 ;;
+            esac
+          }
+
+          select_target windows-amd64 "${INPUT_WINDOWS_AMD64}" "${AUTO_BUILD_WINDOWS_AMD64}"
+          select_target linux-amd64 "${INPUT_LINUX_AMD64}" "${AUTO_BUILD_LINUX_AMD64}"
+          select_target linux-aarch64 "${INPUT_LINUX_AARCH64}" "${AUTO_BUILD_LINUX_AARCH64}"
+          select_target macos-amd64 "${INPUT_MACOS_AMD64}" "${AUTO_BUILD_MACOS_AMD64}"
+          select_target macos-aarch64 "${INPUT_MACOS_AARCH64}" "${AUTO_BUILD_MACOS_AARCH64}"
+
+          python3 probe/packaging/release.py plan \
+            --tag "${TAG}" \
+            --commit "${COMMIT}" \
+            "${enabled[@]}" \
+            --output build/release-input/release-plan.json \
+            --github-output "${GITHUB_OUTPUT}"
+
+      - name: Resolve latest stable Fastfetch release once
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          asset_args=()
+          while IFS= read -r asset; do
+            asset_args+=(--asset "${asset}")
+          done < <(python3 - <<'PY'
+          import json
+          with open("build/release-input/release-plan.json", encoding="utf-8") as stream:
+              plan = json.load(stream)
+          for target in plan["probe_targets"]:
+              print(target["fastfetch_asset"])
+          PY
+          )
+
+          python3 probe/packaging/release.py resolve-fastfetch \
+            "${asset_args[@]}" \
+            --output build/release-input/fastfetch-release.json
+
+      - name: Upload immutable release inputs
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-inputs
+          path: build/release-input/*
+          if-no-files-found: error
+          retention-days: 7
+
+  build-dist:
+    name: Build frontend dist
+    needs: prepare
+    permissions:
+      contents: read
+    uses: ./.github/workflows/release-dist.yml
+    with:
+      release_tag: ${{ needs.prepare.outputs.release_tag }}
+
+  build-probe:
+    name: Build selected probe bundles
+    needs: prepare
+    permissions:
+      contents: read
+    uses: ./.github/workflows/release-probe.yml
+    with:
+      release_tag: ${{ needs.prepare.outputs.release_tag }}
+      targets_json: ${{ needs.prepare.outputs.targets_json }}
+
+  publish:
+    name: Verify and publish one atomic release
+    needs:
+      - prepare
+      - build-dist
+      - build-probe
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.release_tag }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Download immutable release inputs
+        uses: actions/download-artifact@v8
+        with:
+          name: release-inputs
+          path: build/release-input
+
+      - name: Download frontend release assets
+        uses: actions/download-artifact@v8
+        with:
+          name: release-dist
+          path: build/release-assets
+
+      - name: Download selected probe release assets
+        uses: actions/download-artifact@v8
+        with:
+          pattern: probe-release-*
+          path: build/release-assets
+          merge-multiple: true
+
+      - name: Verify release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 probe/packaging/release.py verify \
+            --plan build/release-input/release-plan.json \
+            --fastfetch-manifest build/release-input/fastfetch-release.json \
+            --assets-dir build/release-assets
+
+      - name: Create draft, upload all assets, then publish
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+
+          if is_draft="$(gh release view "${TAG}" --json isDraft --jq '.isDraft' 2>/dev/null)"; then
+            if [[ "${is_draft}" != "true" ]]; then
+              echo "A published GitHub Release already exists for ${TAG}; refusing to overwrite it" >&2
+              exit 1
+            fi
+            gh release delete "${TAG}" --yes
+          fi
+
+          fastfetch_tag="$(jq -r '.tag' build/release-input/fastfetch-release.json)"
+          target_count="$(jq -r '.probe_targets | length' build/release-input/release-plan.json)"
+          release_notes="This release contains one platform-independent frontend dist and ${target_count} selected native probe bundle(s).
+
+          Probe bundles include Fastfetch ${fastfetch_tag}, resolved once and SHA-256 verified at release time."
+
+          gh release create "${TAG}" build/release-assets/* \
+            --draft \
+            --verify-tag \
+            --generate-notes \
+            --notes "${release_notes}"
+
+          release_id="$(gh release view "${TAG}" --json databaseId --jq '.databaseId')"
+          gh api \
+            -H "X-GitHub-Api-Version: 2026-03-10" \
+            "repos/${GITHUB_REPOSITORY}/releases/${release_id}" \
+            > build/remote-release.json
+          python3 - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          assets_dir = Path("build/release-assets")
+          expected = {}
+          for path in assets_dir.iterdir():
+              if path.is_file():
+                  expected[path.name] = "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+
+          release = json.loads(Path("build/remote-release.json").read_text(encoding="utf-8"))
+          actual = {asset["name"]: asset.get("digest") for asset in release.get("assets", [])}
+          if actual != expected:
+              missing = sorted(set(expected) - set(actual))
+              unexpected = sorted(set(actual) - set(expected))
+              mismatched = sorted(
+                  name for name in set(expected) & set(actual) if expected[name] != actual[name]
+              )
+              raise SystemExit(
+                  "Uploaded release assets do not match local files: "
+                  f"missing={missing}, unexpected={unexpected}, digest_mismatch={mismatched}"
+              )
+          PY
+
+          gh release edit "${TAG}" --draft=false

@@ -1,11 +1,9 @@
-import type { CSSProperties } from "react";
+import type { ChangeEvent, CSSProperties } from "react";
 import { BenchmarkKeyCascadeFilter, type BenchmarkKeyFilterOption } from "../benchmarks/components/BenchmarkKeyCascadeFilter";
-import { TimeRangePopover } from "../benchmarks/components/TimeRangePopover";
-import { GroupCascadeMenu, type GroupMenuOption } from "../benchmarks/components/GroupCascadeMenu";
 import Plot from "../benchmarks/components/Plot";
 import { Button } from "../../components/ui/Button";
 import { EmptyState } from "../../components/common/EmptyState";
-import { Field, FieldLabel, InputField, SelectField, Toolbar, ToolbarGrid } from "../../components/ui/Field";
+import { Field, FieldLabel, InputField } from "../../components/ui/Field";
 import { Panel, SectionTitle } from "../../components/ui/Card";
 import { PageHeader } from "../../components/common/PageHeader";
 import { Trend_Board_Plot_Height, type PlotTheme } from "../../lib/dashboard-plotting";
@@ -13,17 +11,17 @@ import {
   Trend_Board_Max_Columns,
   Trend_Board_Min_Columns,
   clampTrendBoardColumns,
-  type DisplayStrategy,
   type TrendAxisMode,
   type TrendBoardViewMode
 } from "../../lib/dashboard-settings";
 import type { TrendBoardCard, TrendBoardCombinedChart } from "./useTrendBoardModel";
+import { BenchmarkFilterToolbar, type BenchmarkFilterToolbarProps } from "../benchmarks/components/BenchmarkFilterToolbar";
 
 export type TrendBoardPageProps = {
   header: {
     benchmarkOptions: BenchmarkKeyFilterOption[];
-    selectedBenchmarkIds: string[];
-    onSelectedBenchmarkIdsChange: (values: string[]) => void;
+    selectedBenchmarkKeys: string[];
+    onSelectedBenchmarkKeysChange: (values: string[]) => void;
     hasDataset: boolean;
     trendBoardColumns: number;
     onTrendBoardColumnsChange: (value: number) => void;
@@ -32,30 +30,7 @@ export type TrendBoardPageProps = {
     trendAxisMode: TrendAxisMode;
     onToggleTrendAxisMode: () => void;
   };
-  filters: {
-    environment: string;
-    environmentOptions: { value: string; label: string }[];
-    onEnvironmentChange: (environment: string) => void;
-    metricKind: string;
-    metricOptions: string[];
-    onMetricKindChange: (metricKind: string) => void;
-    displayStrategy: DisplayStrategy;
-    onDisplayStrategyChange: (strategy: DisplayStrategy) => void;
-    group: string;
-    groupOptions: GroupMenuOption[];
-    selectedGroupLabel: string;
-    onGroupChange: (group: string) => void;
-    branch: string;
-    branchOptions: string[];
-    onBranchChange: (branch: string) => void;
-    timeRangeLabel: string;
-    timeStart: string;
-    timeEnd: string;
-    datasetTimeStart: string;
-    datasetTimeEnd: string;
-    onTimeStartChange: (value: string) => void;
-    onTimeEndChange: (value: string) => void;
-  };
+  filters: Omit<BenchmarkFilterToolbarProps, "hasDataset">;
   trend: {
     selectedMetricLabel: string;
     trendBoardCards: TrendBoardCard[];
@@ -63,6 +38,7 @@ export type TrendBoardPageProps = {
     showCombinedTrendChart: boolean;
     trendPlotMargin: { t: number; r: number; b: number; l: number };
     plotTheme: PlotTheme;
+    hasTrendRows: boolean;
   };
 };
 
@@ -85,20 +61,22 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
               <FieldLabel className="invisible">Benchmark key</FieldLabel>
               <BenchmarkKeyCascadeFilter
                 options={header.benchmarkOptions}
-                selectedValues={header.selectedBenchmarkIds}
-                setSelectedValues={header.onSelectedBenchmarkIdsChange}
+                selectedValues={header.selectedBenchmarkKeys}
+                setSelectedValues={header.onSelectedBenchmarkKeysChange}
                 disabled={!header.hasDataset}
                 stretchWidth
+                ariaLabel="Benchmark keys"
               />
             </Field>
             <Field className="min-w-[7rem]">
               <FieldLabel>Columns</FieldLabel>
               <InputField
                 type="number"
+                aria-label="Trend board columns"
                 min={Trend_Board_Min_Columns}
                 max={Trend_Board_Max_Columns}
                 value={header.trendBoardColumns}
-                onChange={(event) => {
+                onChange={(event: ChangeEvent<HTMLInputElement>) => {
                   const nextValue = Number(event.target.value);
                   header.onTrendBoardColumnsChange(clampTrendBoardColumns(nextValue));
                 }}
@@ -107,13 +85,23 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
             </Field>
             <Field className="max-sm:w-full">
               <FieldLabel className="invisible">View mode</FieldLabel>
-              <Button variant="secondary" className="max-sm:w-full" onClick={header.onToggleTrendBoardViewMode}>
+              <Button
+                variant="secondary"
+                className="max-sm:w-full"
+                onClick={header.onToggleTrendBoardViewMode}
+                aria-pressed={header.trendBoardViewMode === "combined"}
+              >
                 View: {header.trendBoardViewMode === "combined" ? "Combined" : "Separate"}
               </Button>
             </Field>
             <Field className="max-sm:w-full">
               <FieldLabel className="invisible">Axis mode</FieldLabel>
-              <Button variant="secondary" className="w-34 max-sm:w-full" onClick={header.onToggleTrendAxisMode}>
+              <Button
+                variant="secondary"
+                className="w-34 max-sm:w-full"
+                onClick={header.onToggleTrendAxisMode}
+                aria-pressed={header.trendAxisMode === "time"}
+              >
                 X-Axis: {header.trendAxisMode === "commit" ? "Commit" : "Time"}
               </Button>
             </Field>
@@ -121,63 +109,7 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
         )}
       />
 
-      <Toolbar variant="plain">
-        <ToolbarGrid>
-          <Field>
-            <FieldLabel>Environment</FieldLabel>
-            <SelectField value={filters.environment} onChange={(event) => filters.onEnvironmentChange(event.target.value)} disabled={!header.hasDataset}>
-              {filters.environmentOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </SelectField>
-          </Field>
-          <Field>
-            <FieldLabel>Metric</FieldLabel>
-            <SelectField value={filters.metricKind} onChange={(event) => filters.onMetricKindChange(event.target.value)} disabled={!filters.metricOptions.length}>
-              {filters.metricOptions.map((option) => <option key={option} value={option}>{option}</option>)}
-            </SelectField>
-          </Field>
-          <Field>
-            <FieldLabel>Group</FieldLabel>
-            <GroupCascadeMenu
-              disabled={!header.hasDataset}
-              options={filters.groupOptions}
-              selectedValue={filters.group}
-              selectedLabel={filters.selectedGroupLabel}
-              onSelect={filters.onGroupChange}
-            />
-          </Field>
-          <Field>
-            <FieldLabel>Branch</FieldLabel>
-            <SelectField value={filters.branch} onChange={(event) => filters.onBranchChange(event.target.value)} disabled={!filters.branchOptions.length}>
-              {filters.branchOptions.map((option) => <option key={option} value={option}>{option === "all" ? "All branches" : option}</option>)}
-            </SelectField>
-          </Field>
-          <Field>
-            <FieldLabel>Time Range</FieldLabel>
-            <TimeRangePopover
-              disabled={!header.hasDataset}
-              label={filters.timeRangeLabel}
-              timeStart={filters.timeStart}
-              timeEnd={filters.timeEnd}
-              datasetTimeStart={filters.datasetTimeStart}
-              datasetTimeEnd={filters.datasetTimeEnd}
-              onTimeStartChange={filters.onTimeStartChange}
-              onTimeEndChange={filters.onTimeEndChange}
-            />
-          </Field>
-          <Field>
-            <FieldLabel>Display Strategy</FieldLabel>
-            <SelectField
-              value={filters.displayStrategy}
-              onChange={(event) => filters.onDisplayStrategyChange(event.target.value as DisplayStrategy)}
-              disabled={!header.hasDataset}
-            >
-              <option value="all">All records</option>
-              <option value="tagged-only">Tagged only</option>
-              <option value="tagged-main">Tagged + main/master</option>
-            </SelectField>
-          </Field>
-        </ToolbarGrid>
-      </Toolbar>
+      <BenchmarkFilterToolbar {...filters} hasDataset={header.hasDataset} />
 
       {showCombinedTrendChart && trend.combinedTrendChart ? (
         <Panel className="surface-card-trend-board pad-trend-board-card min-w-0">
@@ -229,7 +161,7 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
           style={{ "--trend-board-columns": String(header.trendBoardColumns) } as CSSProperties}
         >
           {trend.trendBoardCards.map((card) => (
-            <Panel key={card.benchmarkId} className="surface-card-trend-board pad-trend-board-card min-w-0">
+            <Panel key={card.benchmarkKey} className="surface-card-trend-board pad-trend-board-card min-w-0">
               <SectionTitle
                 title={card.label}
                 description={card.path[card.path.length - 1] ?? card.label}
@@ -272,7 +204,25 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
           ))}
         </section>
       ) : (
-        <EmptyState className="pad-empty flex min-h-60 flex-col items-center justify-center text-center" title="No benchmark key selected" />
+        <EmptyState
+          className="pad-empty flex min-h-60 flex-col items-center justify-center text-center"
+          title={
+            !header.hasDataset
+              ? "No benchmark data loaded"
+              : !header.benchmarkOptions.length
+                ? "No benchmarks match the current filters"
+                : header.selectedBenchmarkKeys.length
+                  ? "No trend data matches the current filters"
+                  : "No benchmark key selected"
+          }
+          description={
+            !header.hasDataset
+              ? "Load a benchmark database to build trend charts."
+              : !header.benchmarkOptions.length || (header.selectedBenchmarkKeys.length && !trend.hasTrendRows)
+                ? "Adjust the hardware/software pair, metric, group, branch, time range, or display strategy."
+                : "Choose one or more benchmark keys to render trend charts."
+          }
+        />
       )}
     </>
   );

@@ -1,0 +1,61 @@
+[
+  {
+    "type": "CPU",
+    "result": {
+      "cpu": "Example 8-Core Processor",
+      "vendor": "ExampleVendor",
+      "packages": 1,
+      "cores": {"physical": 8, "logical": 16, "online": 16},
+      "frequency": {"base": 0, "max": 0},
+      "temperature": null,
+      "march": "",
+      "numaNodes": 1
+    }
+  },
+  {"type": "PhysicalMemory", "error": "Synthetic SMBIOS lookup failure"},
+  {"type": "Memory", "result": {"total": 33600000000, "used": 10000000000}},
+  {
+    "type": "GPU",
+    "result": [
+      {
+        "index": 0,
+        "coreCount": 0,
+        "coreUsage": 0,
+        "memory": {
+          "dedicated": {"total": 8589934592, "used": 0},
+          "shared": {"total": 0, "used": 0},
+          "type": "GDDR6"
+        },
+        "driver": "nvidia (open source) 999.1",
+        "name": "NVIDIA Example GPU",
+        "temperature": 0,
+        "type": "Discrete",
+        "vendor": "NVIDIA",
+        "platformApi": "PCI",
+        "frequency": 0,
+        "deviceId": 1
+      }
+    ]
+  },
+  {
+    "type": "OS",
+    "result": {
+      "id": "example-linux",
+      "name": "Example Linux",
+      "prettyName": "Example Linux 1.0",
+      "version": "1.0",
+      "versionID": "1.0"
+    }
+  },
+  {
+    "type": "Kernel",
+    "result": {
+      "architecture": "x86_64",
+      "name": "Linux",
+      "release": "6.0.0-example",
+      "version": "Synthetic test kernel",
+      "pageSize": 4096
+    }
+  },
+  {"type": "Version", "result": {"version": "2.66.0"}}
+]

@@ -1,0 +1,12 @@
+[
+  {"type": "CPU", "result": {"cpu": "Intel(R) Xeon(R) Gold 6338 CPU @ 2.00GHz", "vendor": "GenuineIntel", "packages": 2, "cores": {"physical": 64, "logical": 128, "online": 128}, "frequency": {"base": 2000, "max": 3200}, "temperature": null, "march": "Ice Lake", "numaNodes": 2}},
+  {"type": "PhysicalMemory", "result": [{"size": 68719476736, "installed": true, "maxSpeed": 3200, "runningSpeed": 3200, "type": "DDR4", "locator": "A1", "vendor": "Vendor", "serial": "A", "partNumber": "X", "ecc": true}, {"size": 68719476736, "installed": true, "maxSpeed": 3200, "runningSpeed": 3200, "type": "DDR4", "locator": "B1", "vendor": "Vendor", "serial": "B", "partNumber": "X", "ecc": true}]},
+  {"type": "Memory", "result": {"total": 136000000000, "used": 30000000000}},
+  {"type": "GPU", "result": [
+    {"index": 1, "coreCount": 10752, "coreUsage": 0.0, "memory": {"dedicated": {"total": 51539607552, "used": 0}, "shared": {"total": 68719476736, "used": 0}, "type": "GDDR6"}, "driver": "32.0.15.6094", "name": "NVIDIA RTX A6000", "temperature": null, "type": "Discrete", "vendor": "NVIDIA", "platformApi": "DirectX", "frequency": 0, "deviceId": 1},
+    {"index": 0, "coreCount": 10752, "coreUsage": 99.0, "memory": {"dedicated": {"total": 51539607552, "used": 100}, "shared": {"total": 68719476736, "used": 100}, "type": "GDDR6"}, "driver": "32.0.15.6094", "name": "NVIDIA RTX A6000", "temperature": 90.0, "type": "Discrete", "vendor": "NVIDIA", "platformApi": "DirectX", "frequency": 2100, "deviceId": 2}
+  ]},
+  {"type": "OS", "result": {"buildID": "26100.4652", "codename": "", "id": "windows", "idLike": "", "name": "Windows 11 Pro", "prettyName": "Windows 11 Pro 24H2", "variant": "", "variantID": "", "version": "24H2", "versionID": "24H2"}},
+  {"type": "Kernel", "result": {"architecture": "AMD64", "name": "Windows", "release": "10.0.26100", "version": "Microsoft Windows NT 10.0.26100.0", "pageSize": 4096}},
+  {"type": "Version", "result": {"version": "2.64.2"}}
+]

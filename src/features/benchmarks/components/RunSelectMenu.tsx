@@ -11,10 +11,11 @@ type RunSelectMenuProps = {
   runs: BenchmarkRun[];
   selectedRunId: string;
   onSelect: (runId: string) => void;
+  ariaLabel: string;
 };
 
 export function RunSelectMenu(props: RunSelectMenuProps) {
-  const { disabled, runs, selectedRunId, onSelect } = props;
+  const { disabled, runs, selectedRunId, onSelect, ariaLabel } = props;
   const selectedRun = runs.find((run) => run.run_id === selectedRunId) ?? runs[0] ?? null;
   const selectedLabel = selectedRun ? `${runHeadline(selectedRun)} · ${formatDateOnly(selectedRun.measured_at)}` : "No runs available";
 
@@ -23,6 +24,7 @@ export function RunSelectMenu(props: RunSelectMenuProps) {
       <MenuButton
         className={cn(menuTriggerClassName({ disabled }))}
         disabled={disabled}
+        aria-label={ariaLabel}
         title={selectedRun ? `${runIdentityTitle(selectedRun)}\nMeasured: ${formatDate(selectedRun.measured_at)}` : undefined}
       >
         <DisclosureTriggerContent contentClassName="font-mono">{selectedLabel}</DisclosureTriggerContent>

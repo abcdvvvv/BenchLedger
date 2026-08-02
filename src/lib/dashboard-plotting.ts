@@ -1,26 +1,30 @@
 import { schemeTableau10 } from "d3-scale-chromatic";
 import { formatMetricValue, parseDate, unique } from "./format";
+import { metricUnitFamily, timeUnitNanoseconds, Time_Metric_Units } from "./metric-units";
 import type { TrendMarkerSymbol } from "./trend-marker-symbols";
-import type { BenchmarkRow } from "./types";
+import type { BenchmarkBetter, BenchmarkRow } from "./types";
 import type { ThemeMode, TrendAxisMode, TrendLineShape, TrendMarkerFillMode } from "./dashboard-settings";
 
-export type TrendPlotRow = BenchmarkRow & {
+export type TrendPlotRow = {
+  run_id: string;
+  benchmark_key: string;
+  metric_name: string;
+  statistic: string;
+  unit: string;
+  value: number;
+  better: BenchmarkBetter;
+  configuration_key: string;
   code_state_id: string;
   code_date: string;
-  environment_id: string;
-  environment_label: string;
+  environment_pair_key: string;
+  environment_pair_label: string;
   measured_at: string;
   date_value: Date | null;
   run_axis_label: string;
   run_headline: string;
   run_tone: "tag" | "master" | "branch";
   run_identity_title: string;
-};
-
-export type MetricDescriptor = {
-  metric_name: string;
-  statistic: string;
-  unit: string;
+  run_count: number;
 };
 
 export type PlotTheme = {
@@ -47,9 +51,9 @@ export type TrendDisplayUnitContext = {
   formatMetricLabel: (label: string) => string;
 };
 
-export type TrendEnvironmentSeries = {
-  environmentId: string;
-  environmentLabel: string;
+export type TrendEnvironmentPairSeries = {
+  environmentPairKey: string;
+  environmentPairLabel: string;
   rows: TrendPlotRow[];
 };
 
@@ -67,25 +71,10 @@ export type CommitAxisLayout = {
 
 export const Trend_Y_Padding_Ratio = 0.08;
 export const Trend_Board_Plot_Height = 280;
+export const Commit_Axis_Max_Ticks = 60;
 
 const _Trend_Categorical_Colors = schemeTableau10;
-const _Trend_Time_Units = [
-  { unit: "ns", ns: 1 },
-  { unit: "μs", ns: 1_000 },
-  { unit: "us", ns: 1_000 },
-  { unit: "ms", ns: 1_000_000 },
-  { unit: "s", ns: 1_000_000_000 },
-  { unit: "min", ns: 60 * 1_000_000_000 },
-  { unit: "h", ns: 60 * 60 * 1_000_000_000 }
-] as const;
-const _Trend_Time_Display_Units = [
-  { unit: "ns", ns: 1 },
-  { unit: "μs", ns: 1_000 },
-  { unit: "ms", ns: 1_000_000 },
-  { unit: "s", ns: 1_000_000_000 },
-  { unit: "min", ns: 60 * 1_000_000_000 },
-  { unit: "h", ns: 60 * 60 * 1_000_000_000 }
-] as const;
+const _Trend_Time_Display_Units = Time_Metric_Units;
 const _Trend_Default_Display_Context: TrendDisplayUnitContext = {
   unit: "",
   scaleValue: (value) => value,
@@ -147,22 +136,12 @@ export function colorForBenchmark(index: number): string {
   return _Trend_Categorical_Colors[index % _Trend_Categorical_Colors.length];
 }
 
-function _metricUnitFamily(unit: string): string {
-  return _timeUnitNs(unit) === null ? unit : "time";
-}
-
 export function metricKey(row: Pick<BenchmarkRow, "metric_name" | "statistic">): string {
   return `${row.metric_name}::${row.statistic}`;
 }
 
 export function metricFamilyKey(row: Pick<BenchmarkRow, "metric_name" | "statistic" | "unit">): string {
-  return `${metricKey(row)}::${_metricUnitFamily(row.unit)}`;
-}
-
-export function isPrimaryMetric(row: Pick<BenchmarkRow, "metric_name" | "statistic" | "unit">): boolean {
-  return row.metric_name === "time" &&
-    row.statistic === "median" &&
-    row.unit === "ns";
+  return `${metricKey(row)}::${metricUnitFamily(row.unit)}`;
 }
 
 export function metricLabel(row: Pick<BenchmarkRow, "metric_name" | "statistic">): string {
@@ -171,13 +150,8 @@ export function metricLabel(row: Pick<BenchmarkRow, "metric_name" | "statistic">
 
 export function metricFamilyLabel(row: Pick<BenchmarkRow, "metric_name" | "statistic" | "unit">): string {
   const label = metricLabel(row);
-  const family = _metricUnitFamily(row.unit);
+  const family = metricUnitFamily(row.unit);
   return family === "time" || !family ? label : `${label} ${family}`;
-}
-
-function _timeUnitNs(unit: string): number | null {
-  const match = _Trend_Time_Units.find((entry) => entry.unit === unit);
-  return match ? match.ns : null;
 }
 
 function _formatScaledNumber(value: number): string {
@@ -211,30 +185,30 @@ export function trendDisplayUnitContext(
   if (!sourceUnits.length) return _Trend_Default_Display_Context;
 
   const sourceUnit = sourceUnits[0];
-  const sourceUnitNs = _timeUnitNs(sourceUnit);
-  const allTimeUnits = sourceUnits.every((unit) => _timeUnitNs(unit) !== null);
+  const sourceUnitNs = timeUnitNanoseconds(sourceUnit);
+  const allTimeUnits = sourceUnits.every((unit) => timeUnitNanoseconds(unit) !== null);
 
   if (allTimeUnits) {
     const maxNs = rows.reduce((maxValue, row) => {
-      const unitNs = _timeUnitNs(row.unit);
+      const unitNs = timeUnitNanoseconds(row.unit);
       if (!Number.isFinite(row.value) || unitNs === null) return maxValue;
       return Math.max(maxValue, Math.abs(row.value) * unitNs);
     }, 0);
     const displayUnit = _Trend_Time_Display_Units.reduce((currentUnit, candidateUnit) => {
-      if (maxNs / candidateUnit.ns >= 1) return candidateUnit;
+      if (maxNs / candidateUnit.nanoseconds >= 1) return candidateUnit;
       return currentUnit;
     }, _Trend_Time_Display_Units[0]);
 
     return {
       unit: displayUnit.unit,
       scaleValue: (value, unit) => {
-        const unitNs = _timeUnitNs(unit);
-        return unitNs === null ? value : value * unitNs / displayUnit.ns;
+        const unitNs = timeUnitNanoseconds(unit);
+        return unitNs === null ? value : value * unitNs / displayUnit.nanoseconds;
       },
       formatValue: (value, unit) => {
-        const unitNs = _timeUnitNs(unit);
+        const unitNs = timeUnitNanoseconds(unit);
         if (unitNs === null) return formatMetricValue(value, unit);
-        return `${_formatScaledNumber(value * unitNs / displayUnit.ns)} ${displayUnit.unit}`;
+        return `${_formatScaledNumber(value * unitNs / displayUnit.nanoseconds)} ${displayUnit.unit}`;
       },
       formatMetricLabel: (label) => _formatMetricLabelUnit(label, displayUnit.unit, sourceUnits.length === 1 ? sourceUnit : "")
     };
@@ -260,11 +234,11 @@ export function trendDisplayUnitContext(
   return {
     unit: sourceUnit,
     scaleValue: (value, unit) => {
-      const unitNs = _timeUnitNs(unit);
+      const unitNs = timeUnitNanoseconds(unit);
       return unitNs === null ? value : value * unitNs / sourceUnitNs;
     },
     formatValue: (value, unit) => {
-      const unitNs = _timeUnitNs(unit);
+      const unitNs = timeUnitNanoseconds(unit);
       if (unitNs === null) return formatMetricValue(value, unit);
       return `${_formatScaledNumber(value * unitNs / sourceUnitNs)} ${sourceUnit}`;
     },
@@ -272,25 +246,42 @@ export function trendDisplayUnitContext(
   };
 }
 
-export function splitTrendRowsByEnvironment(rows: TrendPlotRow[]): TrendEnvironmentSeries[] {
-  const rowsByEnvironment = new Map<string, TrendPlotRow[]>();
+export function trendValueExtent(
+  rows: readonly Pick<TrendPlotRow, "value" | "unit">[],
+  displayUnitContext: TrendDisplayUnitContext
+): { min: number; max: number } | null {
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
 
   for (const row of rows) {
-    const environmentId = row.environment_id || "unknown";
-    const bucket = rowsByEnvironment.get(environmentId);
+    const value = displayUnitContext.scaleValue(row.value, row.unit);
+    if (!Number.isFinite(value)) continue;
+    if (value < min) min = value;
+    if (value > max) max = value;
+  }
+
+  return min === Number.POSITIVE_INFINITY ? null : { min, max };
+}
+
+export function splitTrendRowsByEnvironmentPair(rows: TrendPlotRow[]): TrendEnvironmentPairSeries[] {
+  const rowsByEnvironmentPair = new Map<string, TrendPlotRow[]>();
+
+  for (const row of rows) {
+    const environmentPairKey = row.environment_pair_key || "unknown";
+    const bucket = rowsByEnvironmentPair.get(environmentPairKey);
     if (bucket) {
       bucket.push(row);
       continue;
     }
-    rowsByEnvironment.set(environmentId, [row]);
+    rowsByEnvironmentPair.set(environmentPairKey, [row]);
   }
 
-  return Array.from(rowsByEnvironment.entries())
+  return Array.from(rowsByEnvironmentPair.entries())
     .sort(([left], [right]) => left.localeCompare(right))
-    .map(([environmentId, environmentRows]) => ({
-      environmentId,
-      environmentLabel: environmentRows[0]?.environment_label || environmentId,
-      rows: environmentRows
+    .map(([environmentPairKey, pairRows]) => ({
+      environmentPairKey,
+      environmentPairLabel: pairRows[0]?.environment_pair_label || environmentPairKey,
+      rows: pairRows
     }));
 }
 
@@ -332,6 +323,33 @@ function _commitAxisAnchorIndices(states: CommitAxisState[]): number[] {
   return anchors;
 }
 
+function _sampleSortedIndices(indices: readonly number[], maximum: number): number[] {
+  if (indices.length <= maximum) return [...indices];
+  if (maximum <= 1) return [indices[0]];
+  return Array.from({ length: maximum }, (_, index) => (
+    indices[Math.round(index * (indices.length - 1) / (maximum - 1))]
+  ));
+}
+
+function _commitAxisTickIndices(states: readonly CommitAxisState[]): number[] {
+  if (states.length <= Commit_Axis_Max_Ticks) {
+    return states.map((_, index) => index);
+  }
+
+  const required = states.flatMap((state, index) => state.isTag ? [index] : []);
+  if (!required.includes(0)) required.unshift(0);
+  if (!required.includes(states.length - 1)) required.push(states.length - 1);
+  if (required.length >= Commit_Axis_Max_Ticks) {
+    return _sampleSortedIndices(required, Commit_Axis_Max_Ticks);
+  }
+
+  const selected = new Set(required);
+  for (let sampleIndex = 0; sampleIndex < Commit_Axis_Max_Ticks && selected.size < Commit_Axis_Max_Ticks; sampleIndex += 1) {
+    selected.add(Math.round(sampleIndex * (states.length - 1) / (Commit_Axis_Max_Ticks - 1)));
+  }
+  return Array.from(selected).sort((left, right) => left - right);
+}
+
 export function commitAxisLayout(rows: TrendPlotRow[]): CommitAxisLayout | undefined {
   const states = _commitAxisStates(rows);
   if (!states.length) return undefined;
@@ -359,13 +377,14 @@ export function commitAxisLayout(rows: TrendPlotRow[]): CommitAxisLayout | undef
     }
   }
 
+  const tickIndices = _commitAxisTickIndices(states);
   return {
     positionsByCodeStateId,
     tickLabels: {
       type: "linear",
       tickmode: "array",
-      tickvals: states.map((state) => positionsByCodeStateId.get(state.codeStateId) ?? 0),
-      ticktext: states.map((state) => state.label)
+      tickvals: tickIndices.map((index) => positionsByCodeStateId.get(states[index].codeStateId) ?? 0),
+      ticktext: tickIndices.map((index) => states[index].label)
     }
   };
 }
@@ -410,7 +429,6 @@ export function buildTrendTrace(
     ? rows.map((row, index) => commitAxisPositions?.get(row.code_state_id) ?? index)
     : rows.map((row) => row.code_date);
   const y = rows.map((row) => displayUnitContext.scaleValue(row.value, row.unit));
-  const unit = displayUnitContext.unit || (rows[0]?.unit ?? "");
   const gradientStart = colorWithAlpha(color, 0);
   const gradientEnd = colorWithAlpha(color, theme === "dark" ? 0.2 : 0.2);
   const colorscale = fillGradientScale ?? [
@@ -459,7 +477,7 @@ export function buildTrendTrace(
         type: "vertical",
         colorscale
       },
-      hovertemplate: `%{customdata[4]}<br>Code date: %{customdata[1]}<br>Measured: %{customdata[2]}<br>Value: %{customdata[3]}<br>Unit: ${unit || "n/a"}<extra></extra>`,
+      hovertemplate: `%{customdata[4]}<br>Code date: %{customdata[1]}<br>Latest measured: %{customdata[2]}<br>Value: %{customdata[3]}<extra></extra>`,
       showlegend: showLegend
     }
   ];

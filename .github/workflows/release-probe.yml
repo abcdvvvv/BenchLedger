@@ -1,0 +1,79 @@
+name: Build probe bundles
+
+on:
+  workflow_call:
+    inputs:
+      release_tag:
+        description: Existing BenchLedger release tag
+        required: true
+        type: string
+      targets_json:
+        description: JSON matrix containing the selected native targets
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUTF8: "1"
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(inputs.targets_json) }}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.release_tag }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Download pinned release inputs
+        uses: actions/download-artifact@v8
+        with:
+          name: release-inputs
+          path: build/release-input
+
+      - name: Configure probe
+        run: >-
+          cmake -S probe -B build/probe
+          -DCMAKE_BUILD_TYPE=Release
+          -DBENCHLEDGER_PROBE_BUILD_TESTS=ON
+
+      - name: Build probe
+        run: cmake --build build/probe --config Release --parallel
+
+      - name: Test probe
+        run: ctest --test-dir build/probe -C Release --output-on-failure
+
+      - name: Download and verify pinned Fastfetch asset
+        run: >-
+          python probe/packaging/release.py download-fastfetch
+          --manifest build/release-input/fastfetch-release.json
+          --asset-name "${{ matrix.fastfetch_asset }}"
+          --output build/release-input/fastfetch-asset
+          --metadata-output build/release-input/fastfetch-asset.json
+
+      - name: Assemble and smoke-test release bundle
+        run: >-
+          python probe/packaging/package_probe.py
+          --target "${{ matrix.target }}"
+          --benchledger-version "${{ inputs.release_tag }}"
+          --probe-binary "${{ matrix.probe_binary }}"
+          --fastfetch-archive build/release-input/fastfetch-asset
+          --fastfetch-metadata build/release-input/fastfetch-asset.json
+          --probe-license LICENSE.md
+          --schema probe/probe-v2.schema.json
+          --output-dir build/release-output
+
+      - name: Upload target release assets
+        uses: actions/upload-artifact@v7
+        with:
+          name: probe-release-${{ matrix.target }}
+          path: build/release-output/assets/*
+          if-no-files-found: error
+          retention-days: 7

@@ -7,7 +7,16 @@ export type TrendMarkerFillMode = "hollow" | "filled";
 export type TrendAxisMode = "commit" | "time";
 export type TrendBoardViewMode = "separate" | "combined";
 export type DisplayStrategy = "all" | "tagged-only" | "tagged-main";
-export type ActivePage = "overview" | "trend-board" | "benchmark-keys" | "settings" | "database-catalog" | "about";
+export const Active_Pages = [
+  "overview",
+  "trend-board",
+  "compare",
+  "benchmark-keys",
+  "settings",
+  "database-catalog",
+  "about"
+] as const;
+export type ActivePage = typeof Active_Pages[number];
 export type AppPhase = "booting" | "select-source" | "loading-database" | "ready";
 export type RunPairSortKey = "benchmark" | "focus" | "baseline" | "delta";
 export type SortDirection = "asc" | "desc";
@@ -18,14 +27,13 @@ export type RunPairSort = {
 export const Benchmark_Diff_Page_Size_Options = [25, 50, 100] as const;
 export type BenchmarkDiffPageSize = typeof Benchmark_Diff_Page_Size_Options[number];
 
-
 export type UISettings = {
   activePage: ActivePage;
   theme: ThemeMode;
   selectedDatabaseId: string;
-  environment: string;
+  environmentPair: string;
   metricKind: string;
-  trendBoardEnvironment: string;
+  trendBoardEnvironmentPair: string;
   trendBoardMetricKind: string;
   trendBoardDisplayStrategy: DisplayStrategy;
   focusRunId: string;
@@ -39,7 +47,7 @@ export type UISettings = {
   trendBoardTimeStart: string;
   trendBoardTimeEnd: string;
   displayStrategy: DisplayStrategy;
-  trendBoardSelectedBenchmarkIds: string[];
+  trendBoardSelectedBenchmarkKeys: string[];
   trendLineShape: TrendLineShape;
   trendMarkerSymbol: TrendMarkerSymbol;
   trendMarkerFillMode: TrendMarkerFillMode;
@@ -47,30 +55,60 @@ export type UISettings = {
   trendBoardColumns: number;
   trendBoardViewMode: TrendBoardViewMode;
   benchmarkDiffPageSize: BenchmarkDiffPageSize;
+  compareBaselineConfigurationKey: string;
+  compareVariableCategory: "" | "code" | "hardware" | "software";
+  compareVariableFieldPathIds: string[];
+  compareBenchmarkKey: string;
+  compareMetricKey: string;
 };
+
+export type PersistedUISettings = Omit<
+  UISettings,
+  | "activePage"
+  | "compareBaselineConfigurationKey"
+  | "compareVariableCategory"
+  | "compareVariableFieldPathIds"
+  | "compareBenchmarkKey"
+  | "compareMetricKey"
+>;
 
 export const UI_SETTINGS_STORAGE_KEY = "benchledger-ui-settings";
 export const Trend_Board_Default_Columns = 3;
 export const Trend_Board_Min_Columns = 1;
 export const Trend_Board_Max_Columns = 10;
 
+const Compare_URL_Keys = [
+  "compareBaseline",
+  "compareCategory",
+  "compareField",
+  "compareBenchmark",
+  "compareMetric"
+] as const;
+
+const URL_Owned_Settings = new Set<keyof UISettings>([
+  "activePage",
+  "compareBaselineConfigurationKey",
+  "compareVariableCategory",
+  "compareVariableFieldPathIds",
+  "compareBenchmarkKey",
+  "compareMetricKey"
+]);
+
 function systemTheme(): ThemeMode {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return "light";
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function stringSetting(settings: Record<string, unknown>, key: keyof UISettings): string {
-  const value = settings[key];
-  return typeof value === "string" ? value : "";
+function isActivePage(value: unknown): value is ActivePage {
+  return typeof value === "string" && Active_Pages.includes(value as ActivePage);
 }
 
-function stringArraySetting(settings: Record<string, unknown>, key: keyof UISettings): string[] {
-  const value = settings[key];
-  if (!Array.isArray(value)) return [];
-  return value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
+function compareCategory(value: unknown): UISettings["compareVariableCategory"] {
+  return value === "code" || value === "hardware" || value === "software" ? value : "";
 }
 
 export function clampTrendBoardColumns(value: number): number {
@@ -84,14 +122,14 @@ export function clampBenchmarkDiffPageSize(value: number): BenchmarkDiffPageSize
     : 50;
 }
 
-export function readUISettings(): UISettings {
-  const defaults: UISettings = {
+export function defaultUISettings(theme: ThemeMode = systemTheme()): UISettings {
+  return {
     activePage: "overview",
-    theme: systemTheme(),
+    theme,
     selectedDatabaseId: "",
-    environment: "all",
+    environmentPair: "all",
     metricKind: "",
-    trendBoardEnvironment: "all",
+    trendBoardEnvironmentPair: "all",
     trendBoardMetricKind: "",
     trendBoardDisplayStrategy: "all",
     focusRunId: "",
@@ -105,107 +143,154 @@ export function readUISettings(): UISettings {
     trendBoardTimeStart: "",
     trendBoardTimeEnd: "",
     displayStrategy: "all",
-    trendBoardSelectedBenchmarkIds: [],
+    trendBoardSelectedBenchmarkKeys: [],
     trendLineShape: "curve",
     trendMarkerSymbol: "circle",
     trendMarkerFillMode: "hollow",
     trendAxisMode: "commit",
     trendBoardColumns: Trend_Board_Default_Columns,
     trendBoardViewMode: "separate",
-    benchmarkDiffPageSize: 50
+    benchmarkDiffPageSize: 50,
+    compareBaselineConfigurationKey: "",
+    compareVariableCategory: "",
+    compareVariableFieldPathIds: [],
+    compareBenchmarkKey: "",
+    compareMetricKey: ""
   };
-  const rawSettings = window.localStorage.getItem(UI_SETTINGS_STORAGE_KEY);
-  if (!rawSettings) return defaults;
+}
 
-  try {
-    const parsedSettings: unknown = JSON.parse(rawSettings);
-    if (!isRecord(parsedSettings)) return defaults;
-    const trendBoardSelectedBenchmarkIds = stringArraySetting(parsedSettings, "trendBoardSelectedBenchmarkIds").length
-      ? stringArraySetting(parsedSettings, "trendBoardSelectedBenchmarkIds")
-      : defaults.trendBoardSelectedBenchmarkIds;
-    return {
-      activePage:
-        parsedSettings.activePage === "overview" ||
-        parsedSettings.activePage === "trend-board" ||
-        parsedSettings.activePage === "benchmark-keys" ||
-        parsedSettings.activePage === "settings" ||
-        parsedSettings.activePage === "database-catalog" ||
-        parsedSettings.activePage === "about"
-          ? parsedSettings.activePage
-          : defaults.activePage,
-      theme: parsedSettings.theme === "light" || parsedSettings.theme === "dark" ? parsedSettings.theme : defaults.theme,
-      selectedDatabaseId: stringSetting(parsedSettings, "selectedDatabaseId"),
-      environment: stringSetting(parsedSettings, "environment"),
-      metricKind: stringSetting(parsedSettings, "metricKind"),
-      trendBoardEnvironment: stringSetting(parsedSettings, "trendBoardEnvironment"),
-      trendBoardMetricKind: stringSetting(parsedSettings, "trendBoardMetricKind"),
-      trendBoardDisplayStrategy:
-        parsedSettings.trendBoardDisplayStrategy === "all" ||
-        parsedSettings.trendBoardDisplayStrategy === "tagged-only" ||
-        parsedSettings.trendBoardDisplayStrategy === "tagged-main"
-          ? parsedSettings.trendBoardDisplayStrategy
-          : defaults.trendBoardDisplayStrategy,
-      focusRunId: stringSetting(parsedSettings, "focusRunId"),
-      baselineRunId: stringSetting(parsedSettings, "baselineRunId"),
-      group: stringSetting(parsedSettings, "group") || defaults.group,
-      trendBoardGroup: stringSetting(parsedSettings, "trendBoardGroup") || defaults.trendBoardGroup,
-      branch: stringSetting(parsedSettings, "branch") || defaults.branch,
-      trendBoardBranch: stringSetting(parsedSettings, "trendBoardBranch") || defaults.trendBoardBranch,
-      timeStart: stringSetting(parsedSettings, "timeStart"),
-      timeEnd: stringSetting(parsedSettings, "timeEnd"),
-      trendBoardTimeStart: stringSetting(parsedSettings, "trendBoardTimeStart"),
-      trendBoardTimeEnd: stringSetting(parsedSettings, "trendBoardTimeEnd"),
-      displayStrategy:
-        parsedSettings.displayStrategy === "all" ||
-        parsedSettings.displayStrategy === "tagged-only" ||
-        parsedSettings.displayStrategy === "tagged-main"
-          ? parsedSettings.displayStrategy
-          : defaults.displayStrategy,
-      trendBoardSelectedBenchmarkIds,
-      trendLineShape:
-        parsedSettings.trendLineShape === "line" || parsedSettings.trendLineShape === "curve"
-          ? parsedSettings.trendLineShape
-          : defaults.trendLineShape,
-      trendMarkerSymbol:
-        Trend_Marker_Symbol_Options.some((option) => option.value === parsedSettings.trendMarkerSymbol)
-          ? parsedSettings.trendMarkerSymbol as TrendMarkerSymbol
-          : defaults.trendMarkerSymbol,
-      trendMarkerFillMode:
-        parsedSettings.trendMarkerFillMode === "hollow" || parsedSettings.trendMarkerFillMode === "filled"
-          ? parsedSettings.trendMarkerFillMode
-          : defaults.trendMarkerFillMode,
-      trendAxisMode:
-        parsedSettings.trendAxisMode === "commit" || parsedSettings.trendAxisMode === "time"
-          ? parsedSettings.trendAxisMode
-          : defaults.trendAxisMode,
-      trendBoardColumns: clampTrendBoardColumns(
-        typeof parsedSettings.trendBoardColumns === "number"
-          ? parsedSettings.trendBoardColumns
-          : defaults.trendBoardColumns
-      ),
-      trendBoardViewMode:
-        parsedSettings.trendBoardViewMode === "combined" || parsedSettings.trendBoardViewMode === "separate"
-          ? parsedSettings.trendBoardViewMode
-          : defaults.trendBoardViewMode,
-      benchmarkDiffPageSize: clampBenchmarkDiffPageSize(
-        typeof parsedSettings.benchmarkDiffPageSize === "number"
-          ? parsedSettings.benchmarkDiffPageSize
-          : defaults.benchmarkDiffPageSize
-      )
-    };
-  } catch {
-    return defaults;
+function enumSetting<T extends string>(value: T, options: readonly T[], fallback: T): T {
+  return options.includes(value) ? value : fallback;
+}
+
+function restoreStoredUISettings(parsed: Record<string, unknown>, defaults: UISettings): UISettings {
+  const restored = { ...defaults } as Record<string, unknown>;
+  for (const [key, fallback] of Object.entries(defaults)) {
+    if (URL_Owned_Settings.has(key as keyof UISettings)) continue;
+    const value = parsed[key];
+    if (Array.isArray(fallback)) {
+      if (Array.isArray(value)) restored[key] = Array.from(new Set(value.filter((item) => typeof item === "string" && item)));
+    } else if (typeof value === typeof fallback) {
+      restored[key] = value;
+    }
   }
+
+  const settings = restored as UISettings;
+  return {
+    ...settings,
+    theme: enumSetting(settings.theme, ["light", "dark"], defaults.theme),
+    displayStrategy: enumSetting(settings.displayStrategy, ["all", "tagged-only", "tagged-main"], defaults.displayStrategy),
+    trendBoardDisplayStrategy: enumSetting(settings.trendBoardDisplayStrategy, ["all", "tagged-only", "tagged-main"], defaults.trendBoardDisplayStrategy),
+    trendLineShape: enumSetting(settings.trendLineShape, ["line", "curve"], defaults.trendLineShape),
+    trendMarkerSymbol: Trend_Marker_Symbol_Options.some(({ value }) => value === settings.trendMarkerSymbol)
+      ? settings.trendMarkerSymbol
+      : defaults.trendMarkerSymbol,
+    trendMarkerFillMode: enumSetting(settings.trendMarkerFillMode, ["hollow", "filled"], defaults.trendMarkerFillMode),
+    trendAxisMode: enumSetting(settings.trendAxisMode, ["commit", "time"], defaults.trendAxisMode),
+    trendBoardViewMode: enumSetting(settings.trendBoardViewMode, ["separate", "combined"], defaults.trendBoardViewMode),
+    trendBoardColumns: clampTrendBoardColumns(settings.trendBoardColumns),
+    benchmarkDiffPageSize: clampBenchmarkDiffPageSize(settings.benchmarkDiffPageSize)
+  };
+}
+
+export function settingsWithURLState(settings: UISettings, search: string): UISettings {
+  const params = new URLSearchParams(search);
+  const pageValue = params.get("page");
+  const activePage = pageValue === null || pageValue === "" ? "overview" : isActivePage(pageValue) ? pageValue : "overview";
+  if (activePage !== "compare") {
+    return activePage === settings.activePage ? settings : { ...settings, activePage };
+  }
+
+  return {
+    ...settings,
+    activePage,
+    compareBaselineConfigurationKey: params.get("compareBaseline") ?? "",
+    compareVariableCategory: compareCategory(params.get("compareCategory")),
+    compareVariableFieldPathIds: Array.from(new Set(params.getAll("compareField").filter(Boolean))),
+    compareBenchmarkKey: params.get("compareBenchmark") ?? "",
+    compareMetricKey: params.get("compareMetric") ?? ""
+  };
+}
+
+export function buildUISettingsURL(settings: UISettings, currentHref: string): string {
+  const url = new URL(currentHref, "https://benchledger.invalid/");
+  if (settings.activePage === "overview") url.searchParams.delete("page");
+  else url.searchParams.set("page", settings.activePage);
+
+  for (const key of Compare_URL_Keys) url.searchParams.delete(key);
+  if (settings.activePage === "compare") {
+    if (settings.compareBaselineConfigurationKey) {
+      url.searchParams.set("compareBaseline", settings.compareBaselineConfigurationKey);
+    }
+    if (settings.compareVariableCategory) {
+      url.searchParams.set("compareCategory", settings.compareVariableCategory);
+    }
+    for (const pathId of Array.from(new Set(settings.compareVariableFieldPathIds.filter(Boolean)))) {
+      url.searchParams.append("compareField", pathId);
+    }
+    if (settings.compareBenchmarkKey) {
+      url.searchParams.set("compareBenchmark", settings.compareBenchmarkKey);
+    }
+    if (settings.compareMetricKey) {
+      url.searchParams.set("compareMetric", settings.compareMetricKey);
+    }
+  }
+
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
+export function persistedUISettings(settings: UISettings): PersistedUISettings {
+  return Object.fromEntries(
+    Object.entries(settings).filter(([key]) => !URL_Owned_Settings.has(key as keyof UISettings))
+  ) as PersistedUISettings;
+}
+
+export function settingsForDatasetSource(settings: UISettings, selectedDatabaseId: string): UISettings {
+  return {
+    ...settings,
+    selectedDatabaseId,
+    environmentPair: "all",
+    metricKind: "",
+    focusRunId: "",
+    baselineRunId: "",
+    group: "all",
+    branch: "all",
+    timeStart: "",
+    timeEnd: "",
+    trendBoardEnvironmentPair: "all",
+    trendBoardMetricKind: "",
+    trendBoardGroup: "all",
+    trendBoardBranch: "all",
+    trendBoardTimeStart: "",
+    trendBoardTimeEnd: "",
+    trendBoardSelectedBenchmarkKeys: [],
+    compareBaselineConfigurationKey: "",
+    compareVariableCategory: "",
+    compareVariableFieldPathIds: [],
+    compareBenchmarkKey: "",
+    compareMetricKey: ""
+  };
+}
+
+export function readUISettings(): UISettings {
+  const defaults = defaultUISettings();
+  let restored = defaults;
+  if (typeof window !== "undefined") {
+    try {
+      const parsed: unknown = JSON.parse(window.localStorage.getItem(UI_SETTINGS_STORAGE_KEY) ?? "null");
+      if (isRecord(parsed)) restored = restoreStoredUISettings(parsed, defaults);
+    } catch {
+      // Storage is optional; malformed or blocked data falls back to defaults.
+    }
+    return settingsWithURLState(restored, window.location.search);
+  }
+  return restored;
 }
 
 export function dateInputValue(value: string): string {
   const date = parseDate(value);
   if (!date) return "";
   return date.toISOString().slice(0, 10);
-}
-
-export function todayDateInput(): string {
-  return new Date().toISOString().slice(0, 10);
 }
 
 export function formatDateRangePart(value: string, fallback: string): string {

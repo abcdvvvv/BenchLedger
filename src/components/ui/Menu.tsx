@@ -76,17 +76,6 @@ export function menuItemRowClassName(options?: MenuItemRowClassNameOptions) {
   );
 }
 
-export function MenuItemRow(props: HTMLAttributes<HTMLDivElement> & MenuItemRowClassNameOptions) {
-  const {
-    className,
-    state,
-    align,
-    ...rest
-  } = props;
-
-  return <div {...rest} className={cn(menuItemRowClassName({ state, align }), className)} />;
-}
-
 export function MenuEmptyState(props: HTMLAttributes<HTMLDivElement>) {
   const { className, ...rest } = props;
   return <div {...rest} className={cn("type-body-muted pad-menu-item", className)} />;

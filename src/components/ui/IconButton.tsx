@@ -1,4 +1,4 @@
-import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from "react";
+import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode, Ref } from "react";
 import { Button } from "./Button";
 
 type CommonProps = {
@@ -10,6 +10,7 @@ type CommonProps = {
 
 type ButtonIconProps = CommonProps & ButtonHTMLAttributes<HTMLButtonElement> & {
   href?: never;
+  buttonRef?: Ref<HTMLButtonElement>;
 };
 
 type LinkIconProps = CommonProps & AnchorHTMLAttributes<HTMLAnchorElement> & {
@@ -17,7 +18,7 @@ type LinkIconProps = CommonProps & AnchorHTMLAttributes<HTMLAnchorElement> & {
 };
 
 export function IconButton(props: ButtonIconProps | LinkIconProps) {
-  if ("href" in props && props.href) {
+  if (typeof props.href === "string") {
     const { children, label, variant = "secondary", className, href, ...rest } = props;
     return (
       <Button
@@ -35,10 +36,11 @@ export function IconButton(props: ButtonIconProps | LinkIconProps) {
     );
   }
 
-  const { children, label, variant = "secondary", className, ...rest } = props;
+  const { children, label, variant = "secondary", className, buttonRef, ...rest } = props;
   return (
     <Button
       {...rest}
+      buttonRef={buttonRef}
       variant={variant}
       size="icon"
       shape="pill"

@@ -1,10 +1,44 @@
 # Changelog
 
 ## [Unreleased]
+
+## [0.7.1] - 2026-08-02
+### Changed
+- `benchledger-probe` now targets C++23 instead of C++26, so more compilers can build it without full C++26 support.
+- Floating-point JSON number parsing in `benchledger-probe` now uses classic-locale stream parsing instead of `std::from_chars` with `chars_format::general`, improving portability across standard libraries.
+
 ### Fixed
-- Prevented inactive keep-alive pages, including hidden Plotly charts, from intercepting pointer and keyboard interaction.
-- Updated Benchmark Diff to retain benchmark keys present in only one selected run, displaying missing values as `—` and labeling them as `Added` or `Removed` instead of silently omitting them.
-- Excluded `Added` and `Removed` rows from percentage-delta summaries and improvement/regression counts.
+- Cleaned up the probe JSON floating-point parser by removing an unused include and an unnecessary `noskipws` extraction flag.
+
+## [0.7.0] - 2026-08-02
+### Breaking
+- BenchLedger now uses schema v6. Hardware and software environments are stored separately, and benchmark results use canonical `benchmark_key` arrays. Official schema v5 databases are migrated automatically; older or customized v5 layouts are rejected instead of being modified silently.
+
+### Added
+- Added Compare for field-level orthogonal comparisons across Code, Hardware, and Software identities. Comparisons use repeated-run averages, show `run_count`, explain missing or incompatible results, list actual identity changes, and can be shared through the URL.
+- Added repeated-run aggregation for Trend Board and Compare. Compatible time units are normalized before averaging, and missing measurements are excluded rather than counted as zero.
+- Added `benchledger-probe` integration so benchmark runs can record detailed CPU, memory, GPU, driver, operating-system, kernel, runtime, dependency, and BLAS information.
+- Added verified release and workflow assets for the frontend and supported Probe platforms.
+
+### Changed
+- Trend Board now filters raw runs before producing one aggregate point per code, hardware, and software configuration.
+- Benchmark Keys now opens large trees more cleanly, supports expand/collapse-all controls, and handles path segments containing `/` correctly.
+- Page navigation and Compare selections are restored through URLs, while durable preferences such as theme, filters, database selection, and plot settings remain in local storage.
+- Switching databases now clears stale dataset-specific selections while preserving display preferences.
+- Mobile navigation, keyboard focus, table navigation, control labels, and reduced-motion behavior have been improved.
+- The About page now presents the application name, version, and repository link in one compact line, and primary actions now match the amber theme.
+- Plotly is preloaded at startup so the first chart opens without an additional library-loading delay.
+
+### Fixed
+- Starting the development server without `benchledger.json` now shows the normal database picker instead of a JSON parse error.
+- Compare now handles neutral metrics, missing results, incompatible units, invalid shared baselines, multi-field warnings, candidate ordering, and changed-field descriptions consistently.
+- Overview now keeps statistics and pagination synchronized with the selected runs, filters, and sorting.
+- Databases now reports the latest measurement time correctly and groups compatible metric units together.
+- Benchmark Diff now retains benchmarks found in only one selected run, labels them as Added or Removed, and excludes them from percentage summaries.
+- Long Trend Board histories no longer overflow range calculations or produce unreadable commit axes.
+- Database switching and startup no longer leave stale or visually selected-but-unloaded sources in the interface.
+- Keep-alive pages and Plotly charts now restore layout correctly without hidden pages intercepting interaction.
+- Mobile navigation now traps and restores focus, closes predictably, and prevents interaction with the page behind it.
 
 ## [0.6.1] - 2026-07-18
 ### Fixed
@@ -150,7 +184,9 @@ The bundled GitHub Actions workflow now supports three target modes through one 
 
 Initial usable release of BenchLedger.
 
-[Unreleased]: https://github.com/abcdvvvv/BenchLedger/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/abcdvvvv/BenchLedger/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/abcdvvvv/BenchLedger/compare/v0.7.0...v0.7.1
+[0.7.0]: https://github.com/abcdvvvv/BenchLedger/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/abcdvvvv/BenchLedger/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/abcdvvvv/BenchLedger/compare/v0.5.4...v0.6.0
 [0.5.4]: https://github.com/abcdvvvv/BenchLedger/compare/v0.5.3...v0.5.4

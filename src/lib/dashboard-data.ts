@@ -1,5 +1,5 @@
 import { formatDate, parseDate, percentageChange, shortCommit, unique } from "./format";
-import { metricFamilyKey, trendDisplayUnitContext } from "./dashboard-plotting";
+import { metricFamilyKey, metricFamilyLabel, trendDisplayUnitContext } from "./dashboard-plotting";
 import type { RunPairSortKey, SortDirection } from "./dashboard-settings";
 import type {
   BenchmarkRow,
@@ -15,7 +15,9 @@ export type DatabaseCatalogStats = {
   rowCount: number;
   runCount: number;
   keyCount: number;
-  environmentCount: number;
+  hardwareEnvironmentCount: number;
+  softwareEnvironmentCount: number;
+  configurationCount: number;
   metrics: string[];
   latestRunDate: string;
   dirtyRunCount: number;
@@ -36,18 +38,41 @@ export type DatabaseCatalogEntry = {
   stats: DatabaseCatalogStats | null;
 };
 
+export function buildDatabaseCatalogStats(
+  dataset: LoadedBenchmarkDataset | null,
+  rows: readonly BenchmarkRow[],
+  runs: readonly BenchmarkRun[]
+): DatabaseCatalogStats | null {
+  if (!dataset) return null;
+
+  let latestRunDate = "";
+  let latestRunValue = Number.NEGATIVE_INFINITY;
+  for (const run of runs) {
+    const measuredAt = parseDate(run.measured_at)?.valueOf();
+    if (measuredAt === undefined || measuredAt <= latestRunValue) continue;
+    latestRunValue = measuredAt;
+    latestRunDate = run.measured_at;
+  }
+
+  return {
+    rowCount: rows.length,
+    runCount: runs.length,
+    keyCount: dataset.benchmarksByKey.size,
+    hardwareEnvironmentCount: dataset.hardwareEnvironmentsById.size,
+    softwareEnvironmentCount: dataset.softwareEnvironmentsById.size,
+    configurationCount: unique(runs.map((run) => run.configuration_key)).length,
+    metrics: unique(rows.map(metricFamilyLabel)).sort(),
+    latestRunDate,
+    dirtyRunCount: runs.filter((run) => run.code_state_metadata.source?.dirty === true).length
+  };
+}
+
 export const Asset_Base_URL = import.meta.env.BASE_URL;
 
 export const deltaColorKey = {
   up: "deltaUp",
   down: "deltaDown",
   neutral: "deltaNeutral"
-} as const;
-
-export const statDeltaTone = {
-  up: "negative",
-  down: "positive",
-  neutral: "neutral"
 } as const;
 
 export const runPairTableColumns: { key: RunPairSortKey; label: string }[] = [
@@ -119,7 +144,7 @@ export function runHeadline(run: BenchmarkRun): string {
   if (revision) return `${shortCommit(revision)}${suffix}`;
   const branch = _runBranch(run);
   if (branch) return `${branch}${suffix}`;
-  return `${run.environment_label || "local"}${suffix}`;
+  return `${run.environment_pair_label || "local"}${suffix}`;
 }
 
 export function runTone(run: BenchmarkRun): "tag" | "master" | "branch" {
@@ -136,7 +161,7 @@ export function runAxisLabel(run: BenchmarkRun): string {
   if (run.code_label) return `${run.code_label}${suffix}`;
   const revision = _codeStateRevision(run);
   if (revision) return `${shortCommit(revision)}${suffix}`;
-  return `${run.environment_label || "local"}${suffix}`;
+  return `${run.environment_pair_label || "local"}${suffix}`;
 }
 
 export function runIdentityTitle(run: BenchmarkRun, separator = "\n"): string {
@@ -149,17 +174,17 @@ export function runIdentityTitle(run: BenchmarkRun, separator = "\n"): string {
 export function buildRunPairComparisons(
   focusRows: BenchmarkRow[],
   baselineRows: BenchmarkRow[],
-  benchmarksById: ReadonlyMap<string, BenchmarkDefinition>
+  benchmarksByKey: ReadonlyMap<string, BenchmarkDefinition>
 ): PairComparison[] {
-  const focusByBenchmark = new Map(focusRows.map((row) => [row.benchmark_id, row]));
-  const baselineByBenchmark = new Map(baselineRows.map((row) => [row.benchmark_id, row]));
+  const focusByBenchmark = new Map(focusRows.map((row) => [row.benchmark_key, row]));
+  const baselineByBenchmark = new Map(baselineRows.map((row) => [row.benchmark_key, row]));
   const keys = unique([...focusByBenchmark.keys(), ...baselineByBenchmark.keys()]).sort();
 
   return keys
     .map((key): PairComparison | null => {
       const focus = focusByBenchmark.get(key);
       const baseline = baselineByBenchmark.get(key);
-      const benchmark_label = benchmarksById.get(key)?.label ?? key;
+      const benchmark_label = benchmarksByKey.get(key)?.label ?? key;
 
       if (focus && baseline) {
         if (metricFamilyKey(focus) !== metricFamilyKey(baseline)) return null;
@@ -171,7 +196,7 @@ export function buildRunPairComparisons(
         const baseline_value = displayUnitContext.scaleValue(baseline.value, baseline.unit);
         return {
           status: "matched",
-          benchmark_id: key,
+          benchmark_key: key,
           benchmark_label,
           focus_value,
           baseline_value,
@@ -186,7 +211,7 @@ export function buildRunPairComparisons(
       if (focus) {
         return {
           status: "focus-only",
-          benchmark_id: key,
+          benchmark_key: key,
           benchmark_label,
           focus_value: focus.value,
           baseline_value: null,
@@ -201,7 +226,7 @@ export function buildRunPairComparisons(
       if (!baseline) return null;
       return {
         status: "baseline-only",
-        benchmark_id: key,
+        benchmark_key: key,
         benchmark_label,
         focus_value: null,
         baseline_value: baseline.value,
@@ -234,6 +259,16 @@ export function defaultRunPairSortDirection(key: RunPairSortKey): SortDirection 
   return key === "benchmark" ? "asc" : "desc";
 }
 
+function environmentPairLabel(hardware: BenchmarkRun["hardware_environment_identity"], software: BenchmarkRun["software_environment_identity"], hardwareFallback: string, softwareFallback: string): string {
+  const model = (hardware.cpu?.model?.trim() || hardwareFallback).replace(/\s+Processor$/i, "");
+  const cores = hardware.cpu?.physical_cores;
+  const hardwareLabel = `${model}${cores && !model.includes(`${cores}-Core`) ? ` ${cores}-Core` : ""}`;
+  const named = (value?: { name?: string; version?: string }) => [value?.name, value?.version].filter(Boolean).join(" ");
+  const threads = software.execution?.threads;
+  const softwareLabel = [named(software.platform?.os), named(software.runtime), threads ? `${threads} thread${threads === 1 ? "" : "s"}` : ""].filter(Boolean).join(" / ");
+  return `${hardwareLabel} / ${softwareLabel || softwareFallback}`;
+}
+
 function compareRuns(left: BenchmarkRun, right: BenchmarkRun): number {
   const leftCodeDate = parseDate(left.code_date)?.valueOf() ?? 0;
   const rightCodeDate = parseDate(right.code_date)?.valueOf() ?? 0;
@@ -245,35 +280,58 @@ function compareRuns(left: BenchmarkRun, right: BenchmarkRun): number {
 }
 
 export function buildRuns(dataset: LoadedBenchmarkDataset): BenchmarkRun[] {
-  const benchmarkIdsByRun = new Map<string, Set<string>>();
+  const benchmarkKeysByRun = new Map<string, Set<string>>();
   for (const row of dataset.rows) {
-    const benchmarkIds = benchmarkIdsByRun.get(row.run_id);
-    if (benchmarkIds) benchmarkIds.add(row.benchmark_id);
-    else benchmarkIdsByRun.set(row.run_id, new Set([row.benchmark_id]));
+    const benchmarkKeys = benchmarkKeysByRun.get(row.run_id);
+    if (benchmarkKeys) benchmarkKeys.add(row.benchmark_key);
+    else benchmarkKeysByRun.set(row.run_id, new Set([row.benchmark_key]));
   }
 
   const runs: BenchmarkRun[] = [];
-  for (const [runId, benchmarkIds] of benchmarkIdsByRun) {
-    const run = dataset.runsById.get(runId);
-    if (!run) continue;
+  for (const run of dataset.runsById.values()) {
     const codeState = dataset.codeStatesById.get(run.code_state_id);
-    const environment = dataset.environmentsById.get(run.environment_id);
+    const hardwareEnvironment = dataset.hardwareEnvironmentsById.get(run.hardware_environment_id);
+    const softwareEnvironment = dataset.softwareEnvironmentsById.get(run.software_environment_id);
+    if (!codeState || !hardwareEnvironment || !softwareEnvironment) continue;
+
+    const hardwareLabel = hardwareEnvironment.label || hardwareEnvironment.id;
+    const softwareLabel = softwareEnvironment.label || softwareEnvironment.id;
+    const pairLabel = environmentPairLabel(hardwareEnvironment.identity, softwareEnvironment.identity, hardwareLabel, softwareLabel);
+    const notes = typeof run.metadata.notes === "string" ? run.metadata.notes : "";
+
     runs.push({
       run_id: run.id,
       code_state_id: run.code_state_id,
-      code_label: codeState?.label ?? "",
-      code_date: codeState?.code_date ?? "",
-      environment_id: run.environment_id,
-      environment_label: environment?.label ?? run.environment_id,
+      code_label: codeState.label,
+      code_date: codeState.code_date,
+      hardware_environment_id: hardwareEnvironment.id,
+      hardware_environment_label: hardwareLabel,
+      software_environment_id: softwareEnvironment.id,
+      software_environment_label: softwareLabel,
+      environment_pair_key: JSON.stringify([hardwareEnvironment.id, softwareEnvironment.id]),
+      environment_pair_label: pairLabel,
+      configuration_key: JSON.stringify([codeState.id, hardwareEnvironment.id, softwareEnvironment.id]),
+      configuration_label: `${codeState.label || codeState.id} · ${pairLabel}`,
       measured_at: run.measured_at,
-      notes: run.notes,
-      code_state_identity: codeState?.identity ?? {},
-      code_state_metadata: codeState?.metadata ?? {},
-      environment_identity: environment?.identity ?? {},
-      environment_metadata: environment?.metadata ?? {},
+      notes,
+      code_state_identity: codeState.identity,
+      code_state_metadata: codeState.metadata,
+      hardware_environment_identity: hardwareEnvironment.identity,
+      hardware_environment_metadata: hardwareEnvironment.metadata,
+      software_environment_identity: softwareEnvironment.identity,
+      software_environment_metadata: softwareEnvironment.metadata,
       run_metadata: run.metadata,
-      benchmark_count: benchmarkIds.size
+      benchmark_count: benchmarkKeysByRun.get(run.id)?.size ?? 0
     });
+  }
+
+  const pairLabels = new Map(runs.map((run) => [run.environment_pair_key, run.environment_pair_label]));
+  const labelCounts = new Map<string, number>();
+  for (const label of pairLabels.values()) labelCounts.set(label, (labelCounts.get(label) ?? 0) + 1);
+  for (const run of runs) {
+    if ((labelCounts.get(run.environment_pair_label) ?? 0) < 2) continue;
+    run.environment_pair_label += ` · s:${run.software_environment_id.replace(/^software-/, "").slice(0, 6)}`;
+    run.configuration_label = `${run.code_label || run.code_state_id} · ${run.environment_pair_label}`;
   }
   return runs.sort(compareRuns);
 }

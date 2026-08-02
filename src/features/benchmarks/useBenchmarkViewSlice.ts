@@ -11,8 +11,8 @@ import type { BenchmarkRow } from "../../lib/types";
 
 type UseBenchmarkViewSliceOptions = {
   index: BenchmarkViewIndex;
-  environment: string;
-  onEnvironmentChange: (environment: string) => void;
+  environmentPair: string;
+  onEnvironmentPairChange: (environmentPair: string) => void;
   metricKind: string;
   onMetricKindChange: (metricKind: string) => void;
   branch: string;
@@ -42,8 +42,8 @@ export function useBenchmarkViewSlice(
 ): UseBenchmarkViewSliceResult {
   const {
     index,
-    environment,
-    onEnvironmentChange,
+    environmentPair,
+    onEnvironmentPairChange,
     metricKind,
     onMetricKindChange,
     branch,
@@ -59,13 +59,13 @@ export function useBenchmarkViewSlice(
   const timeEndValue = useMemo(() => dateRangeEnd(timeEnd), [timeEnd]);
 
   const baseSlice = useMemo(() => resolveBenchmarkViewBaseSlice(index, {
-    environment,
+    environmentPair,
     metricKind,
     branch,
     timeStartValue,
     timeEndValue,
     displayStrategy
-  }), [branch, displayStrategy, environment, index, metricKind, timeEndValue, timeStartValue]);
+  }), [branch, displayStrategy, environmentPair, index, metricKind, timeEndValue, timeStartValue]);
 
   const resolvedSlice = useMemo(
     () => resolveBenchmarkViewGroupSlice(baseSlice, group),
@@ -73,9 +73,9 @@ export function useBenchmarkViewSlice(
   );
 
   useEffect(() => {
-    if (environment === resolvedSlice.effectiveEnvironment) return;
-    onEnvironmentChange(resolvedSlice.effectiveEnvironment);
-  }, [environment, onEnvironmentChange, resolvedSlice.effectiveEnvironment]);
+    if (environmentPair === resolvedSlice.effectiveEnvironmentPair) return;
+    onEnvironmentPairChange(resolvedSlice.effectiveEnvironmentPair);
+  }, [environmentPair, onEnvironmentPairChange, resolvedSlice.effectiveEnvironmentPair]);
 
   useEffect(() => {
     if (!resolvedSlice.metricOptions.length || metricKind === resolvedSlice.effectiveMetricKind) return;

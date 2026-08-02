@@ -2,6 +2,9 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
+
+// Plotly is intentionally preloaded at startup. Charting is a core BenchLedger
+// workflow, so paying the load cost early avoids delaying the first plot.
 import "./lib/plotly";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

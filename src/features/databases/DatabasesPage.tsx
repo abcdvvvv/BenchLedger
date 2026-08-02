@@ -93,14 +93,16 @@ export function DatabasesPage(props: DatabasesPageProps) {
                     <CatalogGridItem label="Rows" value={entry.stats.rowCount.toLocaleString()} />
                     <CatalogGridItem label="Runs" value={entry.stats.runCount.toLocaleString()} />
                     <CatalogGridItem label="Keys" value={entry.stats.keyCount.toLocaleString()} />
-                    <CatalogGridItem label="Environments" value={entry.stats.environmentCount.toLocaleString()} />
+                    <CatalogGridItem label="Hardware Environments" value={entry.stats.hardwareEnvironmentCount.toLocaleString()} />
+                    <CatalogGridItem label="Software Environments" value={entry.stats.softwareEnvironmentCount.toLocaleString()} />
+                    <CatalogGridItem label="Configurations" value={entry.stats.configurationCount.toLocaleString()} />
                     <CatalogGridItem label="Latest Run" value={formatOptionalDate(entry.stats.latestRunDate)} />
                     <CatalogGridItem label="Dirty Runs" value={entry.stats.dirtyRunCount.toLocaleString()} />
                     <CatalogGridItem label="Metrics" value={entry.stats.metrics.join(", ") || "n/a"} fullRow />
                   </CatalogGrid>
                 ) : (
                   <div className="surface-inset-muted pad-field type-body-muted">
-                    Load this database to compute row, run, environment, metric, and latest-run statistics.
+                    Load this database to compute row, run, hardware/software environment, configuration, metric, and latest-run statistics.
                   </div>
                 )}
 

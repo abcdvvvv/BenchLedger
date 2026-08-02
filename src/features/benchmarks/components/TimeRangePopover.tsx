@@ -46,6 +46,7 @@ export function TimeRangePopover(props: TimeRangePopoverProps) {
         store={popover}
         className={menuTriggerClassName({ disabled })}
         disabled={disabled}
+        aria-label={`Time range: ${label}`}
       >
         <DisclosureTriggerContent>{label}</DisclosureTriggerContent>
       </PopoverDisclosure>

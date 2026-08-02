@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://benchledger.dev/probe-v2.schema.json",
+  "title": "BenchLedger Probe Output v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "hardware", "software", "diagnostics", "collector"],
+  "properties": {
+    "schema_version": {"const": 2},
+    "hardware": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["architecture", "cpu"],
+      "properties": {
+        "architecture": {"type": "string", "minLength": 1},
+        "cpu": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["model"],
+          "properties": {
+            "model": {"type": "string", "minLength": 1},
+            "vendor": {"type": "string", "minLength": 1},
+            "physical_cores": {"type": "integer", "minimum": 1},
+            "logical_threads": {"type": "integer", "minimum": 1},
+            "packages": {"type": "integer", "minimum": 1},
+            "microarchitecture": {"type": "string", "minLength": 1},
+            "numa_nodes": {"type": "integer", "minimum": 1}
+          }
+        },
+        "memory": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["total_bytes"],
+          "properties": {
+            "total_bytes": {"type": "integer", "minimum": 1}
+          }
+        },
+        "gpu": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["model", "count"],
+            "properties": {
+              "vendor": {"type": "string", "minLength": 1},
+              "model": {"type": "string", "minLength": 1},
+              "type": {"enum": ["integrated", "discrete", "unknown"]},
+              "memory_bytes": {"type": "integer", "minimum": 1},
+              "count": {"type": "integer", "minimum": 1}
+            }
+          }
+        }
+      }
+    },
+    "software": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["platform"],
+      "properties": {
+        "platform": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kernel"],
+          "properties": {
+            "os": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name"],
+              "properties": {
+                "name": {"type": "string", "minLength": 1},
+                "version": {"type": "string", "minLength": 1}
+              }
+            },
+            "kernel": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": {"type": "string", "minLength": 1},
+                "version": {"type": "string", "minLength": 1}
+              },
+              "minProperties": 1
+            }
+          }
+        },
+        "gpu_drivers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "device_count"],
+            "properties": {
+              "vendor": {"type": "string", "minLength": 1},
+              "name": {"type": "string", "pattern": "^[a-z0-9]+(?:_[a-z0-9]+)*$"},
+              "variant": {"type": "string", "pattern": "^[a-z0-9]+(?:_[a-z0-9]+)*$"},
+              "version": {"type": "string", "minLength": 1},
+              "device_count": {"type": "integer", "minimum": 1}
+            }
+          }
+        }
+      }
+    },
+    "diagnostics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["memory_source", "warnings"],
+      "properties": {
+        "memory_source": {"enum": ["physical_memory", "memory_total", "unavailable"]},
+        "memory_visible_bytes": {"type": "integer", "minimum": 1},
+        "warnings": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "collector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {"const": "fastfetch"},
+        "version": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

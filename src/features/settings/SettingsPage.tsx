@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { MarkerSymbolMenu } from "../benchmarks/components/MarkerSymbolMenu";
 import { PageHeader } from "../../components/common/PageHeader";
-import { cn } from "../../components/ui/cn";
+import { SegmentedToggle } from "../../components/ui/SegmentedToggle";
 import { type TrendLineShape, type TrendMarkerFillMode } from "../../lib/dashboard-settings";
 import { Trend_Marker_Symbol_Options, type TrendMarkerSymbol } from "../../lib/trend-marker-symbols";
 
@@ -18,49 +18,6 @@ const Trend_Line_Style_Help = "Choose whether the main trend chart connects poin
 const Trend_Marker_Symbol_Help = "Choose the marker symbol used for benchmark data points in trend plots.";
 const Trend_Marker_Fill_Help = "Choose whether benchmark data point markers are hollow or filled.";
 
-function SegmentedToggle(props: {
-  value: string;
-  options: Array<{ value: string; label: string }>;
-  onChange: (value: string) => void;
-  ariaLabel: string;
-}) {
-  const activeIndex = props.options.findIndex((option) => option.value === props.value);
-  const activeClassName = activeIndex > 0 ? "translate-x-full" : "translate-x-0";
-
-  return (
-    <div
-      className="control-frame surface-control relative inline-grid min-h-[2.3rem] min-w-[8rem] grid-cols-2 overflow-hidden p-[0.2rem] shadow-none"
-      role="group"
-      aria-label={props.ariaLabel}
-    >
-      <span
-        aria-hidden="true"
-        className={cn(
-          "radius-theme absolute top-[0.2rem] bottom-[0.2rem] left-[0.2rem] z-0 w-[calc((100%-0.4rem)/2)] transition-transform",
-          activeClassName
-        )}
-        style={{ backgroundColor: "var(--color-text-theme-brand)" }}
-      />
-      {props.options.map((option) => {
-        const active = option.value === props.value;
-        return (
-          <button
-            key={option.value}
-            type="button"
-            className={cn(
-              "radius-theme relative z-10 border-0 bg-transparent px-3 text-center text-[0.82rem] font-semibold transition",
-              active ? "text-stone-950" : "text-stone-500 dark:text-stone-400"
-            )}
-            onClick={() => props.onChange(option.value)}
-          >
-            {option.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 function SettingRow(props: {
   title: string;
   help: string;
@@ -70,17 +27,8 @@ function SettingRow(props: {
     <div className="min-w-0">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
-          <div className="flex min-w-0 items-center gap-2">
-            <h3 className="truncate text-[1rem] leading-5 font-semibold text-[var(--color-text-theme-strong)]">{props.title}</h3>
-            <button
-              type="button"
-              className="surface-subtle inline-grid size-5 shrink-0 place-items-center rounded-full border text-[0.78rem] leading-none font-bold text-[var(--color-text-theme-muted)] transition hover:text-theme-brand"
-              aria-label={props.help}
-              title={props.help}
-            >
-              ?
-            </button>
-          </div>
+          <h3 className="text-[1rem] leading-5 font-semibold text-[var(--color-text-theme-strong)]">{props.title}</h3>
+          <p className="type-body-muted mt-1 max-w-2xl">{props.help}</p>
         </div>
         <div className="shrink-0">
           {props.control}
@@ -130,6 +78,8 @@ export function SettingsPage(props: SettingsPageProps) {
                 options={[{ value: "line", label: "Line" }, { value: "curve", label: "Curve" }]}
                 onChange={(value) => onTrendLineShapeChange(value as TrendLineShape)}
                 ariaLabel="Benchmark trend line style"
+                className="min-w-[8rem]"
+                buttonClassName="px-3"
               />
             }
           />
@@ -155,6 +105,8 @@ export function SettingsPage(props: SettingsPageProps) {
                 options={[{ value: "hollow", label: "Hollow" }, { value: "filled", label: "Filled" }]}
                 onChange={(value) => onTrendMarkerFillModeChange(value as TrendMarkerFillMode)}
                 ariaLabel="Benchmark data point fill"
+                className="min-w-[8rem]"
+                buttonClassName="px-3"
               />
             }
           />

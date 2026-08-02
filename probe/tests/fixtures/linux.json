@@ -1,0 +1,46 @@
+[
+  {
+    "type": "CPU",
+    "result": {
+      "cpu": "AMD Ryzen 9 7950X 16-Core Processor",
+      "vendor": "AuthenticAMD",
+      "packages": 1,
+      "cores": {"physical": 16, "logical": 32, "online": 32},
+      "frequency": {"base": 4500, "max": 5750},
+      "temperature": 63.5,
+      "march": "Zen 4",
+      "numaNodes": 1
+    }
+  },
+  {
+    "type": "PhysicalMemory",
+    "result": [
+      {"size": 34359738368, "installed": true, "maxSpeed": 6000, "runningSpeed": 6000, "type": "DDR5", "locator": "DIMM_A1", "vendor": "Example", "serial": "SECRET-1", "partNumber": "P1", "ecc": false},
+      {"size": 34359738368, "installed": true, "maxSpeed": 6000, "runningSpeed": 6000, "type": "DDR5", "locator": "DIMM_B1", "vendor": "Example", "serial": "SECRET-2", "partNumber": "P1", "ecc": false},
+      {"size": 0, "installed": false, "maxSpeed": 0, "runningSpeed": 0, "type": "", "locator": "DIMM_A2", "vendor": "", "serial": "", "partNumber": "", "ecc": false}
+    ]
+  },
+  {"type": "Memory", "result": {"total": 66986545152, "used": 123456789}},
+  {
+    "type": "GPU",
+    "result": [
+      {
+        "index": 0,
+        "coreCount": 16384,
+        "coreUsage": 12.5,
+        "memory": {"dedicated": {"total": 25769803776, "used": 1024}, "shared": {"total": 0, "used": 0}, "type": "GDDR6X"},
+        "driver": "nvidia 555.42.02",
+        "name": "NVIDIA GeForce RTX 4090",
+        "temperature": 48.0,
+        "type": "Discrete",
+        "vendor": "NVIDIA",
+        "platformApi": "PCI",
+        "frequency": 2535,
+        "deviceId": 9860
+      }
+    ]
+  },
+  {"type": "OS", "result": {"buildID": "", "codename": "noble", "id": "ubuntu", "idLike": "debian", "name": "Ubuntu", "prettyName": "Ubuntu 24.04.2 LTS", "variant": "", "variantID": "", "version": "24.04.2 LTS", "versionID": "24.04"}},
+  {"type": "Kernel", "result": {"architecture": "x86_64", "name": "Linux", "release": "6.8.0-64-generic", "version": "#67-Ubuntu SMP PREEMPT_DYNAMIC", "pageSize": 4096}},
+  {"type": "Version", "result": {"projectName": "fastfetch", "version": "2.64.2", "versionTweak": "", "buildType": "release", "sysname": "linux", "arch": "x86_64"}}
+]

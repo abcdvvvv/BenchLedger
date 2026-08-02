@@ -1,6 +1,7 @@
-import { useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import type { RefObject } from "react";
 import {
+  buildDatabaseCatalogStats,
   buildRuns,
   databaseDescription,
   databaseTitle,
@@ -10,28 +11,29 @@ import {
   type DatabaseCatalogStats
 } from "../lib/dashboard-data";
 import { plotThemeFor } from "../lib/dashboard-plotting";
-import { unique } from "../lib/format";
 import { useBenchmarkDataSource } from "../lib/useBenchmarkDataSource";
 import { buildBenchmarkViewIndex } from "../lib/benchmark-view";
 import { useStoredUISettings } from "./useStoredUISettings";
-import type { BenchmarkDefinition, BenchmarkRun, LoadedBenchmarkDataset } from "../lib/types";
+import type { BenchmarkAggregateRow, BenchmarkDefinition, BenchmarkRun, LoadedBenchmarkDataset } from "../lib/types";
 
-
-const Empty_Benchmarks_By_Id: ReadonlyMap<string, BenchmarkDefinition> = new Map();
+const Empty_Benchmarks_By_Key: ReadonlyMap<string, BenchmarkDefinition> = new Map();
+const Empty_Aggregate_Rows: BenchmarkAggregateRow[] = [];
 
 type UseBenchmarkDataSourceRows = ReturnType<typeof useBenchmarkDataSource>["rows"];
 
 export type BenchmarkDatasetState = {
   settings: ReturnType<typeof useStoredUISettings>["settings"];
   setSetting: ReturnType<typeof useStoredUISettings>["setSetting"];
+  navigateToPage: ReturnType<typeof useStoredUISettings>["navigateToPage"];
   fileInputRef: RefObject<HTMLInputElement | null>;
   handleLocalFileChange: ReturnType<typeof useBenchmarkDataSource>["handleLocalFileChange"];
   handleDatabaseSelection: ReturnType<typeof useBenchmarkDataSource>["handleDatabaseSelection"];
   phase: ReturnType<typeof useBenchmarkDataSource>["phase"];
   error: string;
   rows: UseBenchmarkDataSourceRows;
+  aggregateRows: BenchmarkAggregateRow[];
   dataset: LoadedBenchmarkDataset | null;
-  benchmarksById: ReadonlyMap<string, BenchmarkDefinition>;
+  benchmarksByKey: ReadonlyMap<string, BenchmarkDefinition>;
   benchmarkDefinitions: BenchmarkDefinition[];
   sourceDatabases: NonNullable<ReturnType<typeof useBenchmarkDataSource>["manifest"]>["databases"];
   currentMetadata: LoadedBenchmarkDataset["metadata"] | null;
@@ -40,44 +42,22 @@ export type BenchmarkDatasetState = {
   plotTheme: ReturnType<typeof plotThemeFor>;
   allRuns: BenchmarkRun[];
   runsById: ReadonlyMap<string, BenchmarkRun>;
-  environmentOptions: { value: string; label: string }[];
+  environmentPairOptions: { value: string; label: string }[];
   hasDataset: boolean;
   benchmarkViewIndex: ReturnType<typeof buildBenchmarkViewIndex>;
   latestRun: BenchmarkRun | null;
   databaseCatalog: DatabaseCatalogEntry[];
+  datasetSourceRevision: number;
 };
 
-function buildEnvironmentOptions(runs: BenchmarkRun[]): { value: string; label: string }[] {
-  const labelsByEnvironmentId = new Map(runs.map((run) => [run.environment_id, run.environment_label || run.environment_id]));
-  const countsByLabel = new Map<string, number>();
-
-  for (const label of labelsByEnvironmentId.values()) {
-    countsByLabel.set(label, (countsByLabel.get(label) ?? 0) + 1);
-  }
-
-  return [{ value: "all", label: "All environments" }, ...Array.from(labelsByEnvironmentId.entries())
-    .sort((left, right) => left[1].localeCompare(right[1]) || left[0].localeCompare(right[0]))
-    .map(([value, label]) => ({
-      value,
-      label: (countsByLabel.get(label) ?? 0) > 1 ? `${label} · ${value.slice(0, 12)}` : label
-    }))];
-}
-
-function buildLoadedDatabaseStats(
-  dataset: LoadedBenchmarkDataset | null,
-  rows: UseBenchmarkDataSourceRows,
-  runs: BenchmarkRun[]
-): DatabaseCatalogStats | null {
-  if (!dataset) return null;
-  return {
-    rowCount: rows.length,
-    runCount: runs.length,
-    keyCount: dataset.benchmarksById.size,
-    environmentCount: unique(runs.map((run) => run.environment_id)).length,
-    metrics: unique(rows.map((row) => `${row.metric_name} ${row.statistic} ${row.unit}`)).sort(),
-    latestRunDate: runs[0]?.measured_at ?? "",
-    dirtyRunCount: runs.filter((run) => Boolean(run.code_state_metadata.source?.dirty)).length
-  };
+function buildEnvironmentPairOptions(runs: BenchmarkRun[]): { value: string; label: string }[] {
+  const entries = Array.from(new Map(
+    runs.map((run) => [run.environment_pair_key, run.environment_pair_label])
+  ).entries()).sort((left, right) => left[1].localeCompare(right[1]) || left[0].localeCompare(right[0]));
+  return [
+    { value: "all", label: "All hardware + software pairs" },
+    ...entries.map(([value, label]) => ({ value, label }))
+  ];
 }
 
 function buildDatabaseCatalog(options: {
@@ -87,13 +67,7 @@ function buildDatabaseCatalog(options: {
   loadedDatabaseStats: DatabaseCatalogStats | null;
   selectedDatabaseId: string;
 }): DatabaseCatalogEntry[] {
-  const {
-    sourceDatabases,
-    dataset,
-    currentMetadata,
-    loadedDatabaseStats,
-    selectedDatabaseId
-  } = options;
+  const { sourceDatabases, dataset, currentMetadata, loadedDatabaseStats, selectedDatabaseId } = options;
 
   const manifestEntries = sourceDatabases.map((database) => {
     const isActive = Boolean(dataset?.source_url && selectedDatabaseId === database.id);
@@ -107,7 +81,7 @@ function buildDatabaseCatalog(options: {
       sha256: database.sha256 ?? "",
       sizeBytes: database.size_bytes ?? null,
       packedAt: database.packed_at ?? "",
-      schemaVersion: metadata?.schema_version ?? database.schema_version ?? null,
+      schemaVersion: metadata?.schema_version ?? null,
       metadataPreview: metadata?.raw ?? database.metadata_preview ?? {},
       isActive,
       stats: isActive ? loadedDatabaseStats : null
@@ -132,8 +106,12 @@ function buildDatabaseCatalog(options: {
 }
 
 export function useBenchmarkDatasetState(): BenchmarkDatasetState {
-  const { settings, setSetting } = useStoredUISettings();
+  const { settings, setSetting, navigateToPage, setDatasetSource } = useStoredUISettings();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const handleSourceStateChange = useCallback(
+    (databaseId: string, resetDatasetScope: boolean) => setDatasetSource(databaseId, resetDatasetScope),
+    [setDatasetSource]
+  );
   const {
     rows,
     dataset,
@@ -141,21 +119,23 @@ export function useBenchmarkDatasetState(): BenchmarkDatasetState {
     phase,
     error,
     handleDatabaseSelection,
-    handleLocalFileChange
+    handleLocalFileChange,
+    sourceRevision
   } = useBenchmarkDataSource({
     selectedDatabaseId: settings.selectedDatabaseId,
-    onSelectedDatabaseIdChange: (databaseId) => setSetting("selectedDatabaseId", databaseId)
+    onSourceStateChange: handleSourceStateChange
   });
 
-  const benchmarksById = dataset?.benchmarksById ?? Empty_Benchmarks_By_Id;
-  const benchmarkDefinitions = useMemo(() => Array.from(benchmarksById.values()), [benchmarksById]);
+  const benchmarksByKey = dataset?.benchmarksByKey ?? Empty_Benchmarks_By_Key;
+  const aggregateRows = dataset?.aggregateRows ?? Empty_Aggregate_Rows;
+  const benchmarkDefinitions = useMemo(() => Array.from(benchmarksByKey.values()), [benchmarksByKey]);
   const allRuns = useMemo(() => dataset ? buildRuns(dataset) : [], [dataset]);
   const runsById = useMemo(() => new Map(allRuns.map((run) => [run.run_id, run])), [allRuns]);
   const benchmarkViewIndex = useMemo(
-    () => buildBenchmarkViewIndex(rows, runsById, benchmarksById),
-    [benchmarksById, rows, runsById]
+    () => buildBenchmarkViewIndex(rows, runsById, benchmarksByKey),
+    [benchmarksByKey, rows, runsById]
   );
-  const environmentOptions = useMemo(() => buildEnvironmentOptions(allRuns), [allRuns]);
+  const environmentPairOptions = useMemo(() => buildEnvironmentPairOptions(allRuns), [allRuns]);
 
   const plotTheme = useMemo(() => plotThemeFor(settings.theme), [settings.theme]);
   const sourceDatabases = manifest?.databases ?? [];
@@ -166,7 +146,7 @@ export function useBenchmarkDatasetState(): BenchmarkDatasetState {
     : manifest?.site?.description || "Load a benchmark SQLite database to inspect runs and trends.";
 
   const loadedDatabaseStats = useMemo(
-    () => buildLoadedDatabaseStats(dataset, rows, allRuns),
+    () => buildDatabaseCatalogStats(dataset, rows, allRuns),
     [allRuns, dataset, rows]
   );
 
@@ -184,14 +164,16 @@ export function useBenchmarkDatasetState(): BenchmarkDatasetState {
   return {
     settings,
     setSetting,
+    navigateToPage,
     fileInputRef,
     handleLocalFileChange,
     handleDatabaseSelection,
     phase,
     error,
     rows,
+    aggregateRows,
     dataset,
-    benchmarksById,
+    benchmarksByKey,
     benchmarkDefinitions,
     sourceDatabases,
     currentMetadata,
@@ -200,10 +182,11 @@ export function useBenchmarkDatasetState(): BenchmarkDatasetState {
     plotTheme,
     allRuns,
     runsById,
-    environmentOptions,
+    environmentPairOptions,
     hasDataset: Boolean(dataset && rows.length),
     benchmarkViewIndex,
     latestRun: allRuns[0] ?? null,
-    databaseCatalog
+    databaseCatalog,
+    datasetSourceRevision: sourceRevision
   };
 }

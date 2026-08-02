@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { FiMenu, FiX } from "react-icons/fi";
-import { cn } from "../components/ui/cn";
 import { IconButton } from "../components/ui/IconButton";
 import {
   drawerWidthValue,
@@ -13,28 +12,47 @@ import {
 type AppLayoutProps = {
   renderSidebar: (props: {
     mode: SidebarMode;
-    drawerOpen: boolean;
-    closeDrawer: () => void;
+    closeDrawer: (restoreFocus?: boolean) => void;
   }) => ReactNode;
   children: ReactNode;
   navigationKey: string;
   mobileTitle?: string;
 };
 
-export function AppLayout(props: AppLayoutProps) {
-  const responsiveLayout = useMemo(
-    () => (typeof window === "undefined" ? null : readResponsiveLayoutConfig()),
-    []
+const Drawer_Id = "benchledger-navigation-drawer";
+const Focusable_Selector = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "[tabindex]:not([tabindex='-1'])"
+].join(",");
+
+function focusableElements(container: HTMLElement): HTMLElement[] {
+  return Array.from(container.querySelectorAll<HTMLElement>(Focusable_Selector)).filter(
+    (element) => !element.hidden && element.getAttribute("aria-hidden") !== "true"
   );
-  const [sidebarMode, setSidebarMode] = useState<SidebarMode>(() => {
-    if (typeof window === "undefined") return "expanded";
-    return resolveSidebarMode(window.innerWidth, readResponsiveLayoutConfig());
-  });
+}
+
+export function AppLayout(props: AppLayoutProps) {
+  const [responsiveLayout] = useState(readResponsiveLayoutConfig);
+  const [sidebarMode, setSidebarMode] = useState<SidebarMode>(() =>
+    resolveSidebarMode(window.innerWidth, responsiveLayout)
+  );
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const drawerRef = useRef<HTMLDivElement | null>(null);
+  const drawerTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const restoreDrawerFocusRef = useRef(true);
+
+  function closeDrawer(restoreFocus = true) {
+    restoreDrawerFocusRef.current = restoreFocus;
+    setDrawerOpen(false);
+  }
 
   useEffect(() => {
     function handleResize() {
-      setSidebarMode(resolveSidebarMode(window.innerWidth, responsiveLayout ?? readResponsiveLayoutConfig()));
+      setSidebarMode(resolveSidebarMode(window.innerWidth, responsiveLayout));
     }
 
     handleResize();
@@ -45,46 +63,84 @@ export function AppLayout(props: AppLayoutProps) {
   }, [responsiveLayout]);
 
   useEffect(() => {
-    if (sidebarMode !== "drawer") {
-      setDrawerOpen(false);
-    }
-  }, [sidebarMode]);
-
-  useEffect(() => {
+    restoreDrawerFocusRef.current = false;
     setDrawerOpen(false);
-  }, [props.navigationKey]);
+  }, [sidebarMode, props.navigationKey]);
 
   useEffect(() => {
     if (!drawerOpen) return;
 
+    const previousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const frame = window.requestAnimationFrame(() => {
+      const firstFocusable = drawerRef.current ? focusableElements(drawerRef.current)[0] : null;
+      firstFocusable?.focus();
+    });
+
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        setDrawerOpen(false);
+        event.preventDefault();
+        closeDrawer(true);
+        return;
+      }
+      if (event.key !== "Tab" || !drawerRef.current) return;
+
+      const focusable = focusableElements(drawerRef.current);
+      if (!focusable.length) {
+        event.preventDefault();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
       }
     }
 
     window.addEventListener("keydown", handleKeyDown);
     return () => {
+      window.cancelAnimationFrame(frame);
       window.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousBodyOverflow;
+      if (restoreDrawerFocusRef.current) {
+        window.requestAnimationFrame(() => drawerTriggerRef.current?.focus());
+      }
+      restoreDrawerFocusRef.current = true;
     };
   }, [drawerOpen]);
 
   return (
     <div className="min-h-screen overflow-x-clip bg-stone-50 dark:bg-[#09090b]">
-      {sidebarMode === "drawer" ? (
-        <div className="pointer-events-none fixed inset-y-0 left-0 z-50">
+      {sidebarMode === "drawer" && drawerOpen ? (
+        <div className="fixed inset-0 z-50">
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-label="Close navigation"
+            className="absolute inset-0 bg-black/35 backdrop-blur-[1px]"
+            onClick={() => closeDrawer(true)}
+          />
           <div
-            aria-hidden={!drawerOpen}
+            ref={drawerRef}
+            id={Drawer_Id}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Primary navigation"
             style={{ width: drawerWidthValue() }}
-            className={cn(
-              "layout-sidebar-drawer pointer-events-auto h-full transition-all duration-200 ease-out",
-              drawerOpen ? "visible translate-x-0" : "invisible -translate-x-full"
-            )}
+            className="layout-sidebar-drawer relative h-full"
           >
+            <div className="absolute right-3 top-3 z-10">
+              <IconButton onClick={() => closeDrawer(true)} label="Close navigation">
+                <FiX className="size-5" aria-hidden="true" />
+              </IconButton>
+            </div>
             {props.renderSidebar({
               mode: "drawer",
-              drawerOpen,
-              closeDrawer: () => setDrawerOpen(false)
+              closeDrawer
             })}
           </div>
         </div>
@@ -100,8 +156,7 @@ export function AppLayout(props: AppLayoutProps) {
           <div className="layout-sidebar-rail">
             {props.renderSidebar({
               mode: sidebarMode,
-              drawerOpen: false,
-              closeDrawer: () => setDrawerOpen(false)
+              closeDrawer
             })}
           </div>
         )}
@@ -110,8 +165,14 @@ export function AppLayout(props: AppLayoutProps) {
           {sidebarMode === "drawer" ? (
             <header className="layout-drawer-header">
               <IconButton
-                onClick={() => setDrawerOpen((current) => !current)}
+                buttonRef={drawerTriggerRef}
+                onClick={() => {
+                  if (drawerOpen) closeDrawer(true);
+                  else setDrawerOpen(true);
+                }}
                 label={drawerOpen ? "Close navigation" : "Open navigation"}
+                aria-controls={Drawer_Id}
+                aria-expanded={drawerOpen}
               >
                 {drawerOpen ? <FiX className="size-5" aria-hidden="true" /> : <FiMenu className="size-5" aria-hidden="true" />}
               </IconButton>
@@ -121,11 +182,8 @@ export function AppLayout(props: AppLayoutProps) {
 
           <div
             className="layout-page-shell"
-            onClickCapture={() => {
-              if (sidebarMode === "drawer" && drawerOpen) {
-                setDrawerOpen(false);
-              }
-            }}
+            inert={sidebarMode === "drawer" && drawerOpen}
+            aria-hidden={sidebarMode === "drawer" && drawerOpen}
           >
             {props.children}
           </div>

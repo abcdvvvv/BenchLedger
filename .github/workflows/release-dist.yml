@@ -1,37 +1,60 @@
-name: Release Frontend Dist
+name: Build frontend dist
 
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_call:
+    inputs:
+      release_tag:
+        description: Existing BenchLedger release tag
+        required: true
+        type: string
+
+permissions:
+  contents: read
 
 jobs:
-  build-and-release:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
+  build:
+    name: Build platform-independent frontend
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.release_tag }}
+          fetch-depth: 1
+          persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: "24"
+          cache: npm
 
-      - name: Install deps
+      - name: Install dependencies
         run: npm ci
 
-      - name: Build
-        run: npm run build
+      - name: Check and build
+        run: npm run check
 
-      - name: Pack dist
+      - name: Pack deterministic dist archive
+        shell: bash
+        env:
+          TAG: ${{ inputs.release_tag }}
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          TAR="BenchLedger-${VERSION}-dist.tar.gz"
-          tar -czf "$TAR" -C dist .
-          echo "TAR_NAME=$TAR" >> $GITHUB_ENV
+          set -euo pipefail
+          version="${TAG#v}"
+          asset="BenchLedger-${version}-dist.tar.gz"
+          test -f dist/index.html
+          mkdir -p build/release-dist
+          tar --sort=name --mtime='@0' --owner=0 --group=0 --numeric-owner -C dist -cf - . \
+            | gzip -n -9 > "build/release-dist/${asset}"
+          (
+            cd build/release-dist
+            sha256sum "${asset}" > "${asset}.sha256"
+          )
 
-      - name: Release
-        uses: softprops/action-gh-release@v2
+      - name: Upload frontend release assets
+        uses: actions/upload-artifact@v7
         with:
-          files: ${{ env.TAR_NAME }}
+          name: release-dist
+          path: build/release-dist/*
+          if-no-files-found: error
+          retention-days: 7

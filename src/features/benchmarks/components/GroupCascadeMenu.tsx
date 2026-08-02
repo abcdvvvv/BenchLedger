@@ -59,6 +59,7 @@ type GroupCascadeMenuProps = {
   selectedValue: string;
   selectedLabel: string;
   onSelect: (value: string) => void;
+  ariaLabel: string;
 };
 
 type GroupCascadeItemsProps = {
@@ -120,12 +121,12 @@ function GroupCascadeItems(props: GroupCascadeItemsProps) {
 }
 
 export function GroupCascadeMenu(props: GroupCascadeMenuProps) {
-  const { disabled, options, selectedLabel, onSelect } = props;
+  const { disabled, options, selectedLabel, onSelect, ariaLabel } = props;
   const roots = buildGroupMenuTree(options);
 
   return (
-      <MenuProvider>
-      <MenuButton className={cn(menuTriggerClassName({ disabled }))} disabled={disabled}>
+    <MenuProvider>
+      <MenuButton className={cn(menuTriggerClassName({ disabled }))} disabled={disabled} aria-label={ariaLabel}>
         <DisclosureTriggerContent>{selectedLabel}</DisclosureTriggerContent>
       </MenuButton>
       <Menu gutter={0} sameWidth unmountOnHide className={menuSurfaceClassName("max-h-80 overflow-auto")}>

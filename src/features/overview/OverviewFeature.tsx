@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useBenchmarkViewSlice } from "../benchmarks/useBenchmarkViewSlice";
 import { type RunPairSort } from "../../lib/dashboard-settings";
 import type { BenchmarkDatasetState } from "../../app/useBenchmarkDatasetState";
+import { useUISettingSetter } from "../../app/useUISettingSetter";
 import { OverviewPage } from "./OverviewPage";
 import { useOverviewModel } from "./useOverviewModel";
 
@@ -13,33 +14,43 @@ export type OverviewFeatureProps = {
 export function OverviewFeature({ state, onOpenLocalFilePicker }: OverviewFeatureProps) {
   const { settings, setSetting } = state;
   const [runPairSort, setRunPairSort] = useState<RunPairSort | null>(null);
+  const setEnvironmentPair = useUISettingSetter(setSetting, "environmentPair");
+  const setMetricKind = useUISettingSetter(setSetting, "metricKind");
+  const setBranch = useUISettingSetter(setSetting, "branch");
+  const setGroup = useUISettingSetter(setSetting, "group");
+  const setFocusRunId = useUISettingSetter(setSetting, "focusRunId");
+  const setBaselineRunId = useUISettingSetter(setSetting, "baselineRunId");
+  const setTimeStart = useUISettingSetter(setSetting, "timeStart");
+  const setTimeEnd = useUISettingSetter(setSetting, "timeEnd");
+  const setDisplayStrategy = useUISettingSetter(setSetting, "displayStrategy");
+  const setBenchmarkDiffPageSize = useUISettingSetter(setSetting, "benchmarkDiffPageSize");
 
   const slice = useBenchmarkViewSlice({
     index: state.benchmarkViewIndex,
-    environment: settings.environment,
-    onEnvironmentChange: (environment) => setSetting("environment", environment),
+    environmentPair: settings.environmentPair,
+    onEnvironmentPairChange: setEnvironmentPair,
     metricKind: settings.metricKind,
-    onMetricKindChange: (metricKind) => setSetting("metricKind", metricKind),
+    onMetricKindChange: setMetricKind,
     branch: settings.branch,
-    onBranchChange: (branch) => setSetting("branch", branch),
+    onBranchChange: setBranch,
     timeStart: settings.timeStart,
     timeEnd: settings.timeEnd,
     displayStrategy: settings.displayStrategy,
     group: settings.group,
-    onGroupChange: (group) => setSetting("group", group)
+    onGroupChange: setGroup
   });
 
   const model = useOverviewModel({
     rows: slice.scopedRows,
-    benchmarksById: state.benchmarksById,
+    benchmarksByKey: state.benchmarksByKey,
     allRuns: state.allRuns,
     focusRunId: settings.focusRunId,
-    onFocusRunIdChange: (runId) => setSetting("focusRunId", runId),
+    onFocusRunIdChange: setFocusRunId,
     baselineRunId: settings.baselineRunId,
-    onBaselineRunIdChange: (runId) => setSetting("baselineRunId", runId),
+    onBaselineRunIdChange: setBaselineRunId,
     runPairSort,
     onRunPairSortChange: setRunPairSort,
-    environment: settings.environment,
+    environmentPair: settings.environmentPair,
     metricKind: settings.metricKind,
     group: settings.group,
     branch: settings.branch,
@@ -55,8 +66,8 @@ export function OverviewFeature({ state, onOpenLocalFilePicker }: OverviewFeatur
         focusRunId: settings.focusRunId,
         baselineRunId: settings.baselineRunId,
         filteredRuns: model.filteredRuns,
-        onFocusRunChange: (runId) => setSetting("focusRunId", runId),
-        onBaselineRunChange: (runId) => setSetting("baselineRunId", runId),
+        onFocusRunChange: setFocusRunId,
+        onBaselineRunChange: setBaselineRunId,
         onOpenLocalFilePicker,
         downloadUrl: state.dataset?.source_url ?? null,
         downloadLabel: state.dataset?.source_label ?? "benchledger.sqlite"
@@ -67,28 +78,28 @@ export function OverviewFeature({ state, onOpenLocalFilePicker }: OverviewFeatur
         error: state.error
       }}
       filters={{
-        environment: settings.environment,
-        environmentOptions: state.environmentOptions,
-        onEnvironmentChange: (environment) => setSetting("environment", environment),
+        environmentPair: settings.environmentPair,
+        environmentPairOptions: state.environmentPairOptions,
+        onEnvironmentPairChange: setEnvironmentPair,
         metricKind: settings.metricKind,
         metricOptions: slice.metricOptions,
-        onMetricKindChange: (metricKind) => setSetting("metricKind", metricKind),
+        onMetricKindChange: setMetricKind,
         group: settings.group,
         groupOptions: slice.groupOptions,
         selectedGroupLabel: slice.selectedGroupLabel,
-        onGroupChange: (group) => setSetting("group", group),
+        onGroupChange: setGroup,
         branch: settings.branch,
         branchOptions: slice.branchOptions,
-        onBranchChange: (branch) => setSetting("branch", branch),
+        onBranchChange: setBranch,
         timeRangeLabel: slice.runsEmptyTimeRangeLabel,
         timeStart: settings.timeStart,
         timeEnd: settings.timeEnd,
         datasetTimeStart: slice.datasetTimeStart,
         datasetTimeEnd: slice.datasetTimeEnd,
-        onTimeStartChange: (value) => setSetting("timeStart", value),
-        onTimeEndChange: (value) => setSetting("timeEnd", value),
+        onTimeStartChange: setTimeStart,
+        onTimeEndChange: setTimeEnd,
         displayStrategy: settings.displayStrategy,
-        onDisplayStrategyChange: (strategy) => setSetting("displayStrategy", strategy)
+        onDisplayStrategyChange: setDisplayStrategy
       }}
       stats={model.stats}
       comparison={{
@@ -97,7 +108,7 @@ export function OverviewFeature({ state, onOpenLocalFilePicker }: OverviewFeatur
         environmentMismatch: model.environmentMismatch,
         sortedComparisonRows: model.sortedComparisonRows,
         benchmarkDiffPageSize: settings.benchmarkDiffPageSize,
-        onBenchmarkDiffPageSizeChange: (value) => setSetting("benchmarkDiffPageSize", value),
+        onBenchmarkDiffPageSizeChange: setBenchmarkDiffPageSize,
         runPairSort,
         onToggleRunPairSort: model.toggleRunPairSort
       }}

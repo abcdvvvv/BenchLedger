@@ -1,0 +1,9 @@
+[
+  {"type": "CPU", "result": {"cpu": "Apple M4 Max", "vendor": "Apple", "packages": 1, "cores": {"physical": 16, "logical": 16, "online": 16}, "frequency": {"base": 0, "max": 0}, "temperature": null, "march": "", "numaNodes": null}},
+  {"type": "PhysicalMemory", "error": "SMBIOS physical memory data is unavailable"},
+  {"type": "Memory", "result": {"total": 68719476736, "used": 23456789012}},
+  {"type": "GPU", "result": [{"index": null, "coreCount": 40, "coreUsage": null, "memory": {"dedicated": {"total": null, "used": null}, "shared": {"total": 68719476736, "used": null}, "type": null}, "driver": "Metal", "name": "Apple M4 Max", "temperature": null, "type": "Integrated", "vendor": "Apple", "platformApi": "Metal", "frequency": null, "deviceId": 0}]},
+  {"type": "OS", "result": {"buildID": "24F74", "codename": "Sequoia", "id": "macos", "idLike": "", "name": "macOS", "prettyName": "macOS Sequoia 15.5", "variant": "", "variantID": "", "version": "15.5", "versionID": "15.5"}},
+  {"type": "Kernel", "result": {"architecture": "arm64", "name": "Darwin", "release": "24.5.0", "version": "Darwin Kernel Version 24.5.0", "pageSize": 16384}},
+  {"type": "Version", "result": {"version": "2.64.2"}}
+]

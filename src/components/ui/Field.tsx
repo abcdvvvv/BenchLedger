@@ -1,5 +1,5 @@
 import { forwardRef } from "react";
-import type { HTMLAttributes, InputHTMLAttributes, LabelHTMLAttributes, SelectHTMLAttributes } from "react";
+import type { HTMLAttributes, InputHTMLAttributes, SelectHTMLAttributes } from "react";
 import { cn } from "./cn";
 
 type ToolbarProps = HTMLAttributes<HTMLDivElement> & {
@@ -21,9 +21,9 @@ export function Field(props: HTMLAttributes<HTMLDivElement>) {
   return <div {...rest} className={cn("flex min-w-0 flex-col gap-1", className)} />;
 }
 
-export function FieldLabel(props: LabelHTMLAttributes<HTMLLabelElement>) {
+export function FieldLabel(props: HTMLAttributes<HTMLSpanElement>) {
   const { className, ...rest } = props;
-  return <label {...rest} className={cn("type-label", className)} />;
+  return <span {...rest} className={cn("type-label", className)} />;
 }
 
 type ControlClassNameOptions = {
@@ -33,23 +33,12 @@ type ControlClassNameOptions = {
 
 export function controlClassName(options?: ControlClassNameOptions) {
   return cn(
-    "type-body control-h-theme pad-control-x w-full outline-none transition",
+    "type-body control-h-theme pad-control-x w-full outline-none transition focus-visible:ring-4 focus-visible:ring-brand-500/15",
     options?.invalid
       ? "border-error-300 bg-error-25 text-error-700 focus:border-error-500 dark:border-error-500/40 dark:bg-error-500/10 dark:text-error-200"
       : options?.active
         ? "control-surface-selected ring-4 ring-brand-500/10"
         : "surface-control focus:border-brand-500"
-  );
-}
-
-export function controlFrameClassName(options?: ControlClassNameOptions) {
-  return cn(
-    "control-h-theme pad-control-x flex w-full items-center gap-3 transition",
-    options?.invalid
-      ? "border-error-300 bg-error-25 text-error-700 focus-within:border-error-500 dark:border-error-500/40 dark:bg-error-500/10 dark:text-error-200"
-      : options?.active
-        ? "control-surface-selected ring-4 ring-brand-500/10"
-        : "surface-control focus-within:border-brand-500"
   );
 }
 

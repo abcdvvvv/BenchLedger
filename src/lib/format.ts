@@ -1,3 +1,6 @@
+import { canonicalMetricUnit, isTimeMetricUnit } from "./metric-units";
+import type { BenchmarkBetter } from "./types";
+
 export function unique<T>(values: T[]): T[] {
   return Array.from(new Set(values));
 }
@@ -33,14 +36,14 @@ export function formatDateOnly(value: string): string {
 export function formatRuntime(value: number): string {
   if (!Number.isFinite(value)) return "n/a";
   if (value < 1_000) return `${value.toFixed(1)} ns`;
-  if (value < 1_000_000) return `${(value / 1_000).toFixed(2)} us`;
+  if (value < 1_000_000) return `${(value / 1_000).toFixed(2)} μs`;
   if (value < 1_000_000_000) return `${(value / 1_000_000).toFixed(2)} ms`;
   return `${(value / 1_000_000_000).toFixed(2)} s`;
 }
 
 function formatScaledTime(value: number, unit: string): string {
   if (!Number.isFinite(value)) return "n/a";
-  const normalizedUnit = unit === "us" ? "μs" : unit;
+  const normalizedUnit = canonicalMetricUnit(unit);
   if (normalizedUnit === "ns") return formatRuntime(value);
   return `${value.toLocaleString(undefined, { maximumFractionDigits: 3 })} ${normalizedUnit}`;
 }
@@ -55,7 +58,7 @@ export function formatBytes(value: number): string {
 
 export function formatMetricValue(value: number, unit: string): string {
   if (!Number.isFinite(value)) return "n/a";
-  if (unit === "ns" || unit === "μs" || unit === "us" || unit === "ms" || unit === "s" || unit === "min" || unit === "h") {
+  if (isTimeMetricUnit(unit)) {
     return formatScaledTime(value, unit);
   }
   if (unit === "bytes") return formatBytes(value);
@@ -88,10 +91,11 @@ export function deltaClass(value: number): "up" | "down" | "neutral" {
 
 export function metricDeltaClass(
   value: number,
-  better: "lower" | "higher" | "neutral"
+  better: BenchmarkBetter
 ): "up" | "down" | "neutral" {
   const direction = deltaClass(value);
-  if (direction === "neutral" || better !== "higher") return direction;
+  if (direction === "neutral" || better === "neutral") return "neutral";
+  if (better !== "higher") return direction;
   return direction === "up" ? "down" : "up";
 }
 
