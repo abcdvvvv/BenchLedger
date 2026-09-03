@@ -164,7 +164,9 @@ benchmark_results
 
 ### Dimension Selector
 
-Dimension Selector configures the identity dimensions used globally by Dashboard and Trend Board. The editor permits temporary incomplete states while rules and values are being changed, and its validation checker requires exactly one discovered identity dimension to be `Varying` and every `Fixed` dimension to select at least one observed value before dependent benchmark views are available. BenchLedger admits all observed values of the valid varying dimension and maps them to the varying-dimension axis. Selecting one fixed value gives that dimension `Exact` resolution, while selecting multiple values automatically gives it `Grouped` resolution and pools those exact values into the same fixed condition. Dashboard compares two points from the resulting varying dimension, while Trend Board plots all matching points. Y-Axis, Branch, Time Range, Display Strategy, and benchmark-key selection remain view-level controls rather than identity dimensions.
+Dimension Selector defines the identity dimensions used by Dashboard and Trend Board. Exactly one dimension must be `Varying`, while every `Fixed` dimension must select at least one value. One fixed value gives `Exact` resolution; multiple values give `Grouped` resolution. Dashboard compares two points on the varying dimension, while Trend Board plots all matching points. Y-Axis, Branch, Time Range, Display Strategy, and benchmark-key selection remain view-level controls.
+
+Values menus use one-way contextual filtering. Hardware selections narrow later Hardware dimensions and Code/Software values, while explicit parent-child relationships such as runtime name/version or OS name/version filter only downstream values. Empty upstream selections are ignored during editing but still fail validation, and temporarily unavailable selections remain remembered.
 
 ### benchledger.json
 

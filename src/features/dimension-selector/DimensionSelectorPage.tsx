@@ -65,8 +65,10 @@ export function DimensionSelectorPage({ state }: { state: BenchmarkDatabaseState
     if (rule === "varying") next.add(dimension.key); else next.delete(dimension.key);
     setSetting("varyingDimensionKeys", dimensionSelection.dimensions.map((entry) => entry.key).filter((key) => next.has(key)));
   }
-  function setValues(dimensionKey: string, valueKeys: string[]) {
-    const next: DimensionValueSelection[] = [...settings.dimensionValueSelections.filter((selection) => selection.dimensionKey !== dimensionKey), { dimensionKey, valueKeys }];
+  function setValues(selection: FixedDimensionValueSelection, valueKeys: string[]) {
+    const visible = new Set(selection.options.map((option) => option.key));
+    const remembered = selection.rememberedValueKeys.filter((key) => !visible.has(key));
+    const next: DimensionValueSelection[] = [...settings.dimensionValueSelections.filter((entry) => entry.dimensionKey !== selection.dimension.key), { dimensionKey: selection.dimension.key, valueKeys: [...remembered, ...valueKeys] }];
     setSetting("dimensionValueSelections", next);
   }
 
@@ -88,7 +90,7 @@ export function DimensionSelectorPage({ state }: { state: BenchmarkDatabaseState
                         <option value="fixed">Fixed</option><option value="varying">Varying</option>
                       </SelectField>
                     </DataCell>
-                    <DataCell className="align-middle">{row.original.varying ? <span className="type-body-muted text-base leading-6">All</span> : row.original.selection ? <DimensionValueMultiSelect dimension={row.original.dimension} options={row.original.selection.options} selectedValues={row.original.selection.valueKeys} onChange={(values) => setValues(row.original.dimension.key, values)} /> : <span className="type-body-muted text-base leading-6">—</span>}</DataCell>
+                    <DataCell className="align-middle">{row.original.varying ? <span className="type-body-muted text-base leading-6">All</span> : row.original.selection ? <DimensionValueMultiSelect dimension={row.original.dimension} options={row.original.selection.options} selectedValues={row.original.selection.valueKeys} onChange={(values) => setValues(row.original.selection!, values)} /> : <span className="type-body-muted text-base leading-6">—</span>}</DataCell>
                     <DataCell className="align-middle">{row.original.varying ? <span className="type-body-muted text-base leading-6">—</span> : row.original.selectedCount === 0 ? <span className={`text-base leading-6 ${semanticTextClassName("negative")}`}>Select at least 1 value</span> : <StatusBadge tone={row.original.selectedCount > 1 ? "brand" : "positive"} className="text-base leading-6">{row.original.selectedCount > 1 ? "Grouped" : "Exact"}</StatusBadge>}</DataCell>
                   </tr>
                 ))}

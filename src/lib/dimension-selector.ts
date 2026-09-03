@@ -39,7 +39,8 @@ const Identity_Projection_Key_Cache = new WeakMap<object, Map<string, string>>()
 type MissingValue = typeof Missing_Value;
 type IdentityValue = unknown | MissingValue;
 
-const Preferred_Key_Order: Record<string, number> = {
+// Hardware display order also defines its one-way filtering precedence in Dimension Selector.
+const Dimension_Field_Order: Record<string, number> = {
   source: 0,
   architecture: 0,
   platform: 0,
@@ -79,6 +80,20 @@ const Preferred_Key_Order: Record<string, number> = {
   memory_bytes: 2,
   count: 3
 };
+
+type DimensionFilterChain = { category: DimensionCategory; paths: readonly (readonly IdentityPathToken[])[]; };
+
+// Only explicit parent-child identity relationships belong here. Unrelated fields never filter each other by co-occurrence.
+const Dimension_Filter_Chains: readonly DimensionFilterChain[] = [
+  { category: "code", paths: [["source", "kind"], ["source", "revision"], ["source", "diff_digest"]] },
+  { category: "software", paths: [["platform", "os", "name"], ["platform", "os", "version"]] },
+  { category: "software", paths: [["platform", "kernel", "name"], ["platform", "kernel", "version"]] },
+  { category: "software", paths: [["runtime", "name"], ["runtime", "version"]] },
+  { category: "software", paths: [["gpu", "interface", "name"], ["gpu", "interface", "version"]] },
+  { category: "software", paths: [["gpu_runtime", "backend"], ["gpu_runtime", "runtime", "name"], ["gpu_runtime", "runtime", "version"]] },
+  { category: "software", paths: [["benchmark", "framework", "name"], ["benchmark", "framework", "version"]] },
+  { category: "software", paths: [["dependencies", "kind"], ["dependencies", "format"], ["dependencies", "digest"]] }
+];
 
 const Field_Labels: Record<string, string> = {
   architecture: "Architecture",
@@ -136,8 +151,8 @@ function fieldLabel(key: string): string {
 }
 
 function compareFieldKeys(left: string, right: string): number {
-  const leftOrder = Preferred_Key_Order[left] ?? Number.MAX_SAFE_INTEGER;
-  const rightOrder = Preferred_Key_Order[right] ?? Number.MAX_SAFE_INTEGER;
+  const leftOrder = Dimension_Field_Order[left] ?? Number.MAX_SAFE_INTEGER;
+  const rightOrder = Dimension_Field_Order[right] ?? Number.MAX_SAFE_INTEGER;
   return leftOrder - rightOrder || left.localeCompare(right);
 }
 
@@ -361,11 +376,11 @@ function formatProjectionValue(value: IdentityValue, finalToken?: string): strin
 export type DimensionDefinition = { key: string; category: DimensionCategory; pathId: string; label: string; path: IdentityPathToken[]; };
 export type DimensionValueSelection = { dimensionKey: string; valueKeys: string[]; };
 export type DimensionValueOption = { key: string; label: string; configurationCount: number; };
-export type FixedDimensionValueSelection = { dimension: DimensionDefinition; valueKeys: string[]; options: DimensionValueOption[]; };
+export type FixedDimensionValueSelection = { dimension: DimensionDefinition; valueKeys: string[]; rememberedValueKeys: string[]; options: DimensionValueOption[]; };
 export type DimensionSelectionPoint = { key: string; label: string; configurationKeys: string[]; configurationCount: number; };
 export type DimensionSelectionValidation = { isValid: boolean; varyingCount: number; issues: string[]; };
 type IndexedDimensionCoordinate = { configuration: DimensionConfiguration; valueKeys: string[]; pointLabels: string[]; };
-export type DimensionSelectionIndex = { dimensions: readonly DimensionDefinition[]; dimensionIndexByKey: ReadonlyMap<string, number>; coordinates: readonly IndexedDimensionCoordinate[]; optionsByDimensionKey: ReadonlyMap<string, DimensionValueOption[]>; availableValueKeysByDimensionKey: ReadonlyMap<string, ReadonlySet<string>>; };
+export type DimensionSelectionIndex = { dimensions: readonly DimensionDefinition[]; dimensionIndexByKey: ReadonlyMap<string, number>; coordinates: readonly IndexedDimensionCoordinate[]; optionsByDimensionKey: ReadonlyMap<string, DimensionValueOption[]>; availableValueKeysByDimensionKey: ReadonlyMap<string, ReadonlySet<string>>; filterUpstreamIndicesByDimensionIndex: readonly (readonly number[])[]; filterResolutionOrder: readonly number[]; };
 export type ResolvedDimensionSelection = { varyingDimensionKeys: string[]; varyingDimensions: DimensionDefinition[]; varyingDimension: DimensionDefinition | null; fixedValueSelections: FixedDimensionValueSelection[]; valueSelections: DimensionValueSelection[]; validation: DimensionSelectionValidation; configurationKeys: string[]; points: DimensionSelectionPoint[]; pointKeyByConfigurationKey: ReadonlyMap<string, string>; };
 
 export function dimensionKey(category: DimensionCategory, pathId: string): string { return JSON.stringify([category, pathId]); }
@@ -396,6 +411,29 @@ function varyingDimensionLabel(configuration: DimensionConfiguration, dimension:
   return dimension.category === "code" && dimension.path.length === 2 && dimension.path[0] === "source" && dimension.path[1] === "revision" ? configuration.codeLabel || rawLabel : rawLabel;
 }
 
+function buildDimensionFilterGraph(dimensions: readonly DimensionDefinition[]): { upstreamIndicesByDimensionIndex: readonly (readonly number[])[]; resolutionOrder: readonly number[] } {
+  const upstream = dimensions.map(() => new Set<number>());
+  const hardwareIndices = dimensions.flatMap((dimension, index) => dimension.category === "hardware" ? [index] : []);
+  hardwareIndices.forEach((targetIndex, position) => { for (const upstreamIndex of hardwareIndices.slice(0, position)) upstream[targetIndex].add(upstreamIndex); });
+  dimensions.forEach((dimension, targetIndex) => { if (dimension.category !== "hardware") for (const hardwareIndex of hardwareIndices) upstream[targetIndex].add(hardwareIndex); });
+  const dimensionIndexByIdentityPath = new Map(dimensions.map((dimension, index) => [`${dimension.category}:${dimension.pathId}`, index]));
+  for (const chain of Dimension_Filter_Chains) {
+    const chainIndices = chain.paths.flatMap((path) => { const index = dimensionIndexByIdentityPath.get(`${chain.category}:${identityPathId(path)}`); return index === undefined ? [] : [index]; });
+    chainIndices.forEach((targetIndex, position) => { for (const upstreamIndex of chainIndices.slice(0, position)) upstream[targetIndex].add(upstreamIndex); });
+  }
+  const upstreamIndicesByDimensionIndex = upstream.map((indices) => Array.from(indices).sort((left, right) => left - right));
+  const downstream = dimensions.map(() => [] as number[]), indegree = upstreamIndicesByDimensionIndex.map((indices) => indices.length);
+  upstreamIndicesByDimensionIndex.forEach((indices, targetIndex) => { for (const upstreamIndex of indices) downstream[upstreamIndex].push(targetIndex); });
+  const ready = indegree.flatMap((degree, index) => degree === 0 ? [index] : []), resolutionOrder: number[] = [];
+  while (ready.length) {
+    ready.sort((left, right) => left - right);
+    const index = ready.shift()!; resolutionOrder.push(index);
+    for (const targetIndex of downstream[index]) if (--indegree[targetIndex] === 0) ready.push(targetIndex);
+  }
+  if (resolutionOrder.length !== dimensions.length) throw new Error("Dimension filtering dependencies must be acyclic.");
+  return { upstreamIndicesByDimensionIndex, resolutionOrder };
+}
+
 export function buildDimensionSelectionIndex(configurations: readonly DimensionConfiguration[], dimensions: readonly DimensionDefinition[]): DimensionSelectionIndex {
   const dimensionIndexByKey = new Map(dimensions.map((dimension, index) => [dimension.key, index]));
   const optionCounts = dimensions.map(() => new Map<string, { label: string; count: number }>());
@@ -412,7 +450,35 @@ export function buildDimensionSelectionIndex(configurations: readonly DimensionC
     const values = Array.from(optionCounts[index], ([key, value]) => ({ key, label: value.label, configurationCount: value.count })).sort((left, right) => left.label.localeCompare(right.label, undefined, { numeric: true }) || left.key.localeCompare(right.key));
     optionsByDimensionKey.set(dimension.key, values); availableValueKeysByDimensionKey.set(dimension.key, new Set(values.map((value) => value.key)));
   });
-  return { dimensions, dimensionIndexByKey, coordinates, optionsByDimensionKey, availableValueKeysByDimensionKey };
+  const filterGraph = buildDimensionFilterGraph(dimensions);
+  return { dimensions, dimensionIndexByKey, coordinates, optionsByDimensionKey, availableValueKeysByDimensionKey, filterUpstreamIndicesByDimensionIndex: filterGraph.upstreamIndicesByDimensionIndex, filterResolutionOrder: filterGraph.resolutionOrder };
+}
+
+function filteredDimensionOptions(index: DimensionSelectionIndex, dimension: DimensionDefinition, coordinates: readonly IndexedDimensionCoordinate[]): DimensionValueOption[] {
+  const dimensionIndex = index.dimensionIndexByKey.get(dimension.key)!;
+  const counts = new Map<string, number>();
+  for (const coordinate of coordinates) { const key = coordinate.valueKeys[dimensionIndex]; counts.set(key, (counts.get(key) ?? 0) + 1); }
+  return index.optionsByDimensionKey.get(dimension.key)!.flatMap((option) => { const configurationCount = counts.get(option.key) ?? 0; return configurationCount ? [{ ...option, configurationCount }] : []; });
+}
+
+function resolveFixedDimension(index: DimensionSelectionIndex, dimension: DimensionDefinition, options: DimensionValueOption[], selected: ReadonlyMap<string, string[]>): FixedDimensionValueSelection {
+  const globalOptions = index.optionsByDimensionKey.get(dimension.key)!, globallyAvailable = index.availableValueKeysByDimensionKey.get(dimension.key)!, hasStoredSelection = selected.has(dimension.key);
+  let rememberedValueKeys = (selected.get(dimension.key) ?? []).filter((key) => globallyAvailable.has(key));
+  if (globalOptions.length === 1) rememberedValueKeys = [globalOptions[0].key]; else if (!hasStoredSelection && options[0]) rememberedValueKeys = [options[0].key];
+  const available = new Set(options.map((option) => option.key));
+  const valueKeys = options.length === 1 ? [options[0].key] : rememberedValueKeys.filter((key) => available.has(key));
+  return { dimension, valueKeys, rememberedValueKeys, options };
+}
+
+function coordinatesForUpstreamSelections(index: DimensionSelectionIndex, upstreamIndices: readonly number[], fixedByDimensionKey: ReadonlyMap<string, FixedDimensionValueSelection>, cache: Map<string, readonly IndexedDimensionCoordinate[]>): readonly IndexedDimensionCoordinate[] {
+  const filters = upstreamIndices.flatMap((dimensionIndex) => { const selection = fixedByDimensionKey.get(index.dimensions[dimensionIndex].key); return selection?.valueKeys.length ? [{ dimensionIndex, valueKeys: selection.valueKeys }] : []; });
+  if (!filters.length) return index.coordinates;
+  const cacheKey = JSON.stringify(filters.map((filter) => [filter.dimensionIndex, filter.valueKeys]));
+  const cached = cache.get(cacheKey); if (cached) return cached;
+  const membership = filters.map((filter) => ({ dimensionIndex: filter.dimensionIndex, values: new Set(filter.valueKeys) }));
+  const coordinates = index.coordinates.filter((coordinate) => membership.every((filter) => filter.values.has(coordinate.valueKeys[filter.dimensionIndex])));
+  cache.set(cacheKey, coordinates);
+  return coordinates;
 }
 
 function pointDateValue(configurations: readonly DimensionConfiguration[]): number { return configurations.reduce((value, configuration) => Math.min(value, new Date(configuration.codeDate).valueOf()), Number.POSITIVE_INFINITY); }
@@ -430,22 +496,20 @@ export function resolveDimensionSelection(options: { index: DimensionSelectionIn
   const varyingDimension = varyingDimensions.length === 1 ? varyingDimensions[0] : null;
   const fixedDimensions = dimensions.filter((dimension) => !varyingKeySet.has(dimension.key));
   const selected = new Map(options.valueSelections.map((selection) => [selection.dimensionKey, Array.from(new Set(selection.valueKeys))]));
-  const fixedValueSelections = fixedDimensions.map((dimension) => {
-    const selectorOptions = index.optionsByDimensionKey.get(dimension.key) ?? [];
-    const available = index.availableValueKeysByDimensionKey.get(dimension.key) ?? new Set<string>();
-    const hasStoredSelection = selected.has(dimension.key);
-    const current = selected.get(dimension.key) ?? [];
-    const valid = current.filter((key) => available.has(key));
-    const valueKeys = selectorOptions.length === 1 ? [selectorOptions[0].key] : hasStoredSelection ? valid : selectorOptions[0] ? [selectorOptions[0].key] : [];
-    return { dimension, valueKeys, options: selectorOptions };
-  });
-  const valueSelections = fixedValueSelections.map((selector) => ({ dimensionKey: selector.dimension.key, valueKeys: selector.valueKeys }));
+  const fixedByDimensionKey = new Map<string, FixedDimensionValueSelection>(), coordinateCache = new Map<string, readonly IndexedDimensionCoordinate[]>();
+  for (const dimensionIndex of index.filterResolutionOrder) {
+    const dimension = dimensions[dimensionIndex]; if (varyingKeySet.has(dimension.key)) continue;
+    const coordinates = coordinatesForUpstreamSelections(index, index.filterUpstreamIndicesByDimensionIndex[dimensionIndex], fixedByDimensionKey, coordinateCache);
+    fixedByDimensionKey.set(dimension.key, resolveFixedDimension(index, dimension, filteredDimensionOptions(index, dimension, coordinates), selected));
+  }
+  const fixedValueSelections = fixedDimensions.map((dimension) => fixedByDimensionKey.get(dimension.key)!);
+  const valueSelections = fixedValueSelections.map((selection) => ({ dimensionKey: selection.dimension.key, valueKeys: selection.rememberedValueKeys }));
   const issues: string[] = [];
   if (varyingDimensions.length !== 1) issues.push(`Exactly one dimension must be Varying. Currently: ${varyingDimensions.length}.`);
-  for (const selector of fixedValueSelections) if (!selector.valueKeys.length) issues.push(`${selector.dimension.label} must select at least 1 value.`);
+  for (const selection of fixedValueSelections) if (!selection.valueKeys.length) issues.push(`${selection.dimension.label} must select at least 1 value.`);
   const validation = { isValid: issues.length === 0, varyingCount: varyingDimensions.length, issues };
   if (!validation.isValid || !varyingDimension) return { varyingDimensionKeys, varyingDimensions, varyingDimension, fixedValueSelections, valueSelections, validation, configurationKeys: [], points: [], pointKeyByConfigurationKey: new Map<string, string>() };
-  const fixedFilters = fixedValueSelections.map((selector) => ({ dimensionIndex: index.dimensionIndexByKey.get(selector.dimension.key)!, values: new Set(selector.valueKeys) }));
+  const fixedFilters = fixedValueSelections.map((selection) => ({ dimensionIndex: index.dimensionIndexByKey.get(selection.dimension.key)!, values: new Set(selection.valueKeys) }));
   const matched = index.coordinates.filter((coordinate) => fixedFilters.every((filter) => filter.values.has(coordinate.valueKeys[filter.dimensionIndex])));
   const configurationKeys = matched.map((coordinate) => coordinate.configuration.key);
   const varyingDimensionIndex = index.dimensionIndexByKey.get(varyingDimension.key)!;

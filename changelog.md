@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+## [0.8.1] - 2026/09/03
+- Dimension Selector now narrows value menus through one-way identity hierarchies: Hardware choices filter downstream identities, while clear parent-child fields such as source kind/revision, runtime name/version, OS/kernel name/version, and similar pairs filter only forward. Temporarily unavailable choices are remembered and restored.
+
 ## [0.8.0] - 2026/09/03
 ### Added
 - Added Dimension Selector for choosing exactly one varying identity dimension for the x-axis and selecting values for all fixed dimensions across Dashboard and Trend Board, with validation for incomplete selections.
@@ -190,7 +193,8 @@ The bundled GitHub Actions workflow now supports three target modes through one 
 
 Initial usable release of BenchLedger.
 
-[Unreleased]: https://github.com/abcdvvvv/BenchLedger/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/abcdvvvv/BenchLedger/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/abcdvvvv/BenchLedger/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/abcdvvvv/BenchLedger/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/abcdvvvv/BenchLedger/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/abcdvvvv/BenchLedger/compare/v0.6.0...v0.6.1
