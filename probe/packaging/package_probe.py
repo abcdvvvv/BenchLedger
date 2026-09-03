@@ -31,6 +31,7 @@ from release import (
 MAX_ARCHIVE_MEMBERS = 4096
 MAX_ARCHIVE_MEMBER_BYTES = 256 * 1024 * 1024
 MAX_ARCHIVE_TOTAL_BYTES = 1024 * 1024 * 1024
+ARCHIVE_COMPRESSION_LEVEL = 6
 
 
 def _safe_member_path(name: str) -> PurePosixPath:
@@ -116,14 +117,13 @@ def extract_archive(archive: Path, destination: Path) -> None:
 
 def _choose_file(root: Path, names: Iterable[str], *, license_file: bool = False) -> Path:
     expected = {name.lower() for name in names}
-    candidates = [path for path in root.rglob("*") if path.is_file() and path.name.lower() in expected]
-    if license_file:
-        candidates.extend(
-            path
-            for path in root.rglob("*")
-            if path.is_file() and path.name.lower().startswith("license")
-        )
-        candidates = list(dict.fromkeys(candidates))
+    candidates: list[Path] = []
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        lower_name = path.name.lower()
+        if lower_name in expected or (license_file and lower_name.startswith("license")):
+            candidates.append(path)
     if not candidates:
         raise RuntimeError(f"could not find {'license' if license_file else '/'.join(names)} in Fastfetch archive")
 
@@ -248,18 +248,20 @@ def create_archive(package_dir: Path, output_dir: Path, archive_format: str) -> 
     output_dir.mkdir(parents=True, exist_ok=True)
     if archive_format == "zip":
         archive = output_dir / f"{package_dir.name}.zip"
-        with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as target:
+        with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=ARCHIVE_COMPRESSION_LEVEL) as target:
             for path in _iter_files(package_dir):
                 arcname = (Path(package_dir.name) / path.relative_to(package_dir)).as_posix()
                 info = zipfile.ZipInfo.from_file(path, arcname=arcname)
                 info.date_time = (1980, 1, 1, 0, 0, 0)
-                with path.open("rb") as stream:
-                    target.writestr(info, stream.read(), compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
+                info.compress_type = zipfile.ZIP_DEFLATED
+                info._compresslevel = ARCHIVE_COMPRESSION_LEVEL
+                with path.open("rb") as input_stream, target.open(info, "w") as output_stream:
+                    shutil.copyfileobj(input_stream, output_stream, length=1024 * 1024)
         return archive
 
     archive = output_dir / f"{package_dir.name}.tar.gz"
     with archive.open("wb") as raw_stream:
-        with gzip.GzipFile(filename="", mode="wb", fileobj=raw_stream, compresslevel=9, mtime=0) as gzip_stream:
+        with gzip.GzipFile(filename="", mode="wb", fileobj=raw_stream, compresslevel=ARCHIVE_COMPRESSION_LEVEL, mtime=0) as gzip_stream:
             with tarfile.open(fileobj=gzip_stream, mode="w") as target:
                 for path in [package_dir, *_iter_files(package_dir)]:
                     arcname = Path(package_dir.name) / path.relative_to(package_dir)
@@ -361,7 +363,7 @@ def package(args: argparse.Namespace) -> int:
     if not args.skip_smoke_test:
         smoke_test(package_dir, target_config["probe"], expected_collector_version)
 
-    archive = create_archive(package_dir, output_dir / "assets", target_config["format"])
+    archive = create_archive(package_dir, output_dir / "assets", target_config["archive_extension"])
     write_checksum(archive)
 
     print(f"Created {archive}")

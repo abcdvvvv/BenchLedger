@@ -10,6 +10,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #ifndef BENCHLEDGER_PROBE_VERSION
 #define BENCHLEDGER_PROBE_VERSION "dev"
@@ -91,7 +92,7 @@ int main(int argc, char** argv) {
         if (!options.input.empty()) source = read_input(options.input);
         else {
             const auto executable = benchledger::probe::resolve_fastfetch(argv[0], options.fastfetch);
-            const auto process = benchledger::probe::run_process(executable, {
+            auto process = benchledger::probe::run_process(executable, {
                 "--config", "none",
                 "-s", "CPU:PhysicalMemory:Memory:GPU:OS:Kernel:Version",
                 "--format", "json"}, Fastfetch_Timeout);
@@ -99,7 +100,7 @@ int main(int argc, char** argv) {
                 throw std::runtime_error("Fastfetch exited with code " + std::to_string(process.exit_code) +
                     (process.standard_error.empty() ? std::string{} : ": " + process.standard_error));
             }
-            source = process.standard_output;
+            source = std::move(process.standard_output);
         }
 
         const auto normalized = benchledger::probe::normalize_fastfetch(benchledger::probe::Json::parse(source));

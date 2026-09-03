@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- Improved Probe process execution and packaging efficiency, including lower POSIX launch latency, stricter output-size limits, smaller release binaries, and reduced archive creation time and memory use.
 
 ## [0.8.2] - 2026/09/03
 - Baseline and Focus revision selectors now order points by code commit date while continuing to show benchmark measurement time.

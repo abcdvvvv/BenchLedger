@@ -15,6 +15,7 @@
 #include <cerrno>
 #include <fcntl.h>
 #include <signal.h>
+#include <sys/resource.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -30,10 +31,24 @@ std::uintmax_t file_size_or_zero(const std::filesystem::path& path) {
 }
 
 std::string read_file(const std::filesystem::path& path, std::uintmax_t max_bytes) {
-    if (file_size_or_zero(path) > max_bytes) throw std::runtime_error("Fastfetch output exceeded " + std::to_string(max_bytes) + " bytes");
+    std::error_code error;
+    const auto size = std::filesystem::file_size(path, error);
+    if (error) throw std::runtime_error("failed to inspect process output: " + path.string());
+    if (size > max_bytes) throw std::runtime_error("Fastfetch output exceeded " + std::to_string(max_bytes) + " bytes");
+    if (size > static_cast<std::uintmax_t>(std::numeric_limits<std::size_t>::max()) ||
+        size > static_cast<std::uintmax_t>(std::numeric_limits<std::streamsize>::max())) {
+        throw std::runtime_error("process output is too large to read: " + path.string());
+    }
     std::ifstream stream(path, std::ios::binary);
     if (!stream) throw std::runtime_error("failed to read process output: " + path.string());
-    return {std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
+    std::string result(static_cast<std::size_t>(size), '\0');
+    if (!result.empty()) {
+        stream.read(result.data(), static_cast<std::streamsize>(result.size()));
+        if (stream.gcount() != static_cast<std::streamsize>(result.size())) {
+            throw std::runtime_error("failed to read complete process output: " + path.string());
+        }
+    }
+    return result;
 }
 
 bool output_exceeds_limit(const std::filesystem::path& output, const std::filesystem::path& error, std::uintmax_t max_bytes) {
@@ -203,7 +218,7 @@ ProcessResult run_process(const std::filesystem::path& executable, const std::ve
 
     const auto deadline = std::chrono::steady_clock::now() + timeout;
     while (true) {
-        const DWORD wait_result = WaitForSingleObject(process.get(), 20);
+        const DWORD wait_result = WaitForSingleObject(process.get(), 2);
         if (wait_result == WAIT_OBJECT_0) break;
         if (wait_result != WAIT_TIMEOUT) throw std::runtime_error("failed to wait for Fastfetch");
         if (output_exceeds_limit(output_path, error_path, max_output_bytes)) {
@@ -222,25 +237,30 @@ ProcessResult run_process(const std::filesystem::path& executable, const std::ve
     const int exit_code = raw_exit_code <= static_cast<DWORD>(std::numeric_limits<int>::max()) ? static_cast<int>(raw_exit_code) : 125;
     return {exit_code, read_file(output_path, max_output_bytes), read_file(error_path, max_output_bytes)};
 #else
+    std::vector<std::string> storage;
+    storage.reserve(arguments.size() + 1);
+    storage.push_back(executable.string());
+    storage.insert(storage.end(), arguments.begin(), arguments.end());
+    std::vector<char*> argv;
+    argv.reserve(storage.size() + 1);
+    for (std::string& item : storage) argv.push_back(item.data());
+    argv.push_back(nullptr);
+
     const pid_t pid = fork();
     if (pid < 0) throw std::runtime_error("failed to fork Fastfetch process");
     if (pid == 0) {
+        rlimit output_limit{};
+        if (getrlimit(RLIMIT_FSIZE, &output_limit) != 0) _exit(126);
+        const auto requested_limit = static_cast<rlim_t>(max_output_bytes);
+        if (output_limit.rlim_cur == RLIM_INFINITY || requested_limit < output_limit.rlim_cur) output_limit.rlim_cur = requested_limit;
+        if (setrlimit(RLIMIT_FSIZE, &output_limit) != 0 || signal(SIGXFSZ, SIG_DFL) == SIG_ERR) _exit(126);
         const int output = ::open(output_path.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0600);
         const int error = ::open(error_path.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0600);
         if (output < 0 || error < 0) _exit(126);
         if (dup2(output, STDOUT_FILENO) < 0 || dup2(error, STDERR_FILENO) < 0) _exit(126);
         close(output);
         close(error);
-
-        std::vector<std::string> storage;
-        storage.reserve(arguments.size() + 1);
-        storage.push_back(executable.string());
-        storage.insert(storage.end(), arguments.begin(), arguments.end());
-        std::vector<char*> argv;
-        argv.reserve(storage.size() + 1);
-        for (std::string& item : storage) argv.push_back(item.data());
-        argv.push_back(nullptr);
-        execvp(argv[0], argv.data());
+        execv(executable.c_str(), argv.data());
         _exit(127);
     }
 
@@ -260,7 +280,10 @@ ProcessResult run_process(const std::filesystem::path& executable, const std::ve
             while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {}
             throw std::runtime_error("Fastfetch timed out after " + std::to_string(timeout.count()) + " ms");
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    if (WIFSIGNALED(status) && WTERMSIG(status) == SIGXFSZ) {
+        throw std::runtime_error("Fastfetch output exceeded " + std::to_string(max_output_bytes) + " bytes");
     }
     int exit_code = 125;
     if (WIFEXITED(status)) exit_code = WEXITSTATUS(status);

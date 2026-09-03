@@ -150,6 +150,7 @@ class PackagingTests(unittest.TestCase):
             finally:
                 release._request_json = original_request
             manifest = json.loads(output.read_text())
+            self.assertEqual(set(manifest), {"repository", "tag", "version", "assets"})
             self.assertEqual(manifest["tag"], "2.0")
             self.assertEqual(sorted(manifest["assets"]), ["one.zip", "two.tar.gz"])
 
@@ -279,7 +280,6 @@ class ReleaseOrchestrationTests(unittest.TestCase):
                 "repository": "fastfetch-cli/fastfetch",
                 "tag": "2.66.0",
                 "version": "2.66.0",
-                "published_at": "2026-01-01T00:00:00Z",
                 "assets": {
                     "fastfetch-linux-amd64.tar.gz": {
                         "digest": "sha256:" + "b" * 64,

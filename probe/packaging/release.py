@@ -33,7 +33,6 @@ TARGETS: dict[str, dict[str, str]] = {
         "archive_extension": "zip",
         "fastfetch": "fastfetch.exe",
         "probe": "benchledger-probe.exe",
-        "format": "zip",
     },
     "linux-amd64": {
         "runner": "ubuntu-24.04",
@@ -42,7 +41,6 @@ TARGETS: dict[str, dict[str, str]] = {
         "archive_extension": "tar.gz",
         "fastfetch": "fastfetch",
         "probe": "benchledger-probe",
-        "format": "tar.gz",
     },
     "linux-aarch64": {
         "runner": "ubuntu-24.04-arm",
@@ -51,7 +49,6 @@ TARGETS: dict[str, dict[str, str]] = {
         "archive_extension": "tar.gz",
         "fastfetch": "fastfetch",
         "probe": "benchledger-probe",
-        "format": "tar.gz",
     },
     "macos-amd64": {
         "runner": "macos-15-intel",
@@ -60,7 +57,6 @@ TARGETS: dict[str, dict[str, str]] = {
         "archive_extension": "tar.gz",
         "fastfetch": "fastfetch",
         "probe": "benchledger-probe",
-        "format": "tar.gz",
     },
     "macos-aarch64": {
         "runner": "macos-15",
@@ -69,7 +65,6 @@ TARGETS: dict[str, dict[str, str]] = {
         "archive_extension": "tar.gz",
         "fastfetch": "fastfetch",
         "probe": "benchledger-probe",
-        "format": "tar.gz",
     },
 }
 
@@ -244,10 +239,8 @@ def resolve_fastfetch(args: argparse.Namespace) -> int:
     version = tag[1:] if tag.startswith("v") else tag
     write_json(args.output, {
         "repository": repository,
-        "release_id": release.get("id"),
         "tag": tag,
         "version": version,
-        "published_at": release.get("published_at"),
         "assets": selected_assets,
     })
     print(f"Resolved Fastfetch {tag} with {len(selected_assets)} required assets")
@@ -376,8 +369,6 @@ def verify_release_assets(args: argparse.Namespace) -> int:
     expected_primary_assets = {frontend_name}
     expected_fastfetch_assets: set[str] = set()
     probe_versions: set[str] = set()
-    bundled_repositories: set[str] = set()
-    bundled_fastfetch_versions: set[str] = set()
     target_names: set[str] = set()
 
     for target in plan["probe_targets"]:
@@ -435,16 +426,10 @@ def verify_release_assets(args: argparse.Namespace) -> int:
         for key, expected in checks.items():
             if bundled.get(key) != expected:
                 raise RuntimeError(f"{archive_name} contains mismatched Fastfetch {key}")
-        bundled_repositories.add(str(bundled["repository"]))
-        bundled_fastfetch_versions.add(str(bundled["version"]))
         expected_fastfetch_assets.add(asset_name)
 
     if len(probe_versions) != 1:
         raise RuntimeError("selected probe bundles do not contain one consistent probe version")
-    if bundled_repositories != {str(fastfetch.get("repository"))}:
-        raise RuntimeError("selected probe bundles do not contain one consistent Fastfetch repository")
-    if bundled_fastfetch_versions != {str(fastfetch.get("version"))}:
-        raise RuntimeError("selected probe bundles do not contain one consistent Fastfetch version")
     if expected_fastfetch_assets != set(fastfetch["assets"]):
         raise RuntimeError("Fastfetch manifest does not exactly match the selected target set")
 

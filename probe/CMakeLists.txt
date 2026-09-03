@@ -23,6 +23,14 @@ target_link_libraries(benchledger-probe PRIVATE benchledger_probe_core)
 target_compile_definitions(benchledger-probe PRIVATE
     BENCHLEDGER_PROBE_VERSION="${PROJECT_VERSION}")
 
+include(CheckIPOSupported)
+check_ipo_supported(RESULT BENCHLEDGER_PROBE_IPO_SUPPORTED OUTPUT BENCHLEDGER_PROBE_IPO_ERROR LANGUAGES CXX)
+if(BENCHLEDGER_PROBE_IPO_SUPPORTED)
+    set_property(TARGET benchledger_probe_core benchledger-probe PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+else()
+    message(STATUS "Probe IPO/LTO is unavailable: ${BENCHLEDGER_PROBE_IPO_ERROR}")
+endif()
+
 include(GNUInstallDirs)
 install(TARGETS benchledger-probe RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(FILES probe-v2.schema.json DESTINATION ${CMAKE_INSTALL_DATADIR}/benchledger-probe)
