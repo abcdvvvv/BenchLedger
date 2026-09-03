@@ -5,7 +5,7 @@ import { SegmentedToggle } from "../../components/ui/SegmentedToggle";
 import { type ThemeMode, type TrendLineShape, type TrendMarkerFillMode } from "../../lib/dashboard-settings";
 import { Trend_Marker_Symbol_Options, type TrendMarkerSymbol } from "../../lib/trend-marker-symbols";
 
-export type SettingsPageProps = {
+type SettingsPageProps = {
   theme: ThemeMode;
   trendLineShape: TrendLineShape;
   trendMarkerSymbol: TrendMarkerSymbol;

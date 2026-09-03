@@ -33,7 +33,7 @@ export function formatDateOnly(value: string): string {
   });
 }
 
-export function formatRuntime(value: number): string {
+function formatRuntime(value: number): string {
   if (!Number.isFinite(value)) return "n/a";
   if (value < 1_000) return `${value.toFixed(1)} ns`;
   if (value < 1_000_000) return `${(value / 1_000).toFixed(2)} μs`;
@@ -81,7 +81,7 @@ export function formatPercent(value: number): string {
   return `${sign}${value.toFixed(Percent_Digits)}%`;
 }
 
-export function deltaClass(value: number): "up" | "down" | "neutral" {
+function deltaClass(value: number): "up" | "down" | "neutral" {
   if (!Number.isFinite(value)) return "neutral";
   if (Math.abs(value) < Neutral_Delta_Threshold) return "neutral";
   if (value > 0) return "up";

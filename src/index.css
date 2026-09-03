@@ -2,7 +2,6 @@
 @import "./styles/app.css";
 
 @font-face { font-family: "Inter"; src: url("./assets/fonts/InterVariable.woff2") format("woff2"); font-style: normal; font-weight: 100 900; font-display: swap; }
-@font-face { font-family: "Inter"; src: url("./assets/fonts/InterVariable-Italic.woff2") format("woff2"); font-style: italic; font-weight: 100 900; font-display: swap; }
 
 @custom-variant dark (&:is(.dark *));
 
@@ -81,7 +80,6 @@
   --menu-padding-theme: 0.25rem;
   --menu-item-padding-theme-x: 0.45rem;
   --menu-item-padding-theme-y: 0.0rem;
-  --plot-padding-theme: 0.5rem;
   --table-cell-padding-theme-x: 1rem;
   --table-cell-padding-theme-y: 0.75rem;
   --empty-padding-theme-x: 1.5rem;
@@ -287,10 +285,6 @@
     border-bottom-width: var(--border-width-theme);
   }
 
-  .border-theme-l {
-    border-left-width: var(--border-width-theme);
-  }
-
   .control-h-theme {
     min-height: var(--control-height-theme);
   }
@@ -381,12 +375,6 @@
     border-width: var(--border-width-theme);
     box-shadow: var(--shadow-theme-surface);
     @apply border-warning-300 bg-warning-25 dark:border-warning-500/35 dark:bg-warning-500/10;
-  }
-
-  .surface-plot {
-    border-radius: var(--radius-theme);
-    border-width: var(--border-width-theme);
-    @apply border-stone-200 bg-stone-100/80 dark:border-[#2f2f33] dark:bg-[#27272a];
   }
 
   .surface-floating {
@@ -516,10 +504,6 @@
 
   .pad-menu-item {
     padding: var(--menu-item-padding-theme-y) var(--menu-item-padding-theme-x);
-  }
-
-  .pad-plot {
-    padding: var(--plot-padding-theme);
   }
 
   .pad-data-cell {

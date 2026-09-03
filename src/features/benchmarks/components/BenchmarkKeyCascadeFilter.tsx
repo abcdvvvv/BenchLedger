@@ -21,7 +21,7 @@ import {
   selectionIndicatorClassName
 } from "../../../components/ui/Menu";
 
-export type BenchmarkKeyFilterOption = {
+type BenchmarkKeyFilterOption = {
   value: string;
   path: string[];
   label: string;
@@ -94,7 +94,7 @@ function BenchmarkKeyLeafItem(props: BenchmarkKeyNodeItemProps & { node: Benchma
       onClick={() => toggleValues(node.leafValues)}
     >
       <SelectionIndicator state={state} />
-      <span className="truncate">{node.segment}</span>
+      <span className="truncate">{node.path[node.path.length - 1]}</span>
     </MenuItemCheckbox>
   );
 }
@@ -121,7 +121,7 @@ function BenchmarkKeyBranchItem(props: BenchmarkKeyNodeItemProps & { node: Bench
         }}
       >
         <SelectionIndicator state={state} />
-        <span className="min-w-0 flex-1 truncate text-left">{node.segment}</span>
+        <span className="min-w-0 flex-1 truncate text-left">{node.path[node.path.length - 1]}</span>
         <FiChevronRight className="shrink-0 text-gray-400" aria-hidden="true" />
       </MenuButton>
       <Menu store={submenu} portal overlap gutter={4} overflowPadding={8} fitViewport unmountOnHide className={Root_Menu_Classes}>

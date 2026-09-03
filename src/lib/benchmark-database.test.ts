@@ -69,7 +69,6 @@ describe("BenchmarkDatabaseSession", () => {
     const { database } = await loadedSession();
     expect(database.stats).toMatchObject({ rowCount: 7, runCount: 4, keyCount: 3, configurationCount: 3, latestRunDate: "2026-01-02T01:00:00Z" });
     expect(database.configurations).toHaveLength(2);
-    expect(database.benchmarkCountByRun).toEqual(new Map([["r1", 2], ["r2", 2], ["r3", 2]]));
     expect(database.viewCatalog.metricOptions).toEqual(["memory median bytes", "time median"]);
     expect(database.viewCatalog.branchOptions).toEqual(["all", "feature", "main"]);
     expect("rows" in database).toBe(false);
@@ -95,9 +94,9 @@ describe("BenchmarkDatabaseSession", () => {
     await expect(session.queryBenchmarkKeys({ ...Base_Query, benchmarkKeys: [Key_A, Key_B] })).resolves.toEqual([Key_A, Key_B]);
     await expect(session.queryBenchmarkKeys({ ...Base_Query, timeStartValue: Date.parse("2026-01-02T00:00:00Z"), timeEndValue: Date.parse("2026-01-02T23:59:59.999Z") })).resolves.toEqual([Key_A, Key_C]);
     await expect(session.queryRunSlice(Base_Query)).resolves.toEqual([
-      { run_id: "r1", row_count: 2, benchmark_count: 2 },
-      { run_id: "r2", row_count: 2, benchmark_count: 2 },
-      { run_id: "r3", row_count: 2, benchmark_count: 2 }
+      { run_id: "r1", row_count: 2 },
+      { run_id: "r2", row_count: 2 },
+      { run_id: "r3", row_count: 2 }
     ]);
     const trendRows = await session.queryTrendAggregates({ ...Base_Query, benchmarkKeys: [Key_A] });
     expect(trendRows).toEqual(expect.arrayContaining([
@@ -173,11 +172,11 @@ describe("BenchmarkDatabaseSession", () => {
     const file = await editor.getDatabaseFile();
     await editor.destroy(true);
     await session.replaceDatabaseFile(file, "display-strategy.sqlite", null);
-    await expect(session.queryRunSlice({ ...Base_Query, displayStrategy: "tagged-only" })).resolves.toEqual([{ run_id: "r3", row_count: 2, benchmark_count: 2 }]);
+    await expect(session.queryRunSlice({ ...Base_Query, displayStrategy: "tagged-only" })).resolves.toEqual([{ run_id: "r3", row_count: 2 }]);
     await expect(session.queryRunSlice({ ...Base_Query, displayStrategy: "tagged-main" })).resolves.toEqual([
-      { run_id: "r1", row_count: 2, benchmark_count: 2 },
-      { run_id: "r2", row_count: 2, benchmark_count: 2 },
-      { run_id: "r3", row_count: 2, benchmark_count: 2 }
+      { run_id: "r1", row_count: 2 },
+      { run_id: "r2", row_count: 2 },
+      { run_id: "r3", row_count: 2 }
     ]);
   });
 

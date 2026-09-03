@@ -154,9 +154,6 @@ export type BenchmarkRow = {
 /** An average across repeated runs of one code/hardware/software configuration. */
 export type BenchmarkAggregateRow = {
   configuration_key: string;
-  code_state_id: string;
-  hardware_environment_id: string;
-  software_environment_id: string;
   benchmark_key: string;
   metric_name: string;
   statistic: string;
@@ -200,19 +197,15 @@ export type BenchmarkRunRecord = {
 /** Resolved raw-run context used by run detail and run-to-run comparison. */
 export type BenchmarkRun = {
   run_id: string;
-  code_state_id: string;
   code_label: string;
   code_date: string;
   hardware_environment_id: string;
   hardware_environment_label: string;
   software_environment_id: string;
   software_environment_label: string;
-  environment_pair_key: string;
   environment_pair_label: string;
   configuration_key: string;
-  configuration_label: string;
   measured_at: string;
-  notes: string;
   code_state_identity: BenchmarkCodeStateIdentity;
   code_state_metadata: BenchmarkCodeStateMetadata;
   hardware_environment_identity: BenchmarkHardwareEnvironmentIdentity;
@@ -220,7 +213,6 @@ export type BenchmarkRun = {
   software_environment_identity: BenchmarkSoftwareEnvironmentIdentity;
   software_environment_metadata: BenchmarkEnvironmentMetadata;
   run_metadata: BenchmarkRunMetadata;
-  benchmark_count: number;
 };
 
 type PairComparisonBase = {
@@ -234,8 +226,6 @@ export type PairComparison = PairComparisonBase & (
       status: "matched";
       focus_value: number;
       baseline_value: number;
-      focus_unit: string;
-      baseline_unit: string;
       delta: number;
       unit: string;
     }
@@ -243,8 +233,6 @@ export type PairComparison = PairComparisonBase & (
       status: "focus-only";
       focus_value: number;
       baseline_value: null;
-      focus_unit: string;
-      baseline_unit: null;
       delta: null;
       unit: string;
     }
@@ -252,8 +240,6 @@ export type PairComparison = PairComparisonBase & (
       status: "baseline-only";
       focus_value: null;
       baseline_value: number;
-      focus_unit: null;
-      baseline_unit: string;
       delta: null;
       unit: string;
     }
@@ -329,7 +315,6 @@ export type LoadedBenchmarkDatabase = {
   hardwareEnvironmentsById: ReadonlyMap<string, BenchmarkHardwareEnvironment>;
   softwareEnvironmentsById: ReadonlyMap<string, BenchmarkSoftwareEnvironment>;
   configurations: BenchmarkConfigurationIds[];
-  benchmarkCountByRun: ReadonlyMap<string, number>;
   viewCatalog: BenchmarkViewCatalog;
   stats: BenchmarkDatabaseStats;
   metadata: BenchLedgerMetadata;

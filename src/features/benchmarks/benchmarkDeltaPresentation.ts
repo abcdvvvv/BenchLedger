@@ -2,7 +2,7 @@ import type { SemanticTone } from "../../components/common/semanticTone";
 import { metricDeltaClass } from "../../lib/format";
 import type { PairComparison } from "../../lib/types";
 
-export type BenchmarkDeltaTone = Extract<SemanticTone, "positive" | "negative" | "neutral">;
+type BenchmarkDeltaTone = Extract<SemanticTone, "positive" | "negative" | "neutral">;
 
 type BenchmarkBetter = PairComparison["better"];
 

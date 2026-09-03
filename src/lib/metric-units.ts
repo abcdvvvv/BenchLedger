@@ -1,6 +1,6 @@
-export type TimeMetricUnit = "ns" | "μs" | "ms" | "s" | "min" | "h";
+type TimeMetricUnit = "ns" | "μs" | "ms" | "s" | "min" | "h";
 
-export type TimeMetricUnitDefinition = {
+type TimeMetricUnitDefinition = {
   unit: TimeMetricUnit;
   nanoseconds: number;
 };

@@ -10,7 +10,7 @@ const Required_Tables = ["benchledger_metadata", "code_states", "hardware_enviro
 
 type DatabaseFile = File | ArrayBuffer;
 export type BenchmarkResultQuery = { yAxis: string; branch: string; timeStartValue: number | null; timeEndValue: number | null; displayStrategy: DisplayStrategy; configurationKeys?: readonly string[]; benchmarkKeys?: readonly string[]; };
-export type BenchmarkRunSliceSummary = { run_id: string; row_count: number; benchmark_count: number; };
+export type BenchmarkRunSliceSummary = { run_id: string; row_count: number; };
 export type BenchmarkTrendAggregateRow = BenchmarkAggregateRow & { representative_run_id: string; };
 
 type SqlParts = { clauses: string[]; params: unknown[]; };
@@ -59,7 +59,7 @@ function combineAggregateGroups(groups: readonly AggregateGroupRow[]): Benchmark
     const canonicalUnit = canonicalMetricUnit(group.unit);
     const normalizedValue = convertMetricValue(group.value, group.unit, canonicalUnit);
     if (normalizedValue === null) throw new Error(`Cannot aggregate benchmark_key=${group.benchmark_key}, metric_name=${group.metric_name}, statistic=${group.statistic}: invalid value conversion.`);
-    if (!current) { combined.set(key, { configuration_key: configuration, ...ids, benchmark_key: group.benchmark_key, metric_name: group.metric_name, statistic: group.statistic, unit: canonicalUnit, value: normalizedValue, better: group.better, run_count: group.run_count }); continue; }
+    if (!current) { combined.set(key, { configuration_key: configuration, benchmark_key: group.benchmark_key, metric_name: group.metric_name, statistic: group.statistic, unit: canonicalUnit, value: normalizedValue, better: group.better, run_count: group.run_count }); continue; }
     const unit = compatibleAggregateUnit(current.unit, group.unit);
     if (unit === null) throw new Error(`Cannot aggregate benchmark_key=${group.benchmark_key}, metric_name=${group.metric_name}, statistic=${group.statistic}: conflicting units ${current.unit} and ${group.unit}.`);
     if (current.better !== group.better) throw new Error(`Cannot aggregate benchmark_key=${group.benchmark_key}, metric_name=${group.metric_name}, statistic=${group.statistic}: conflicting better values ${current.better} and ${group.better}.`);
@@ -189,8 +189,8 @@ export class BenchmarkDatabaseSession {
   async queryRunSlice(query: BenchmarkResultQuery): Promise<BenchmarkRunSliceSummary[]> {
     await this.replaceTail;
     const filters = queryFilters(this.requireSnapshot(), query);
-    const rows = await this.requireClient().sql<Record<string, unknown>>(benchmarkQuerySql("SELECT br.run_id, COUNT(*) AS row_count, COUNT(DISTINCT br.benchmark_key) AS benchmark_count", filters, "GROUP BY br.run_id"), ...filters.params);
-    return rows.map((row) => ({ run_id: stringColumn(row.run_id, "run slice run_id"), row_count: finiteCount(row.row_count, "run slice row count"), benchmark_count: finiteCount(row.benchmark_count, "run slice benchmark count") }));
+    const rows = await this.requireClient().sql<Record<string, unknown>>(benchmarkQuerySql("SELECT br.run_id, COUNT(*) AS row_count", filters, "GROUP BY br.run_id"), ...filters.params);
+    return rows.map((row) => ({ run_id: stringColumn(row.run_id, "run slice run_id"), row_count: finiteCount(row.row_count, "run slice row count") }));
   }
 
   async queryTrendAggregates(query: BenchmarkResultQuery): Promise<BenchmarkTrendAggregateRow[]> {
@@ -234,7 +234,7 @@ export class BenchmarkDatabaseSession {
       sql`SELECT id, label, identity, metadata FROM hardware_environments`,
       sql`SELECT id, label, identity, metadata FROM software_environments`,
       sql`SELECT DISTINCT benchmark_key FROM benchmark_results ORDER BY benchmark_key`,
-      sql`SELECT run_id, COUNT(*) AS row_count, COUNT(DISTINCT benchmark_key) AS benchmark_count FROM benchmark_results GROUP BY run_id`,
+      sql`SELECT run_id, COUNT(*) AS row_count FROM benchmark_results GROUP BY run_id`,
       sql`SELECT DISTINCT br.metric_name, br.statistic, br.unit FROM benchmark_results br ORDER BY br.metric_name, br.statistic, br.unit`,
       sql`SELECT br.run_id FROM benchmark_results br LEFT JOIN runs r ON r.id = br.run_id WHERE r.id IS NULL LIMIT 1`,
       sql`SELECT run_id, benchmark_key, metric_name, statistic, unit, value, better FROM benchmark_results WHERE typeof(run_id) <> 'text' OR length(trim(CAST(run_id AS TEXT))) = 0 OR typeof(benchmark_key) <> 'text' OR length(trim(CAST(benchmark_key AS TEXT))) = 0 OR typeof(metric_name) <> 'text' OR length(trim(CAST(metric_name AS TEXT))) = 0 OR typeof(statistic) <> 'text' OR length(trim(CAST(statistic AS TEXT))) = 0 OR typeof(unit) <> 'text' OR length(trim(CAST(unit AS TEXT))) = 0 OR typeof(value) NOT IN ('integer', 'real') OR value IS NULL OR abs(value) > 1.7976931348623157e308 OR typeof(better) <> 'text' OR better NOT IN ('lower', 'higher', 'neutral') LIMIT 1`,
@@ -265,16 +265,9 @@ export class BenchmarkDatabaseSession {
     const benchmarksByKey = new Map<string, BenchmarkDefinition>();
     for (const row of benchmarkKeyRows) { const rawKey = stringColumn(row.benchmark_key, "benchmark result key"); const definition = normalizeBenchmarkKey(rawKey, "benchmark_results"); benchmarksByKey.set(definition.key, definition); }
 
-    const benchmarkCountByRun = new Map<string, number>();
+    const runIdsWithResults = new Set<string>();
     let rowCount = 0;
-    for (const row of runCountRows) {
-      const runId = stringColumn(row.run_id, "benchmark count run_id");
-      const count = finiteCount(row.benchmark_count, "benchmark count");
-      const runRowCount = finiteCount(row.row_count, "benchmark result count");
-      benchmarkCountByRun.set(runId, count);
-      rowCount += runRowCount;
-    }
-    const runIdsWithResults = new Set(benchmarkCountByRun.keys());
+    for (const row of runCountRows) { const runId = stringColumn(row.run_id, "benchmark result run_id"); runIdsWithResults.add(runId); rowCount += finiteCount(row.row_count, "benchmark result count"); }
     const configurationMap = new Map<string, BenchmarkConfigurationIds>();
     let minCodeDate = "";
     let maxCodeDate = "";
@@ -302,7 +295,7 @@ export class BenchmarkDatabaseSession {
     const allConfigurationCount = new Set(Array.from(runsById.values(), (run) => configurationKey({ code_state_id: run.code_state_id, hardware_environment_id: run.hardware_environment_id, software_environment_id: run.software_environment_id }))).size;
     const stats: BenchmarkDatabaseStats = { rowCount, runCount: runsById.size, keyCount: benchmarksByKey.size, hardwareEnvironmentCount: hardwareEnvironmentsById.size, softwareEnvironmentCount: softwareEnvironmentsById.size, configurationCount: allConfigurationCount, metrics: Array.from(viewCatalog.metricSourcesByLabel.keys()).sort(), latestRunDate, dirtyRunCount: Array.from(runsById.values()).filter((run) => codeStatesById.get(run.code_state_id)?.metadata.source?.dirty === true).length };
 
-    return { benchmarksByKey, runsById, codeStatesById, hardwareEnvironmentsById, softwareEnvironmentsById, configurations, benchmarkCountByRun, viewCatalog, stats, metadata, source_label: sourceLabel, source_url: sourceUrl };
+    return { benchmarksByKey, runsById, codeStatesById, hardwareEnvironmentsById, softwareEnvironmentsById, configurations, viewCatalog, stats, metadata, source_label: sourceLabel, source_url: sourceUrl };
   }
 }
 

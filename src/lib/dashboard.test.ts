@@ -6,7 +6,6 @@ import {
   type TrendPlotRow
 } from "./dashboard-plotting";
 import {
-  buildDatabaseCatalogStats,
   buildRuns,
   buildBenchmarkPairComparisons,
   runAxisLabel,
@@ -37,19 +36,15 @@ const Base_Row: BenchmarkRow = {
 function makeRun(overrides: Partial<BenchmarkRun> = {}): BenchmarkRun {
   return {
     run_id: "run-1",
-    code_state_id: "state-1",
     code_label: "",
     code_date: "2026-01-01T00:00:00Z",
     hardware_environment_id: "hardware-1",
     hardware_environment_label: "Hardware 1",
     software_environment_id: "software-1",
     software_environment_label: "Software 1",
-    environment_pair_key: '["hardware-1","software-1"]',
     environment_pair_label: "Hardware 1 · Software 1",
     configuration_key: '["state-1","hardware-1","software-1"]',
-    configuration_label: "State 1 · Hardware 1 · Software 1",
     measured_at: "2026-01-01T00:00:00Z",
-    notes: "",
     code_state_identity: { source: { kind: "git", revision: "abcdef1234567890" } },
     code_state_metadata: { source: { dirty: false } },
     hardware_environment_identity: {},
@@ -57,21 +52,18 @@ function makeRun(overrides: Partial<BenchmarkRun> = {}): BenchmarkRun {
     software_environment_identity: {},
     software_environment_metadata: {},
     run_metadata: { source: { branch: "main", tags: [] } },
-    benchmark_count: 1,
     ...overrides
   };
 }
 
 function makeTrendRow(overrides: Partial<TrendPlotRow> = {}): TrendPlotRow {
   return {
-    ...Base_Row,
+    unit: Base_Row.unit,
+    value: Base_Row.value,
     code_date: "2026-01-01T00:00:00Z",
     measured_at: "2026-01-01T00:00:00Z",
-    date_value: new Date("2026-01-01T00:00:00Z"),
     run_axis_label: "2026-01-01",
     run_identity_title: "Run: Run 1",
-    run_count: 1,
-    x_key: "state-1",
     x_label: "State 1",
     ...overrides
   };
@@ -121,7 +113,7 @@ describe("dashboard helpers", () => {
 
   });
 
-  it("sorts runs by code date while catalog latest-run uses measurement time", () => {
+  it("sorts runs by code date and formats the hardware label", () => {
     const runsById = new Map<string, BenchmarkRunRecord>([
       ["run-old", {
         id: "run-old", code_state_id: "state-old", hardware_environment_id: "hardware-1",
@@ -155,7 +147,6 @@ describe("dashboard helpers", () => {
         { code_state_id: "state-old", hardware_environment_id: "hardware-1", software_environment_id: "software-1" },
         { code_state_id: "state-new", hardware_environment_id: "hardware-1", software_environment_id: "software-1" }
       ],
-      benchmarkCountByRun: new Map([["run-old", 1], ["run-new", 1]]),
       viewCatalog: { metricOptions: [], metricSourcesByLabel: new Map(), branchOptions: ["all"], databaseTimeStart: "2026-06-10", databaseTimeEnd: "2026-06-11" },
       stats: { rowCount: 2, runCount: 2, keyCount: 2, hardwareEnvironmentCount: 1, softwareEnvironmentCount: 1, configurationCount: 2, metrics: ["time median"], latestRunDate: "2026-06-20T00:00:00Z", dirtyRunCount: 0 },
       metadata: {
@@ -169,18 +160,16 @@ describe("dashboard helpers", () => {
 
     expect(runs.map((run) => run.run_id)).toEqual(["run-new", "run-old"]);
     expect(runs[0]?.environment_pair_label).toBe("AMD EPYC 9V74 80-Core / Software");
-    expect(buildDatabaseCatalogStats(database)!.latestRunDate).toBe("2026-06-20T00:00:00Z");
   });
 
   it("uses the resolved varying-dimension labels on trend traces", () => {
     const rows = [
-      makeTrendRow({ run_id: "a", code_date: "2026-06-02", value: 20, x_key: "a", x_label: "A" }),
-      makeTrendRow({ run_id: "b", code_date: "2026-06-03", value: 10, x_key: "b", x_label: "B" })
+      makeTrendRow({ code_date: "2026-06-02", value: 20, x_label: "A" }),
+      makeTrendRow({ code_date: "2026-06-03", value: 10, x_label: "B" })
     ];
     const traces = buildTrendTrace(rows, {
       lineShape: "line", markerSymbol: "circle", markerFillMode: "hollow", displayUnitContext: trendDisplayUnitContext(rows), color: "#000000", label: "Series",
-      plotTheme: { paper: "transparent", plot: "transparent", grid: "#ccc", axis: "#333", zero: "#999", line: "#000", areaGradientStart: "rgba(0,0,0,0)", areaGradientEnd: "rgba(0,0,0,0.2)", markerStrong: "#000", marker: "#000", markerMuted: "#666", deltaUp: "#f00", deltaDown: "#0f0", deltaNeutral: "#999" },
-      theme: "light", yMin: 0, yPadding: 1, showLegend: true
+      yMin: 0, yPadding: 1, showLegend: true
     });
     expect(traces[1]?.x).toEqual(["A", "B"]);
   });

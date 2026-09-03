@@ -6,7 +6,8 @@ import {
   DatabasesPage,
   OverviewPage,
   SettingsPage,
-  TrendBoardPage
+  TrendBoardPage,
+  App_Page_Definitions
 } from "./app/pageRegistry";
 import { useBenchmarkDatabaseState } from "./app/useBenchmarkDatabaseState";
 import { Asset_Base_URL } from "./lib/dashboard-data";
@@ -52,16 +53,6 @@ function LoadingState(props: { phase: "booting" | "loading-database" }) {
     </div>
   );
 }
-
-const Page_Render_Order: ActivePage[] = [
-  "overview",
-  "trend-board",
-  "dimension-selector",
-  "benchmark-keys",
-  "settings",
-  "about",
-  "database-catalog"
-];
 
 function App() {
   const state = useBenchmarkDatabaseState();
@@ -135,7 +126,6 @@ function App() {
             selectedDatabaseId={settings.selectedDatabaseId}
             onDatabaseChange={state.handleDatabaseSelection}
             database={state.database}
-            currentMetadata={state.currentMetadata}
             theme={settings.theme}
             assetBaseUrl={Asset_Base_URL}
             siteTitle={state.siteTitle}
@@ -144,7 +134,7 @@ function App() {
         )}
       >
         <Suspense key={state.databaseSourceRevision} fallback={<PageLoadingState />}>
-          {Page_Render_Order.map((id) => (
+          {App_Page_Definitions.map(({ id }) => (
             id === activePage || visitedPages.has(id)
               ? <PageSlot key={id} active={activePage === id}>{pages[id]}</PageSlot>
               : null

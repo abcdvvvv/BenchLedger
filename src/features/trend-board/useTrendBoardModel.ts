@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { BenchmarkDimensionSelection } from "../../app/useBenchmarkDimensionSelector";
 import { buildTrendRowsByBenchmark, normalizeSelectedBenchmarkKeys, type BenchmarkViewBenchmarkOption } from "../../lib/benchmark-view";
-import { Trend_Y_Padding_Ratio, buildTrendTrace, colorForBenchmark, colorWithAlpha, trendDisplayUnitContext, trendValueExtent, type PlotTheme } from "../../lib/dashboard-plotting";
-import type { ThemeMode, TrendLineShape, TrendMarkerFillMode } from "../../lib/dashboard-settings";
+import { Trend_Y_Padding_Ratio, buildTrendTrace, colorForBenchmark, colorWithAlpha, trendDisplayUnitContext, trendValueExtent } from "../../lib/dashboard-plotting";
+import type { TrendLineShape, TrendMarkerFillMode } from "../../lib/dashboard-settings";
 import type { TrendMarkerSymbol } from "../../lib/trend-marker-symbols";
 import type { BenchmarkRun } from "../../lib/types";
 import type { BenchmarkDatabaseSession, BenchmarkResultQuery, BenchmarkTrendAggregateRow } from "../../lib/benchmark-database";
 import { LatestTaskRunner } from "../../lib/latest-task";
 
-export type TrendBoardCard = { benchmarkKey: string; label: string; path: string[]; metricLabel: string; traces: Array<Record<string, unknown>>; };
-export type TrendBoardCombinedChart = { traces: Array<Record<string, unknown>>; metricLabel: string; showLegend: boolean; };
-type UseTrendBoardModelOptions = { session: BenchmarkDatabaseSession | null; query: BenchmarkResultQuery; sourceRevision: number; runsById: ReadonlyMap<string, BenchmarkRun>; benchmarkOptions: BenchmarkViewBenchmarkOption[]; selectedBenchmarkKeys: string[]; onSelectedBenchmarkKeysChange: (values: string[]) => void; yAxis: string; dimensionSelection: BenchmarkDimensionSelection; trendLineShape: TrendLineShape; trendMarkerSymbol: TrendMarkerSymbol; trendMarkerFillMode: TrendMarkerFillMode; plotTheme: PlotTheme; theme: ThemeMode; };
+type TrendBoardCard = { benchmarkKey: string; label: string; path: string[]; metricLabel: string; traces: Array<Record<string, unknown>>; };
+type TrendBoardCombinedChart = { traces: Array<Record<string, unknown>>; metricLabel: string; showLegend: boolean; };
+type UseTrendBoardModelOptions = { session: BenchmarkDatabaseSession | null; query: BenchmarkResultQuery; sourceRevision: number; runsById: ReadonlyMap<string, BenchmarkRun>; benchmarkOptions: BenchmarkViewBenchmarkOption[]; selectedBenchmarkKeys: string[]; onSelectedBenchmarkKeysChange: (values: string[]) => void; yAxis: string; dimensionSelection: BenchmarkDimensionSelection; trendLineShape: TrendLineShape; trendMarkerSymbol: TrendMarkerSymbol; trendMarkerFillMode: TrendMarkerFillMode; };
 type UseTrendBoardModelResult = { trendBoardCards: TrendBoardCard[]; combinedTrendChart: TrendBoardCombinedChart | null; trendPlotMargin: { t: number; r: number; b: number; l: number }; hasTrendRows: boolean; xAxisTitle: string; };
 
 const Trend_Plot_Margin = { t: 2, r: 12, b: 58, l: 52 } as const;
@@ -21,7 +21,7 @@ function yBounds(rows: { value: number; unit: string }[]) {
 }
 
 export function useTrendBoardModel(options: UseTrendBoardModelOptions): UseTrendBoardModelResult {
-  const { session, query, sourceRevision, runsById, benchmarkOptions, selectedBenchmarkKeys, onSelectedBenchmarkKeysChange, yAxis, dimensionSelection, trendLineShape, trendMarkerSymbol, trendMarkerFillMode, plotTheme, theme } = options;
+  const { session, query, sourceRevision, runsById, benchmarkOptions, selectedBenchmarkKeys, onSelectedBenchmarkKeysChange, yAxis, dimensionSelection, trendLineShape, trendMarkerSymbol, trendMarkerFillMode } = options;
   const normalizedSelectedBenchmarkKeys = useMemo(() => dimensionSelection.validation.isValid ? normalizeSelectedBenchmarkKeys(selectedBenchmarkKeys, benchmarkOptions) : selectedBenchmarkKeys, [benchmarkOptions, dimensionSelection.validation.isValid, selectedBenchmarkKeys]);
   const [rows, setRows] = useState<BenchmarkTrendAggregateRow[]>([]);
   const queryContextRef = useRef<{ session: BenchmarkDatabaseSession | null; query: BenchmarkResultQuery; sourceRevision: number } | null>(null);
@@ -45,14 +45,14 @@ export function useTrendBoardModel(options: UseTrendBoardModelOptions): UseTrend
   const trendBoardCards = useMemo<TrendBoardCard[]>(() => normalizedSelectedBenchmarkKeys.flatMap((benchmarkKey, index) => {
     const cardRows = rowsByBenchmark.get(benchmarkKey) ?? []; if (!cardRows.length) return [];
     const bounds = yBounds(cardRows); const option = benchmarkOptionsByKey.get(benchmarkKey); const path = option?.path?.length ? option.path : [option?.label ?? benchmarkKey]; const label = path.length > 1 ? path.slice(0, -1).join(" | ") : path[0] ?? benchmarkKey; const color = colorForBenchmark(index);
-    return [{ benchmarkKey, label, path, metricLabel: bounds.display.formatMetricLabel(yAxis), traces: buildTrendTrace(cardRows, { lineShape: trendLineShape, markerSymbol: trendMarkerSymbol, markerFillMode: trendMarkerFillMode, displayUnitContext: bounds.display, color, label, plotTheme, theme, yMin: bounds.min, yPadding: bounds.padding, showLegend: false, fillGradientScale: [[0, colorWithAlpha(color, 0)], [1, colorWithAlpha(color, 0.2)]] }) }];
-  }), [benchmarkOptionsByKey, normalizedSelectedBenchmarkKeys, plotTheme, rowsByBenchmark, theme, trendLineShape, trendMarkerFillMode, trendMarkerSymbol, yAxis]);
+    return [{ benchmarkKey, label, path, metricLabel: bounds.display.formatMetricLabel(yAxis), traces: buildTrendTrace(cardRows, { lineShape: trendLineShape, markerSymbol: trendMarkerSymbol, markerFillMode: trendMarkerFillMode, displayUnitContext: bounds.display, color, label, yMin: bounds.min, yPadding: bounds.padding, showLegend: false, fillGradientScale: [[0, colorWithAlpha(color, 0)], [1, colorWithAlpha(color, 0.2)]] }) }];
+  }), [benchmarkOptionsByKey, normalizedSelectedBenchmarkKeys, rowsByBenchmark, trendLineShape, trendMarkerFillMode, trendMarkerSymbol, yAxis]);
 
   const combinedTrendChart = useMemo<TrendBoardCombinedChart | null>(() => {
     if (!normalizedSelectedBenchmarkKeys.length) return null;
-    const traces = normalizedSelectedBenchmarkKeys.flatMap((benchmarkKey, index) => { const traceRows = rowsByBenchmark.get(benchmarkKey) ?? []; if (!traceRows.length) return []; const label = benchmarkOptionsByKey.get(benchmarkKey)?.label ?? benchmarkKey; const color = colorForBenchmark(index); return buildTrendTrace(traceRows, { lineShape: trendLineShape, markerSymbol: trendMarkerSymbol, markerFillMode: trendMarkerFillMode, displayUnitContext: combinedBounds.display, color, label, plotTheme, theme, yMin: combinedBounds.min, yPadding: combinedBounds.padding, showLegend: normalizedSelectedBenchmarkKeys.length > 1 }); });
+    const traces = normalizedSelectedBenchmarkKeys.flatMap((benchmarkKey, index) => { const traceRows = rowsByBenchmark.get(benchmarkKey) ?? []; if (!traceRows.length) return []; const label = benchmarkOptionsByKey.get(benchmarkKey)?.label ?? benchmarkKey; const color = colorForBenchmark(index); return buildTrendTrace(traceRows, { lineShape: trendLineShape, markerSymbol: trendMarkerSymbol, markerFillMode: trendMarkerFillMode, displayUnitContext: combinedBounds.display, color, label, yMin: combinedBounds.min, yPadding: combinedBounds.padding, showLegend: normalizedSelectedBenchmarkKeys.length > 1 }); });
     return traces.length ? { traces, metricLabel: combinedBounds.display.formatMetricLabel(yAxis), showLegend: normalizedSelectedBenchmarkKeys.length > 1 } : null;
-  }, [benchmarkOptionsByKey, combinedBounds, normalizedSelectedBenchmarkKeys, plotTheme, rowsByBenchmark, theme, trendLineShape, trendMarkerFillMode, trendMarkerSymbol, yAxis]);
+  }, [benchmarkOptionsByKey, combinedBounds, normalizedSelectedBenchmarkKeys, rowsByBenchmark, trendLineShape, trendMarkerFillMode, trendMarkerSymbol, yAxis]);
 
   return { trendBoardCards, combinedTrendChart, trendPlotMargin, hasTrendRows: allRows.length > 0, xAxisTitle: dimensionSelection.varyingDimension?.label ?? "Varying dimension" };
 }

@@ -17,7 +17,7 @@ import {
   initiallyExpandedBenchmarkGroupIds
 } from "../../lib/benchmark-key-tree";
 
-export type BenchmarkKeysPageProps = {
+type BenchmarkKeysPageProps = {
   benchmarks: BenchmarkDefinition[];
 };
 
@@ -48,7 +48,7 @@ export function BenchmarkKeysPage(props: BenchmarkKeysPageProps) {
         <Panel className="min-h-[32rem]">
           <div className="mb-4 flex flex-wrap items-center gap-3">
             <StatusBadge>{props.benchmarks.length.toLocaleString()} benchmark{props.benchmarks.length === 1 ? "" : "s"}</StatusBadge>
-            <StatusBadge>{tree.groupCount.toLocaleString()} group{tree.groupCount === 1 ? "" : "s"}</StatusBadge>
+            <StatusBadge>{tree.branchIds.length.toLocaleString()} group{tree.branchIds.length === 1 ? "" : "s"}</StatusBadge>
             <p className="type-body-muted mr-auto">Expand or collapse any group to inspect its nested benchmark keys.</p>
             <Button
               variant="secondary"
@@ -79,7 +79,7 @@ export function BenchmarkKeysPage(props: BenchmarkKeysPageProps) {
               <tbody>
                 {rows.map((node) => {
                   const isExpanded = expandedIds.has(node.id);
-                  const indentStyle = { paddingLeft: `${node.depth * Tree_Indent_Rem}rem` };
+                  const indentStyle = { paddingLeft: `${Math.max(node.path.length - 1, 0) * Tree_Indent_Rem}rem` };
 
                   return (
                     <tr key={node.id}>
@@ -114,7 +114,7 @@ export function BenchmarkKeysPage(props: BenchmarkKeysPageProps) {
                         <StatusBadge>{node.kind === "group" ? "Group" : "Benchmark"}</StatusBadge>
                       </DataCell>
                       <DataCell>{node.kind === "group" ? node.childIds.length : ""}</DataCell>
-                      <DataCell>{node.benchmarkCount}</DataCell>
+                      <DataCell>{node.leafValues.length}</DataCell>
                     </tr>
                   );
                 })}

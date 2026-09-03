@@ -31,7 +31,7 @@ type ControlClassNameOptions = {
   active?: boolean;
 };
 
-export function controlClassName(options?: ControlClassNameOptions) {
+function controlClassName(options?: ControlClassNameOptions) {
   return cn(
     "type-body control-h-theme pad-control-x w-full outline-none transition focus-visible:ring-4 focus-visible:ring-brand-500/15",
     options?.invalid

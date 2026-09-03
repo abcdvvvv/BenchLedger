@@ -9,7 +9,6 @@ import { DisclosureTriggerContent, menuItemRowClassName, menuSurfaceClassName, m
 type DimensionPointSelectMenuProps = { disabled: boolean; points: readonly DimensionSelectionPoint[]; runsByPoint: ReadonlyMap<string, readonly BenchmarkRun[]>; preferRunIdentity: boolean; selectedPointKey: string; onSelect: (pointKey: string) => void; ariaLabel: string; };
 
 function measuredTime(run: BenchmarkRun): number { const value = Date.parse(run.measured_at); return Number.isFinite(value) ? value : Number.NEGATIVE_INFINITY; }
-
 function newestRun(runs: readonly BenchmarkRun[]): BenchmarkRun | null { return runs.reduce<BenchmarkRun | null>((latest, run) => !latest || measuredTime(run) > measuredTime(latest) ? run : latest, null); }
 
 function preferredPointRun(runs: readonly BenchmarkRun[]): BenchmarkRun | null { return newestRun(runs.filter((run) => (run.run_metadata.source?.tags?.length ?? 0) > 0)) ?? newestRun(runs); }
@@ -19,12 +18,10 @@ function pointPresentation(point: DimensionSelectionPoint, runsByPoint: Readonly
   return run ? { label: `${runHeadline(run)} · ${formatDateOnly(run.measured_at)}`, title: `${runIdentityTitle(run)}\nMeasured: ${formatDate(run.measured_at)}` } : { label: point.label, title: undefined };
 }
 
-function pointMeasuredTime(point: DimensionSelectionPoint, runsByPoint: ReadonlyMap<string, readonly BenchmarkRun[]>): number { const run = preferredPointRun(runsByPoint.get(point.key) ?? []); return run ? measuredTime(run) : Number.NEGATIVE_INFINITY; }
-
 export function DimensionPointSelectMenu(props: DimensionPointSelectMenuProps) {
   const selected = props.points.find((point) => point.key === props.selectedPointKey) ?? props.points[0] ?? null;
   const selectedPresentation = selected ? pointPresentation(selected, props.runsByPoint, props.preferRunIdentity) : null;
-  const orderedPoints = props.preferRunIdentity ? [...props.points].sort((left, right) => pointMeasuredTime(right, props.runsByPoint) - pointMeasuredTime(left, props.runsByPoint) || left.label.localeCompare(right.label, undefined, { numeric: true })) : props.points;
+  const orderedPoints = props.preferRunIdentity ? Array.from(props.runsByPoint.keys(), (key) => props.points.find((point) => point.key === key)).filter((point): point is DimensionSelectionPoint => point !== undefined) : props.points;
   return (
     <MenuProvider>
       <MenuButton className={menuTriggerClassName({ disabled: props.disabled })} disabled={props.disabled} aria-label={props.ariaLabel} title={selectedPresentation?.title}>
@@ -38,7 +35,7 @@ export function DimensionPointSelectMenu(props: DimensionPointSelectMenuProps) {
             <MenuItem key={point.key} className={menuItemRowClassName({ state: isSelected ? "selected" : "default" })} onClick={() => props.onSelect(point.key)} title={presentation.title}>
               <span className="flex size-4 items-center justify-center" aria-hidden="true">{isSelected ? <FiCheck className="size-4" /> : null}</span>
               <span className="min-w-0 flex-1 truncate font-mono">{presentation.label}</span>
-              {point.configurationCount > 1 ? <span className="type-meta shrink-0">{point.configurationCount} configs</span> : null}
+              {point.configurationKeys.length > 1 ? <span className="type-meta shrink-0">{point.configurationKeys.length} configs</span> : null}
             </MenuItem>
           );
         })}

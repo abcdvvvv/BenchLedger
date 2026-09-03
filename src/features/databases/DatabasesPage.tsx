@@ -10,7 +10,7 @@ import {
 } from "../../lib/dashboard-data";
 import { formatBytes } from "../../lib/format";
 
-export type DatabasesPageProps = {
+type DatabasesPageProps = {
   databaseCatalog: DatabaseCatalogEntry[];
   onOpenLocalFilePicker: () => void;
 };

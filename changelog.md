@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- Baseline and Focus revision selectors now order points by code commit date while continuing to show benchmark measurement time.
 
 ## [0.8.1] - 2026/09/03
 - Dimension Selector now narrows value menus through one-way identity hierarchies: Hardware choices filter downstream identities, while clear parent-child fields such as source kind/revision, runtime name/version, OS/kernel name/version, and similar pairs filter only forward. Temporarily unavailable choices are remembered and restored.

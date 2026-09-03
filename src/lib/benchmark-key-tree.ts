@@ -1,4 +1,4 @@
-export type BenchmarkKeyTreeSource = {
+type BenchmarkKeyTreeSource = {
   label: string;
   path: string[];
 };
@@ -6,12 +6,8 @@ export type BenchmarkKeyTreeSource = {
 type BenchmarkKeyNodeBase = {
   id: string;
   label: string;
-  segment: string;
   path: string[];
-  parentId: string | null;
   childIds: string[];
-  depth: number;
-  benchmarkCount: number;
   leafValues: string[];
 };
 
@@ -32,9 +28,8 @@ export type BenchmarkKeyTreeView = {
   rootIds: string[];
 };
 
-export type BenchmarkKeyTree = BenchmarkKeyTreeView & {
+type BenchmarkKeyTree = BenchmarkKeyTreeView & {
   branchIds: string[];
-  groupCount: number;
 };
 
 function compareNodeOrder(left: BenchmarkKeyNode, right: BenchmarkKeyNode, order: "groups-first" | "path"): number {
@@ -77,12 +72,8 @@ export function buildBenchmarkKeyTree<T extends BenchmarkKeyTreeSource>(sources:
         nodesById.set(nodeId, {
           id: nodeId,
           label: segment,
-          segment,
           path: groupPath,
-          parentId,
           childIds: [],
-          depth: groupPath.length - 1,
-          benchmarkCount: 0,
           leafValues: [],
           kind: "group",
           value: null
@@ -99,12 +90,8 @@ export function buildBenchmarkKeyTree<T extends BenchmarkKeyTreeSource>(sources:
     nodesById.set(leafId, {
       id: leafId,
       label: source.label,
-      segment: path[path.length - 1],
       path,
-      parentId,
       childIds: [],
-      depth: Math.max(path.length - 1, 0),
-      benchmarkCount: 1,
       leafValues: [value],
       kind: "benchmark",
       value
@@ -122,11 +109,10 @@ export function buildBenchmarkKeyTree<T extends BenchmarkKeyTreeSource>(sources:
   for (let index = branchIds.length - 1; index >= 0; index -= 1) {
     const branch = nodesById.get(branchIds[index]);
     if (!branch || branch.kind !== "group") continue;
-    branch.benchmarkCount = branch.childIds.reduce((count, childId) => count + (nodesById.get(childId)?.benchmarkCount ?? 0), 0);
     branch.leafValues = Array.from(new Set(branch.childIds.flatMap((childId) => nodesById.get(childId)?.leafValues ?? [])));
   }
 
-  return { nodesById, rootIds, branchIds, groupCount: branchIds.length };
+  return { nodesById, rootIds, branchIds };
 }
 
 export function filterBenchmarkKeyTree(tree: BenchmarkKeyTree, query: string): BenchmarkKeyTreeView {
@@ -150,7 +136,6 @@ export function filterBenchmarkKeyTree(tree: BenchmarkKeyTree, query: string): B
     const filteredNode: BenchmarkKeyGroupNode = {
       ...node,
       childIds: children.map((child) => child.id),
-      benchmarkCount: children.reduce((count, child) => count + child.benchmarkCount, 0),
       leafValues: Array.from(new Set(children.flatMap((child) => child.leafValues)))
     };
     nodesById.set(filteredNode.id, filteredNode);

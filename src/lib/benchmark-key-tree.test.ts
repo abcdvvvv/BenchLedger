@@ -21,7 +21,7 @@ describe("benchmark key tree", () => {
     const expanded = initiallyExpandedBenchmarkGroupIds(tree);
     const rows = flattenVisibleBenchmarkKeyNodes(tree, expanded);
 
-    expect(tree.groupCount).toBe(3);
+    expect(tree.branchIds).toHaveLength(3);
     expect(Array.from(expanded)).toEqual(tree.rootIds);
     expect(rows.map((node) => node.path)).toEqual([
       ["other"],

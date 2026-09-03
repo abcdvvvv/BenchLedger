@@ -2,7 +2,7 @@ import { FaGithub } from "react-icons/fa";
 import { PageHeader } from "../../components/common/PageHeader";
 import { IconButton } from "../../components/ui/IconButton";
 
-export type AboutPageProps = {
+type AboutPageProps = {
   applicationName: string;
   version: string;
   repositoryUrl: string;

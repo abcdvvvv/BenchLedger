@@ -9,7 +9,7 @@ import { EmptyState } from "../../components/common/EmptyState";
 import { Field, FieldLabel, InputField } from "../../components/ui/Field";
 import { Panel, SectionTitle } from "../../components/ui/Card";
 import { PageHeader } from "../../components/common/PageHeader";
-import { Trend_Board_Plot_Height, type PlotTheme } from "../../lib/dashboard-plotting";
+import { Trend_Board_Plot_Height, plotThemeFor, type PlotTheme } from "../../lib/dashboard-plotting";
 import {
   Trend_Board_Max_Columns,
   Trend_Board_Min_Columns,
@@ -30,10 +30,11 @@ const TrendPlot = memo(function TrendPlot({ data, margin, metricLabel, xAxisTitl
   return <Plot useResizeHandler style={Trend_Plot_Style} data={data} layout={layout} config={Trend_Plot_Config} />;
 });
 
-export type TrendBoardPageProps = { state: BenchmarkDatabaseState; };
+type TrendBoardPageProps = { state: BenchmarkDatabaseState; };
 
 export function TrendBoardPage({ state }: TrendBoardPageProps) {
   const { settings, setSetting } = state;
+  const plotTheme = useMemo(() => plotThemeFor(settings.theme), [settings.theme]);
   const setYAxis = useUISettingSetter(setSetting, "yAxis");
   const setBranch = useUISettingSetter(setSetting, "trendBoardBranch");
   const setSelectedBenchmarkKeys = useUISettingSetter(setSetting, "selectedBenchmarkKeys");
@@ -69,9 +70,7 @@ export function TrendBoardPage({ state }: TrendBoardPageProps) {
     dimensionSelection: state.dimensionSelection,
     trendLineShape: settings.trendLineShape,
     trendMarkerSymbol: settings.trendMarkerSymbol,
-    trendMarkerFillMode: settings.trendMarkerFillMode,
-    plotTheme: state.plotTheme,
-    theme: settings.theme
+    trendMarkerFillMode: settings.trendMarkerFillMode
   });
   const showCombinedTrendChart = settings.trendBoardViewMode === "combined";
   const pageDescription = showCombinedTrendChart
@@ -158,7 +157,7 @@ export function TrendBoardPage({ state }: TrendBoardPageProps) {
         <Panel className="surface-card-trend-board pad-trend-board-card min-w-0">
           <SectionTitle title="Combined Trend" description="Trend Board benchmarks overlaid in one chart." />
           <div className="mt-5" style={{ height: `${Trend_Board_Plot_Height}px` }}>
-            <TrendPlot data={model.combinedTrendChart.traces} margin={model.trendPlotMargin} metricLabel={model.combinedTrendChart.metricLabel || settings.yAxis || "Metric value"} xAxisTitle={model.xAxisTitle} plotTheme={state.plotTheme} showLegend={model.combinedTrendChart.showLegend} />
+            <TrendPlot data={model.combinedTrendChart.traces} margin={model.trendPlotMargin} metricLabel={model.combinedTrendChart.metricLabel || settings.yAxis || "Metric value"} xAxisTitle={model.xAxisTitle} plotTheme={plotTheme} showLegend={model.combinedTrendChart.showLegend} />
           </div>
         </Panel>
       ) : model.trendBoardCards.length ? (
@@ -173,7 +172,7 @@ export function TrendBoardPage({ state }: TrendBoardPageProps) {
                 description={card.path[card.path.length - 1] ?? card.label}
               />
               <div className="mt-5" style={{ height: `${Trend_Board_Plot_Height}px` }}>
-                <TrendPlot data={card.traces} margin={model.trendPlotMargin} metricLabel={card.metricLabel || settings.yAxis || "Metric value"} xAxisTitle={model.xAxisTitle} plotTheme={state.plotTheme} showLegend={false} />
+                <TrendPlot data={card.traces} margin={model.trendPlotMargin} metricLabel={card.metricLabel || settings.yAxis || "Metric value"} xAxisTitle={model.xAxisTitle} plotTheme={plotTheme} showLegend={false} />
               </div>
             </Panel>
           ))}

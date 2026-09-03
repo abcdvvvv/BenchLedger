@@ -8,7 +8,7 @@ const Kind: DimensionDefinition = { key: "kind", category: "code", pathId: '["so
 const Revision: DimensionDefinition = { key: "revision", category: "code", pathId: '["source","revision"]', label: "Code / Source / Revision", path: ["source", "revision"] };
 
 function state(): BenchmarkDatabaseState {
-  return { settings: { varyingDimensionKeys: [Revision.key], dimensionValueSelections: [{ dimensionKey: Kind.key, valueKeys: ["git"] }] }, setSetting: () => undefined, dimensionSelection: { dimensions: [Kind, Revision], varyingDimensionKeys: [Revision.key], fixedValueSelections: [{ dimension: Kind, valueKeys: ["git"], rememberedValueKeys: ["git"], options: [{ key: "git", label: "git", configurationCount: 2 }] }], validation: { isValid: true, varyingCount: 1, issues: [] } } } as unknown as BenchmarkDatabaseState;
+  return { settings: { varyingDimensionKeys: [Revision.key], dimensionValueSelections: [{ dimensionKey: Kind.key, valueKeys: ["git"] }] }, setSetting: () => undefined, dimensionSelection: { dimensions: [Kind, Revision], varyingDimensionKeys: [Revision.key], fixedValueSelections: [{ dimension: Kind, valueKeys: ["git"], rememberedValueKeys: ["git"], options: [{ key: "git", label: "git", configurationCount: 2 }] }], validation: { isValid: true, issues: [] } } } as unknown as BenchmarkDatabaseState;
 }
 
 describe("Dimension Selector hierarchy", () => {

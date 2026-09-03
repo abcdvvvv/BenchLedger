@@ -1,16 +1,13 @@
 import { useCallback, useMemo, useRef } from "react";
 import type { RefObject } from "react";
 import {
-  buildDatabaseCatalogStats,
   buildRuns,
   databaseDescription,
   databaseTitle,
   metadataDescription,
   metadataTitle,
-  type DatabaseCatalogEntry,
-  type DatabaseCatalogStats
+  type DatabaseCatalogEntry
 } from "../lib/dashboard-data";
-import { plotThemeFor } from "../lib/dashboard-plotting";
 import { useBenchmarkDataSource } from "../lib/useBenchmarkDataSource";
 import { useStoredUISettings } from "./useStoredUISettings";
 import { useBenchmarkDimensionSelector, type BenchmarkDimensionSelection } from "./useBenchmarkDimensionSelector";
@@ -34,16 +31,13 @@ export type BenchmarkDatabaseState = {
   benchmarksByKey: ReadonlyMap<string, BenchmarkDefinition>;
   benchmarkDefinitions: BenchmarkDefinition[];
   sourceDatabases: NonNullable<ReturnType<typeof useBenchmarkDataSource>["manifest"]>["databases"];
-  currentMetadata: LoadedBenchmarkDatabase["metadata"] | null;
   siteTitle: string;
   siteDescription: string;
-  plotTheme: ReturnType<typeof plotThemeFor>;
   allRuns: BenchmarkRun[];
   runsById: ReadonlyMap<string, BenchmarkRun>;
   dimensionSelection: BenchmarkDimensionSelection;
   hasDatabase: boolean;
   benchmarkViewIndex: BenchmarkViewCatalog;
-  latestRun: BenchmarkRun | null;
   databaseCatalog: DatabaseCatalogEntry[];
   databaseSourceRevision: number;
 };
@@ -51,15 +45,13 @@ export type BenchmarkDatabaseState = {
 function buildDatabaseCatalog(options: {
   sourceDatabases: NonNullable<ReturnType<typeof useBenchmarkDataSource>["manifest"]>["databases"];
   database: LoadedBenchmarkDatabase | null;
-  currentMetadata: LoadedBenchmarkDatabase["metadata"] | null;
-  loadedDatabaseStats: DatabaseCatalogStats | null;
   selectedDatabaseId: string;
 }): DatabaseCatalogEntry[] {
-  const { sourceDatabases, database, currentMetadata, loadedDatabaseStats, selectedDatabaseId } = options;
+  const { sourceDatabases, database, selectedDatabaseId } = options;
 
   const manifestEntries = sourceDatabases.map((manifestDatabase) => {
     const isActive = Boolean(database?.source_url && selectedDatabaseId === manifestDatabase.id);
-    const metadata = isActive ? currentMetadata : null;
+    const metadata = isActive ? database?.metadata ?? null : null;
     return {
       id: manifestDatabase.id,
       title: metadata ? metadataTitle(metadata) : databaseTitle(manifestDatabase),
@@ -72,7 +64,7 @@ function buildDatabaseCatalog(options: {
       schemaVersion: metadata?.schema_version ?? null,
       metadataPreview: metadata?.raw ?? manifestDatabase.metadata_preview ?? {},
       isActive,
-      stats: isActive ? loadedDatabaseStats : null
+      stats: isActive ? database?.stats ?? null : null
     };
   });
 
@@ -89,7 +81,7 @@ function buildDatabaseCatalog(options: {
     schemaVersion: database.metadata.schema_version,
     metadataPreview: database.metadata.raw,
     isActive: true,
-    stats: loadedDatabaseStats
+    stats: database.stats
   }, ...manifestEntries];
 }
 
@@ -121,7 +113,6 @@ export function useBenchmarkDatabaseState(): BenchmarkDatabaseState {
   const benchmarkViewIndex = database?.viewCatalog ?? Empty_View_Catalog;
   const dimensionSelection = useBenchmarkDimensionSelector(database, settings, setSetting);
 
-  const plotTheme = useMemo(() => plotThemeFor(settings.theme), [settings.theme]);
   const sourceDatabases = manifest?.databases ?? [];
   const currentMetadata = database?.metadata ?? null;
   const siteTitle = currentMetadata ? metadataTitle(currentMetadata) : manifest?.site?.title || "BenchLedger";
@@ -129,20 +120,14 @@ export function useBenchmarkDatabaseState(): BenchmarkDatabaseState {
     ? metadataDescription(currentMetadata)
     : manifest?.site?.description || "Load a benchmark SQLite database to inspect runs and trends.";
 
-  const loadedDatabaseStats = useMemo(
-    () => buildDatabaseCatalogStats(database),
-    [database]
-  );
 
   const databaseCatalog = useMemo(
     () => buildDatabaseCatalog({
       sourceDatabases,
       database,
-      currentMetadata,
-      loadedDatabaseStats,
       selectedDatabaseId: settings.selectedDatabaseId
     }),
-    [currentMetadata, database, loadedDatabaseStats, settings.selectedDatabaseId, sourceDatabases]
+    [database, settings.selectedDatabaseId, sourceDatabases]
   );
 
   return {
@@ -159,16 +144,13 @@ export function useBenchmarkDatabaseState(): BenchmarkDatabaseState {
     benchmarksByKey,
     benchmarkDefinitions,
     sourceDatabases,
-    currentMetadata,
     siteTitle,
     siteDescription,
-    plotTheme,
     allRuns,
     runsById,
     dimensionSelection,
     hasDatabase: Boolean(database && database.stats.rowCount),
     benchmarkViewIndex,
-    latestRun: allRuns[0] ?? null,
     databaseCatalog,
     databaseSourceRevision: sourceRevision
   };

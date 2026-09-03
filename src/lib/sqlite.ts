@@ -427,7 +427,7 @@ function rememberDatabaseResponseRevision(url: string, response: Response) {
   if (revision !== null) databaseResponseRevisions.set(url, revision);
 }
 
-export async function databaseUrlHasChanged(url: string, signal?: AbortSignal): Promise<boolean> {
+async function databaseUrlHasChanged(url: string, signal?: AbortSignal): Promise<boolean> {
   const response = await fetch(url, { method: "HEAD", cache: "no-store", signal });
   if (response.status === 405 || response.status === 501) return true;
   if (!response.ok) throw new Error(`Failed to check SQLite file: ${response.status}`);
@@ -436,7 +436,7 @@ export async function databaseUrlHasChanged(url: string, signal?: AbortSignal): 
   return revision === null || previousRevision === undefined || revision !== previousRevision;
 }
 
-export type LoadedDatabaseFile = { bytes: ArrayBuffer; sourceLabel: string; sourceUrl: string | null; };
+type LoadedDatabaseFile = { bytes: ArrayBuffer; sourceLabel: string; sourceUrl: string | null; };
 
 export async function loadDatabaseFileFromUrl(url: string, sourceLabel = sourceLabelFromUrl(url), signal?: AbortSignal): Promise<LoadedDatabaseFile> {
   const response = await fetch(url, { cache: "no-store", signal });

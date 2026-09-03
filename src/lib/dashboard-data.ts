@@ -8,20 +8,9 @@ import type {
   BenchLedgerManifestDatabase,
   BenchLedgerMetadata,
   LoadedBenchmarkDatabase,
-  PairComparison
+  PairComparison,
+  BenchmarkDatabaseStats
 } from "./types";
-
-export type DatabaseCatalogStats = {
-  rowCount: number;
-  runCount: number;
-  keyCount: number;
-  hardwareEnvironmentCount: number;
-  softwareEnvironmentCount: number;
-  configurationCount: number;
-  metrics: string[];
-  latestRunDate: string;
-  dirtyRunCount: number;
-};
 
 export type DatabaseCatalogEntry = {
   id: string;
@@ -35,12 +24,8 @@ export type DatabaseCatalogEntry = {
   schemaVersion: number | null;
   metadataPreview: Record<string, string | null>;
   isActive: boolean;
-  stats: DatabaseCatalogStats | null;
+  stats: BenchmarkDatabaseStats | null;
 };
-
-export function buildDatabaseCatalogStats(database: LoadedBenchmarkDatabase | null): DatabaseCatalogStats | null {
-  return database?.stats ?? null;
-}
 
 export const Asset_Base_URL = import.meta.env.BASE_URL;
 
@@ -51,45 +36,10 @@ export const runPairTableColumns: { key: RunPairSortKey; label: string }[] = [
   { key: "delta", label: "Delta" }
 ];
 
-function _metadataRecord(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
-}
-
-function _metadataString(record: Record<string, unknown>, key: string): string {
-  const value = record[key];
-  return typeof value === "string" ? value : "";
-}
-
-function _metadataStringArray(record: Record<string, unknown>, key: string): string[] {
-  const value = record[key];
-  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0) : [];
-}
-
-function _codeStateIdentitySource(run: Pick<BenchmarkRun, "code_state_identity">): Record<string, unknown> {
-  return _metadataRecord(run.code_state_identity.source);
-}
-
-function _runSource(run: Pick<BenchmarkRun, "run_metadata">): Record<string, unknown> {
-  return _metadataRecord(run.run_metadata.source);
-}
-
-function _runBranch(run: Pick<BenchmarkRun, "run_metadata">): string {
-  return _metadataString(_runSource(run), "branch");
-}
-
-function _runTags(run: Pick<BenchmarkRun, "run_metadata">): string[] {
-  return _metadataStringArray(_runSource(run), "tags");
-}
-
-function _codeStateRevision(run: Pick<BenchmarkRun, "code_state_identity">): string {
-  return _metadataString(_codeStateIdentitySource(run), "revision");
-}
-
-function _dirtyRunSuffix(run: BenchmarkRun): string {
-  if (run.code_state_metadata.source?.dirty !== true) return "";
-  const digest = _metadataString(_codeStateIdentitySource(run), "diff_digest");
-  return ` (${digest ? digest.slice(0, 6) : "dirty"})`;
-}
+function _runBranch(run: Pick<BenchmarkRun, "run_metadata">): string { return run.run_metadata.source?.branch ?? ""; }
+function _runTags(run: Pick<BenchmarkRun, "run_metadata">): string[] { return run.run_metadata.source?.tags ?? []; }
+function _codeStateRevision(run: Pick<BenchmarkRun, "code_state_identity">): string { return run.code_state_identity.source?.revision ?? ""; }
+function _dirtyRunSuffix(run: BenchmarkRun): string { if (run.code_state_metadata.source?.dirty !== true) return ""; const digest = run.code_state_identity.source?.diff_digest ?? ""; return ` (${digest ? digest.slice(0, 6) : "dirty"})`; }
 
 export function runHeadline(run: BenchmarkRun): string {
   const suffix = _dirtyRunSuffix(run);
@@ -114,7 +64,7 @@ export function runAxisLabel(run: BenchmarkRun): string {
 }
 
 export function runIdentityTitle(run: BenchmarkRun, separator = "\n"): string {
-  const digest = _metadataString(_codeStateIdentitySource(run), "diff_digest");
+  const digest = run.code_state_identity.source?.diff_digest ?? "";
   return [`Run: ${runHeadline(run)}`, `Tag: ${_runTags(run).join(", ") || "n/a"}`, `Branch: ${_runBranch(run) || "n/a"}`,
     `Revision: ${_codeStateRevision(run) || "n/a"}`, `Dirty: ${run.code_state_metadata.source?.dirty === true}`, `Diff digest: ${digest || "n/a"}`].join(separator);
 }
@@ -148,8 +98,6 @@ export function buildBenchmarkPairComparisons(
           benchmark_label,
           focus_value,
           baseline_value,
-          focus_unit: focus.unit,
-          baseline_unit: baseline.unit,
           delta: percentageChange(focus_value, baseline_value),
           unit: displayUnitContext.unit || focus.unit,
           better: focus.better
@@ -163,8 +111,6 @@ export function buildBenchmarkPairComparisons(
           benchmark_label,
           focus_value: focus.value,
           baseline_value: null,
-          focus_unit: focus.unit,
-          baseline_unit: null,
           delta: null,
           unit: focus.unit,
           better: focus.better
@@ -178,8 +124,6 @@ export function buildBenchmarkPairComparisons(
         benchmark_label,
         focus_value: null,
         baseline_value: baseline.value,
-        focus_unit: null,
-        baseline_unit: baseline.unit,
         delta: null,
         unit: baseline.unit,
         better: baseline.better
@@ -228,53 +172,19 @@ function compareRuns(left: BenchmarkRun, right: BenchmarkRun): number {
 }
 
 export function buildRuns(database: LoadedBenchmarkDatabase): BenchmarkRun[] {
-  const runs: BenchmarkRun[] = [];
-  for (const run of database.runsById.values()) {
-    const codeState = database.codeStatesById.get(run.code_state_id);
-    const hardwareEnvironment = database.hardwareEnvironmentsById.get(run.hardware_environment_id);
-    const softwareEnvironment = database.softwareEnvironmentsById.get(run.software_environment_id);
-    if (!codeState || !hardwareEnvironment || !softwareEnvironment) continue;
-
-    const hardwareLabel = hardwareEnvironment.label || hardwareEnvironment.id;
-    const softwareLabel = softwareEnvironment.label || softwareEnvironment.id;
-    const pairLabel = environmentPairLabel(hardwareEnvironment.identity, softwareEnvironment.identity, hardwareLabel, softwareLabel);
-    const notes = typeof run.metadata.notes === "string" ? run.metadata.notes : "";
-
-    runs.push({
-      run_id: run.id,
-      code_state_id: run.code_state_id,
-      code_label: codeState.label,
-      code_date: codeState.code_date,
-      hardware_environment_id: hardwareEnvironment.id,
-      hardware_environment_label: hardwareLabel,
-      software_environment_id: softwareEnvironment.id,
-      software_environment_label: softwareLabel,
-      environment_pair_key: JSON.stringify([hardwareEnvironment.id, softwareEnvironment.id]),
-      environment_pair_label: pairLabel,
-      configuration_key: JSON.stringify([codeState.id, hardwareEnvironment.id, softwareEnvironment.id]),
-      configuration_label: `${codeState.label || codeState.id} · ${pairLabel}`,
-      measured_at: run.measured_at,
-      notes,
-      code_state_identity: codeState.identity,
-      code_state_metadata: codeState.metadata,
-      hardware_environment_identity: hardwareEnvironment.identity,
-      hardware_environment_metadata: hardwareEnvironment.metadata,
-      software_environment_identity: softwareEnvironment.identity,
-      software_environment_metadata: softwareEnvironment.metadata,
-      run_metadata: run.metadata,
-      benchmark_count: database.benchmarkCountByRun.get(run.id) ?? 0
-    });
-  }
-
-  const pairLabels = new Map(runs.map((run) => [run.environment_pair_key, run.environment_pair_label]));
-  const labelCounts = new Map<string, number>();
+  const resolved = Array.from(database.runsById.values()).flatMap((run) => {
+    const codeState = database.codeStatesById.get(run.code_state_id), hardwareEnvironment = database.hardwareEnvironmentsById.get(run.hardware_environment_id), softwareEnvironment = database.softwareEnvironmentsById.get(run.software_environment_id);
+    if (!codeState || !hardwareEnvironment || !softwareEnvironment) return [];
+    const hardwareLabel = hardwareEnvironment.label || hardwareEnvironment.id, softwareLabel = softwareEnvironment.label || softwareEnvironment.id;
+    return [{ run, codeState, hardwareEnvironment, softwareEnvironment, hardwareLabel, softwareLabel, pairKey: JSON.stringify([hardwareEnvironment.id, softwareEnvironment.id]), pairLabel: environmentPairLabel(hardwareEnvironment.identity, softwareEnvironment.identity, hardwareLabel, softwareLabel) }];
+  });
+  const pairLabels = new Map(resolved.map((entry) => [entry.pairKey, entry.pairLabel])), labelCounts = new Map<string, number>();
   for (const label of pairLabels.values()) labelCounts.set(label, (labelCounts.get(label) ?? 0) + 1);
-  for (const run of runs) {
-    if ((labelCounts.get(run.environment_pair_label) ?? 0) < 2) continue;
-    run.environment_pair_label += ` · s:${run.software_environment_id.replace(/^software-/, "").slice(0, 6)}`;
-    run.configuration_label = `${run.code_label || run.code_state_id} · ${run.environment_pair_label}`;
-  }
-  return runs.sort(compareRuns);
+  return resolved.map(({ run, codeState, hardwareEnvironment, softwareEnvironment, hardwareLabel, softwareLabel, pairLabel }) => ({
+    run_id: run.id, code_label: codeState.label, code_date: codeState.code_date, hardware_environment_id: hardwareEnvironment.id, hardware_environment_label: hardwareLabel, software_environment_id: softwareEnvironment.id, software_environment_label: softwareLabel,
+    environment_pair_label: (labelCounts.get(pairLabel) ?? 0) > 1 ? `${pairLabel} · s:${softwareEnvironment.id.replace(/^software-/, "").slice(0, 6)}` : pairLabel, configuration_key: JSON.stringify([codeState.id, hardwareEnvironment.id, softwareEnvironment.id]), measured_at: run.measured_at,
+    code_state_identity: codeState.identity, code_state_metadata: codeState.metadata, hardware_environment_identity: hardwareEnvironment.identity, hardware_environment_metadata: hardwareEnvironment.metadata, software_environment_identity: softwareEnvironment.identity, software_environment_metadata: softwareEnvironment.metadata, run_metadata: run.metadata
+  })).sort(compareRuns);
 }
 
 export function databaseTitle(database: BenchLedgerManifestDatabase): string {

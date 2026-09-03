@@ -11,7 +11,7 @@ import type { IconType } from "react-icons";
 import { TbCube } from "react-icons/tb";
 import type { ActivePage } from "../lib/dashboard-settings";
 
-export type AppPageDefinition = {
+type AppPageDefinition = {
   id: ActivePage;
   navigationLabel: string;
   Icon: IconType;

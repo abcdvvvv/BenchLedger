@@ -12,7 +12,7 @@ import type { BenchmarkDefinition, BenchmarkRun, PairComparison } from "../../li
 import { benchmarkDeltaTone } from "../benchmarks/benchmarkDeltaPresentation";
 import { LatestTaskRunner } from "../../lib/latest-task";
 
-export type OverviewStat = { Icon: IconType; label: string; value: string; valueTone?: "positive" | "negative" | "neutral"; delta: string; deltaTone: "positive" | "negative" | "neutral"; detail: ReactNode; detailFullWidth?: boolean; inlineNoWrap?: boolean; };
+type OverviewStat = { Icon: IconType; label: string; value: string; valueTone?: "positive" | "negative" | "neutral"; delta: string; deltaTone: "positive" | "negative" | "neutral"; detail: ReactNode; detailFullWidth?: boolean; inlineNoWrap?: boolean; };
 
 type UseOverviewModelOptions = {
   session: BenchmarkDatabaseSession | null;
@@ -21,6 +21,7 @@ type UseOverviewModelOptions = {
   benchmarkCount: number;
   benchmarksByKey: ReadonlyMap<string, BenchmarkDefinition>;
   allRuns: BenchmarkRun[];
+  runsById: ReadonlyMap<string, BenchmarkRun>;
   dimensionSelection: BenchmarkDimensionSelection;
   focusPointKey: string;
   onFocusPointKeyChange: (pointKey: string) => void;
@@ -35,10 +36,10 @@ type UseOverviewModelOptions = {
   timeEnd: string;
 };
 
-type UseOverviewModelResult = { points: DimensionSelectionPoint[]; runsByPoint: ReadonlyMap<string, BenchmarkRun[]>; latestRun: BenchmarkRun | null; filteredRuns: BenchmarkRun[]; focusPoint: DimensionSelectionPoint | null; baselinePoint: DimensionSelectionPoint | null; focusRun: BenchmarkRun | null; sortedComparisonRows: PairComparison[]; stats: OverviewStat[]; toggleRunPairSort: (key: RunPairSortKey) => void; };
+type UseOverviewModelResult = { points: DimensionSelectionPoint[]; runsByPoint: ReadonlyMap<string, BenchmarkRun[]>; focusPoint: DimensionSelectionPoint | null; baselinePoint: DimensionSelectionPoint | null; focusRun: BenchmarkRun | null; sortedComparisonRows: PairComparison[]; stats: OverviewStat[]; toggleRunPairSort: (key: RunPairSortKey) => void; };
 
 export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewModelResult {
-  const { session, query, sourceRevision, benchmarkCount, benchmarksByKey, allRuns, dimensionSelection, focusPointKey, onFocusPointKeyChange, baselinePointKey, onBaselinePointKeyChange, runPairSort, onRunPairSortChange, conditionCount, yAxis, branch, timeStart, timeEnd } = options;
+  const { session, query, sourceRevision, benchmarkCount, benchmarksByKey, allRuns, runsById, dimensionSelection, focusPointKey, onFocusPointKeyChange, baselinePointKey, onBaselinePointKeyChange, runPairSort, onRunPairSortChange, conditionCount, yAxis, branch, timeStart, timeEnd } = options;
   const [runSlice, setRunSlice] = useState<BenchmarkRunSliceSummary[]>([]);
   const [pairAggregates, setPairAggregates] = useState<BenchmarkTrendAggregateRow[]>([]);
   const runSliceQueries = useMemo(() => new LatestTaskRunner<BenchmarkRunSliceSummary[]>(), []);
@@ -88,7 +89,7 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
     return () => { cancelled = true; };
   }, [baselinePoint?.key, focusPoint?.key, pairAggregateQueries, query, session, sourceRevision]);
 
-  const pointAggregates = useMemo(() => buildDimensionPointAggregates(pairAggregates, new Map(allRuns.map((run) => [run.run_id, run])), dimensionSelection), [allRuns, dimensionSelection, pairAggregates]);
+  const pointAggregates = useMemo(() => buildDimensionPointAggregates(pairAggregates, runsById, dimensionSelection), [dimensionSelection, pairAggregates, runsById]);
   const focusRows = useMemo(() => focusPoint ? pointAggregates.filter((row) => row.point_key === focusPoint.key) : [], [focusPoint, pointAggregates]);
   const baselineRows = useMemo(() => baselinePoint ? pointAggregates.filter((row) => row.point_key === baselinePoint.key) : [], [baselinePoint, pointAggregates]);
   const comparisonRows = useMemo<PairComparison[]>(() => buildBenchmarkPairComparisons(focusRows, baselineRows, benchmarksByKey), [baselineRows, benchmarksByKey, focusRows]);
@@ -124,5 +125,5 @@ export function useOverviewModel(options: UseOverviewModelOptions): UseOverviewM
     { Icon: FiGitBranch, label: "Dirty Snapshots", value: filteredRuns.filter((run) => Boolean(run.code_state_metadata.source?.dirty)).length.toLocaleString(), delta: "", deltaTone: "neutral", detail: latestRun?.code_state_metadata.source?.dirty ? "Latest run was recorded from a dirty worktree" : "Latest run is clean" }
   ], [benchmarkCount, capturedRunsDetail, filteredRuns, improvedCount, largestDeltaLabel, largestDeltaRow, latestRun, latestRunSliceRowCount, regressedCount, sliceRowCount]);
 
-  return { points, runsByPoint, latestRun, filteredRuns, focusPoint, baselinePoint, focusRun, sortedComparisonRows, stats, toggleRunPairSort };
+  return { points, runsByPoint, focusPoint, baselinePoint, focusRun, sortedComparisonRows, stats, toggleRunPairSort };
 }

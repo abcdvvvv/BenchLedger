@@ -4,26 +4,11 @@ import type { TrendMarkerSymbol } from "./trend-marker-symbols";
 import type { BenchmarkRow } from "./types";
 import type { ThemeMode, TrendLineShape, TrendMarkerFillMode } from "./dashboard-settings";
 
-export type TrendPlotRow = Pick<BenchmarkRow, "run_id" | "benchmark_key" | "metric_name" | "statistic" | "unit" | "value" | "better"> & { code_date: string; measured_at: string; date_value: Date | null; run_axis_label: string; run_identity_title: string; run_count: number; x_key: string; x_label: string; };
+export type TrendPlotRow = Pick<BenchmarkRow, "unit" | "value"> & { code_date: string; measured_at: string; run_axis_label: string; run_identity_title: string; x_label: string; };
 
-export type PlotTheme = {
-  paper: string;
-  plot: string;
-  grid: string;
-  axis: string;
-  zero: string;
-  line: string;
-  areaGradientStart: string;
-  areaGradientEnd: string;
-  markerStrong: string;
-  marker: string;
-  markerMuted: string;
-  deltaUp: string;
-  deltaDown: string;
-  deltaNeutral: string;
-};
+export type PlotTheme = { grid: string; axis: string; line: string; };
 
-export type TrendDisplayUnitContext = {
+type TrendDisplayUnitContext = {
   unit: string;
   scaleValue: (value: number, unit: string) => number;
   formatValue: (value: number, unit: string) => string;
@@ -34,7 +19,6 @@ export const Trend_Y_Padding_Ratio = 0.08;
 export const Trend_Board_Plot_Height = 280;
 
 const _Trend_Categorical_Colors = ["#4e79a7", "#f28e2c", "#e15759", "#76b7b2", "#59a14f", "#edc949", "#af7aa1", "#ff9da7", "#9c755f", "#bab0ab"] as const;
-const _Trend_Time_Display_Units = Time_Metric_Units;
 const _Trend_Default_Display_Context: TrendDisplayUnitContext = {
   unit: "",
   scaleValue: (value) => value,
@@ -56,47 +40,14 @@ export function colorWithAlpha(color: string, alpha: number): string {
 }
 
 export function plotThemeFor(theme: ThemeMode): PlotTheme {
-  if (theme === "dark") {
-    return {
-      paper: "transparent",
-      plot: "transparent",
-      grid: "#2F2F33",
-      axis: "#A8A29E",
-      zero: "#44403C",
-      line: "#F59E0B",
-      areaGradientStart: "rgba(245, 158, 11, 0)",
-      areaGradientEnd: "rgba(245, 158, 11, 0.35)",
-      markerStrong: "#FBBF24",
-      marker: "#F59E0B",
-      markerMuted: "#78716C",
-      deltaUp: "#DC2626",
-      deltaDown: "#059669",
-      deltaNeutral: "#78716C"
-    };
-  }
-  return {
-    paper: "transparent",
-    plot: "transparent",
-    grid: "#E7E5E4",
-    axis: "#78716C",
-    zero: "#D6D3D1",
-    line: "#B45309",
-    areaGradientStart: "rgba(180, 83, 9, 0)",
-    areaGradientEnd: "rgba(180, 83, 9, 0.28)",
-    markerStrong: "#18181B",
-    marker: "#B45309",
-    markerMuted: "#A8A29E",
-    deltaUp: "#DC2626",
-    deltaDown: "#059669",
-    deltaNeutral: "#78716C"
-  };
+  return theme === "dark" ? { grid: "#2F2F33", axis: "#A8A29E", line: "#F59E0B" } : { grid: "#E7E5E4", axis: "#78716C", line: "#B45309" };
 }
 
 export function colorForBenchmark(index: number): string {
   return _Trend_Categorical_Colors[index % _Trend_Categorical_Colors.length];
 }
 
-export function metricKey(row: Pick<BenchmarkRow, "metric_name" | "statistic">): string {
+function metricKey(row: Pick<BenchmarkRow, "metric_name" | "statistic">): string {
   return `${row.metric_name}::${row.statistic}`;
 }
 
@@ -145,7 +96,6 @@ export function trendDisplayUnitContext(
   if (!sourceUnits.length) return _Trend_Default_Display_Context;
 
   const sourceUnit = sourceUnits[0];
-  const sourceUnitNs = timeUnitNanoseconds(sourceUnit);
   const allTimeUnits = sourceUnits.every((unit) => timeUnitNanoseconds(unit) !== null);
 
   if (allTimeUnits) {
@@ -154,10 +104,10 @@ export function trendDisplayUnitContext(
       if (!Number.isFinite(row.value) || unitNs === null) return maxValue;
       return Math.max(maxValue, Math.abs(row.value) * unitNs);
     }, 0);
-    const displayUnit = _Trend_Time_Display_Units.reduce((currentUnit, candidateUnit) => {
+    const displayUnit = Time_Metric_Units.reduce((currentUnit, candidateUnit) => {
       if (maxNs / candidateUnit.nanoseconds >= 1) return candidateUnit;
       return currentUnit;
-    }, _Trend_Time_Display_Units[0]);
+    }, Time_Metric_Units[0]);
 
     return {
       unit: displayUnit.unit,
@@ -174,35 +124,19 @@ export function trendDisplayUnitContext(
     };
   }
 
-  if (sourceUnits.length !== 1 || sourceUnitNs === null) {
-    if (sourceUnits.length === 1) {
-      return {
-        unit: sourceUnit,
-        scaleValue: (value) => value,
-        formatValue: (value, unit) => formatMetricValue(value, unit),
-        formatMetricLabel: (label) => _formatMetricLabelUnit(label, sourceUnit)
-      };
-    }
+  if (sourceUnits.length === 1) {
     return {
-      unit: "",
+      unit: sourceUnit,
       scaleValue: (value) => value,
       formatValue: (value, unit) => formatMetricValue(value, unit),
-      formatMetricLabel: (label) => label || "Metric value"
+      formatMetricLabel: (label) => _formatMetricLabelUnit(label, sourceUnit)
     };
   }
-
   return {
-    unit: sourceUnit,
-    scaleValue: (value, unit) => {
-      const unitNs = timeUnitNanoseconds(unit);
-      return unitNs === null ? value : value * unitNs / sourceUnitNs;
-    },
-    formatValue: (value, unit) => {
-      const unitNs = timeUnitNanoseconds(unit);
-      if (unitNs === null) return formatMetricValue(value, unit);
-      return `${_formatScaledNumber(value * unitNs / sourceUnitNs)} ${sourceUnit}`;
-    },
-    formatMetricLabel: (label) => _formatMetricLabelUnit(label, sourceUnit, sourceUnit)
+    unit: "",
+    scaleValue: (value) => value,
+    formatValue: (value, unit) => formatMetricValue(value, unit),
+    formatMetricLabel: (label) => label || "Metric value"
   };
 }
 
@@ -232,8 +166,6 @@ export function buildTrendTrace(
     displayUnitContext: TrendDisplayUnitContext;
     color: string;
     label: string;
-    plotTheme: PlotTheme;
-    theme: ThemeMode;
     yMin: number;
     yPadding: number;
     showLegend: boolean;
@@ -248,8 +180,6 @@ export function buildTrendTrace(
     displayUnitContext,
     color,
     label,
-    plotTheme,
-    theme,
     yMin,
     yPadding,
     showLegend,
@@ -258,7 +188,7 @@ export function buildTrendTrace(
   const x = rows.map((row) => row.x_label);
   const y = rows.map((row) => displayUnitContext.scaleValue(row.value, row.unit));
   const gradientStart = colorWithAlpha(color, 0);
-  const gradientEnd = colorWithAlpha(color, theme === "dark" ? 0.2 : 0.2);
+  const gradientEnd = colorWithAlpha(color, 0.2);
   const colorscale = fillGradientScale ?? [
     [0, gradientStart],
     [0.4, gradientStart],
@@ -296,7 +226,7 @@ export function buildTrendTrace(
       },
       marker: {
         size: 8,
-        color: markerFillMode === "filled" ? color : plotTheme.plot,
+        color: markerFillMode === "filled" ? color : "transparent",
         symbol: markerSymbol,
         line: { color, width: 2.5 }
       },

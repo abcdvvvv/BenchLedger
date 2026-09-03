@@ -6,7 +6,6 @@ import { databaseTitle, metadataTitle, sourceSummary } from "../lib/dashboard-da
 import type { ActivePage, ThemeMode } from "../lib/dashboard-settings";
 import type {
   BenchLedgerManifestDatabase,
-  BenchLedgerMetadata,
   LoadedBenchmarkDatabase
 } from "../lib/types";
 import { buttonClassName } from "../components/ui/Button";
@@ -16,7 +15,7 @@ import { cn } from "../components/ui/cn";
 import { resolveSafeUserUrl } from "../lib/url";
 import type { SidebarMode } from "./layoutConfig";
 
-export type AppSidebarProps = {
+type AppSidebarProps = {
   mode: SidebarMode;
   activePage: ActivePage;
   onPageChange: (page: ActivePage) => void;
@@ -24,7 +23,6 @@ export type AppSidebarProps = {
   selectedDatabaseId: string;
   onDatabaseChange: (databaseId: string) => void | Promise<void>;
   database: LoadedBenchmarkDatabase | null;
-  currentMetadata: BenchLedgerMetadata | null;
   theme: ThemeMode;
   assetBaseUrl: string;
   siteTitle: string;
@@ -64,12 +62,12 @@ export function AppSidebar(props: AppSidebarProps) {
     selectedDatabaseId,
     onDatabaseChange,
     database,
-    currentMetadata,
     theme,
     assetBaseUrl,
     siteTitle,
     onRequestClose
   } = props;
+  const currentMetadata = database?.metadata ?? null;
   const defaultLogoSrc = `${assetBaseUrl}${theme === "dark" ? "LightLogo.png" : "DarkLogo.png"}`;
   const defaultLogoHref = "https://github.com/abcdvvvv/BenchLedger";
   const customLogoUrl = theme === "dark"
@@ -85,7 +83,6 @@ export function AppSidebar(props: AppSidebarProps) {
   const databasePickerButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const iconMode = mode === "icon";
-  const fullMode = mode !== "icon";
   const localFileActive = Boolean(database && !database.source_url);
   const canChooseDatabase = sourceDatabases.length > 1 || (sourceDatabases.length > 0 && (!database || localFileActive));
 
@@ -210,7 +207,7 @@ export function AppSidebar(props: AppSidebarProps) {
       </div>
 
       <div className={cn("w-full", iconMode ? "space-y-2" : "space-y-3")}>
-        {fullMode ? <div className="type-eyebrow px-1">Navigation</div> : null}
+        {!iconMode ? <div className="type-eyebrow px-1">Navigation</div> : null}
         <nav aria-label="Primary navigation" className="grid grid-cols-1 gap-1">
           {App_Page_Definitions.map((item) => {
             const active = activePage === item.id;
@@ -245,7 +242,7 @@ export function AppSidebar(props: AppSidebarProps) {
         </nav>
       </div>
 
-      {fullMode && canChooseDatabase ? (
+      {!iconMode && canChooseDatabase ? (
         <div className="surface-card pad-panel space-y-3">
           <div className="type-eyebrow">Data Source</div>
           <label className="flex flex-col gap-2">
@@ -260,7 +257,7 @@ export function AppSidebar(props: AppSidebarProps) {
         </div>
       ) : null}
 
-      {fullMode ? (
+      {!iconMode ? (
         <div className="surface-card pad-panel mt-auto">
           <div className="type-card-title flex items-center gap-2">
             <FiDatabase className="size-4" aria-hidden="true" />

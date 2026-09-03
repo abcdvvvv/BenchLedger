@@ -6,9 +6,9 @@ import { normalizeDimensionValueSelections, type DimensionValueSelection } from 
 export type ThemeMode = "light" | "dark";
 export type TrendLineShape = "line" | "curve";
 export type TrendMarkerFillMode = "hollow" | "filled";
-export type TrendBoardViewMode = "separate" | "combined";
+type TrendBoardViewMode = "separate" | "combined";
 export type DisplayStrategy = "all" | "tagged-only" | "tagged-main";
-export const Active_Pages = [
+const Active_Pages = [
   "overview",
   "trend-board",
   "dimension-selector",
@@ -54,10 +54,10 @@ export type UISettings = {
   benchmarkDiffPageSize: BenchmarkDiffPageSize;
 };
 
-export type PersistedUISettings = Omit<UISettings, "activePage">;
+type PersistedUISettings = Omit<UISettings, "activePage">;
 
 export const UI_SETTINGS_STORAGE_KEY = "benchledger-ui-settings";
-export const Trend_Board_Default_Columns = 3;
+const Trend_Board_Default_Columns = 3;
 export const Trend_Board_Min_Columns = 1;
 export const Trend_Board_Max_Columns = 10;
 
@@ -78,7 +78,7 @@ export function clampTrendBoardColumns(value: number): number {
   return Math.min(Trend_Board_Max_Columns, Math.max(Trend_Board_Min_Columns, Math.round(value)));
 }
 
-export function clampBenchmarkDiffPageSize(value: number): BenchmarkDiffPageSize {
+function clampBenchmarkDiffPageSize(value: number): BenchmarkDiffPageSize {
   return Benchmark_Diff_Page_Size_Options.includes(value as BenchmarkDiffPageSize)
     ? value as BenchmarkDiffPageSize
     : 50;

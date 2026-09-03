@@ -35,7 +35,7 @@ import { useBenchmarkViewSlice } from "../benchmarks/useBenchmarkViewSlice";
 import { useOverviewModel } from "./useOverviewModel";
 import { DimensionSelectorInvalidBanner } from "../dimension-selector/DimensionSelectorInvalidBanner";
 
-export type OverviewPageProps = { state: BenchmarkDatabaseState; onOpenLocalFilePicker: () => void; };
+type OverviewPageProps = { state: BenchmarkDatabaseState; onOpenLocalFilePicker: () => void; };
 
 function DatabaseBanner(props: { hasLoadedDatabase: boolean; hasDatabase: boolean; error: string; onOpenLocalFilePicker: () => void }) {
   if (props.hasDatabase && !props.error) return null;
@@ -90,7 +90,7 @@ function RepresentativeRunContextPanel(props: { focusRun: BenchmarkRun | null; f
   const rows = [
     ["Varying Dimension", props.dimensionLabel || "n/a"],
     ["Focus Value", focusPoint?.label || "n/a"],
-    ["Exact Configurations", focusPoint ? focusPoint.configurationCount.toLocaleString() : "n/a"],
+    ["Exact Configurations", focusPoint ? focusPoint.configurationKeys.length.toLocaleString() : "n/a"],
     ["Representative Run", focusRun ? runHeadline(focusRun) : "n/a"],
     ["Code Date", focusRun ? formatDate(focusRun.code_date) : "n/a"],
     ["Measured", focusRun ? formatDate(focusRun.measured_at) : "n/a"],
@@ -182,6 +182,7 @@ export function OverviewPage({ state, onOpenLocalFilePicker }: OverviewPageProps
     benchmarkCount: slice.benchmarkOptions.length,
     benchmarksByKey: state.benchmarksByKey,
     allRuns: state.allRuns,
+    runsById: state.runsById,
     dimensionSelection: state.dimensionSelection,
     focusPointKey: settings.focusPointKey,
     onFocusPointKeyChange: setFocusPointKey,

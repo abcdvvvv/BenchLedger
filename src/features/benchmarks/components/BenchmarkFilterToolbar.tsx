@@ -3,7 +3,7 @@ import type { DisplayStrategy } from "../../../lib/dashboard-settings";
 import { Field, FieldLabel, SelectField, Toolbar, ToolbarGrid } from "../../../components/ui/Field";
 import { TimeRangePopover, type TimeRangeSelectionProps } from "./TimeRangePopover";
 
-export type BenchmarkFilterToolbarProps = TimeRangeSelectionProps & { hasDatabase: boolean; yAxis: string; yAxisOptions: string[]; onYAxisChange: (value: string) => void; displayStrategy: DisplayStrategy; onDisplayStrategyChange: (value: DisplayStrategy) => void; branch: string; branchOptions: string[]; onBranchChange: (value: string) => void; timeRangeLabel: string; };
+type BenchmarkFilterToolbarProps = TimeRangeSelectionProps & { hasDatabase: boolean; yAxis: string; yAxisOptions: string[]; onYAxisChange: (value: string) => void; displayStrategy: DisplayStrategy; onDisplayStrategyChange: (value: DisplayStrategy) => void; branch: string; branchOptions: string[]; onBranchChange: (value: string) => void; timeRangeLabel: string; };
 
 export function BenchmarkFilterToolbar({ hasDatabase, ...filters }: BenchmarkFilterToolbarProps) {
   return (
