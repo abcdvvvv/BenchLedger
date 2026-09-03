@@ -2,16 +2,15 @@
 
 ## [Unreleased]
 
+## [0.8.0] - 2026/09/03
 ### Added
 - Added Dimension Selector for choosing exactly one varying identity dimension for the x-axis and selecting values for all fixed dimensions across Dashboard and Trend Board, with validation for incomplete selections.
-
 ### Changed
 - Dimension Selector now presents Code, Hardware, and Software dimensions hierarchically and manages fixed-dimension values directly in the table, with one selected value shown as Exact and multiple values shown as Grouped.
 - Dashboard Baseline and Focus selectors now prefer tags over commit SHAs, show measurement time, and list newer measurements first.
 - View-level condition controls now focus on Y-Axis, Branch, Time Range, and Display Strategy, while identity-dimension choices are managed in Dimension Selector.
 - Theme selection has moved to Settings as a Light/Dark control.
 - Improved responsiveness during dimension and filter changes and reduced memory use when loading large SQLite databases.
-
 ### Fixed
 - Fixed Dimension Selector persistence so dimension rules and fixed-value choices survive reloads, including temporarily incomplete selections.
 - Fixed dependent benchmark views so incomplete Dimension Selector configurations are reported clearly instead of continuing with a stale previous selection.
@@ -191,8 +190,8 @@ The bundled GitHub Actions workflow now supports three target modes through one 
 
 Initial usable release of BenchLedger.
 
-[Unreleased]: https://github.com/abcdvvvv/BenchLedger/compare/v0.7.1...HEAD
-[0.7.1]: https://github.com/abcdvvvv/BenchLedger/compare/v0.7.0...v0.7.1
+[Unreleased]: https://github.com/abcdvvvv/BenchLedger/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/abcdvvvv/BenchLedger/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/abcdvvvv/BenchLedger/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/abcdvvvv/BenchLedger/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/abcdvvvv/BenchLedger/compare/v0.5.4...v0.6.0
