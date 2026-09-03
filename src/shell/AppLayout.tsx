@@ -51,14 +51,19 @@ export function AppLayout(props: AppLayoutProps) {
   }
 
   useEffect(() => {
-    function handleResize() {
-      setSidebarMode(resolveSidebarMode(window.innerWidth, responsiveLayout));
+    const expandedQuery = window.matchMedia(`(min-width: ${responsiveLayout.sidebarExpandedMinWidth}px)`);
+    const iconQuery = window.matchMedia(`(min-width: ${responsiveLayout.sidebarIconMinWidth}px)`);
+
+    function syncSidebarMode() {
+      setSidebarMode(expandedQuery.matches ? "expanded" : iconQuery.matches ? "icon" : "drawer");
     }
 
-    handleResize();
-    window.addEventListener("resize", handleResize);
+    syncSidebarMode();
+    expandedQuery.addEventListener("change", syncSidebarMode);
+    iconQuery.addEventListener("change", syncSidebarMode);
     return () => {
-      window.removeEventListener("resize", handleResize);
+      expandedQuery.removeEventListener("change", syncSidebarMode);
+      iconQuery.removeEventListener("change", syncSidebarMode);
     };
   }, [responsiveLayout]);
 

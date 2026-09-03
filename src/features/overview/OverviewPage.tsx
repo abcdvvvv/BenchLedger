@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import type { BenchmarkDatabaseState } from "../../app/useBenchmarkDatabaseState";
+import { useUISettingSetter } from "../../app/useUISettingSetter";
 import { FiFolder } from "react-icons/fi";
 import { FiChevronLeft, FiChevronRight } from "react-icons/fi";
-import { RunSelectMenu } from "../benchmarks/components/RunSelectMenu";
+import { DimensionPointSelectMenu } from "../benchmarks/components/DimensionPointSelectMenu";
 import { Button } from "../../components/ui/Button";
 import { IconButton } from "../../components/ui/IconButton";
 import { StatusBadge } from "../../components/ui/Badge";
@@ -16,8 +18,7 @@ import { runHeadline, runPairTableColumns } from "../../lib/dashboard-data";
 import {
   Benchmark_Diff_Page_Size_Options,
   type BenchmarkDiffPageSize,
-  type RunPairSort,
-  type RunPairSortKey
+  type RunPairSort
 } from "../../lib/dashboard-settings";
 import {
   formatDate,
@@ -26,64 +27,37 @@ import {
 } from "../../lib/format";
 import { SegmentedToggle } from "../../components/ui/SegmentedToggle";
 import { benchmarkDeltaTone } from "../benchmarks/benchmarkDeltaPresentation";
-import type { OverviewStat } from "./useOverviewModel";
-import type { BenchmarkRun, PairComparison } from "../../lib/types";
-import { BenchmarkFilterToolbar, type BenchmarkFilterToolbarProps } from "../benchmarks/components/BenchmarkFilterToolbar";
+import type { BenchmarkRun } from "../../lib/types";
+import type { DimensionSelectionPoint } from "../../lib/dimension-selector";
+import { BenchmarkFilterToolbar } from "../benchmarks/components/BenchmarkFilterToolbar";
+import { BenchmarkKeyCascadeFilter } from "../benchmarks/components/BenchmarkKeyCascadeFilter";
+import { useBenchmarkViewSlice } from "../benchmarks/useBenchmarkViewSlice";
+import { useOverviewModel } from "./useOverviewModel";
+import { DimensionSelectorInvalidBanner } from "../dimension-selector/DimensionSelectorInvalidBanner";
 
-export type OverviewPageProps = {
-  header: {
-    siteTitle: string;
-    siteDescription: string;
-    focusRunId: string;
-    baselineRunId: string;
-    filteredRuns: BenchmarkRun[];
-    onFocusRunChange: (runId: string) => void;
-    onBaselineRunChange: (runId: string) => void;
-    onOpenLocalFilePicker: () => void;
-    downloadUrl: string | null;
-    downloadLabel: string;
-  };
-  datasetState: {
-    hasLoadedDatabase: boolean;
-    hasDataset: boolean;
-    error: string;
-  };
-  filters: Omit<BenchmarkFilterToolbarProps, "hasDataset">;
-  stats: OverviewStat[];
-  comparison: {
-    focusRun: BenchmarkRun | null;
-    baselineRun: BenchmarkRun | null;
-    environmentMismatch: boolean;
-    sortedComparisonRows: PairComparison[];
-    benchmarkDiffPageSize: BenchmarkDiffPageSize;
-    onBenchmarkDiffPageSizeChange: (value: BenchmarkDiffPageSize) => void;
-    runPairSort: RunPairSort | null;
-    onToggleRunPairSort: (key: RunPairSortKey) => void;
-  };
-};
+export type OverviewPageProps = { state: BenchmarkDatabaseState; onOpenLocalFilePicker: () => void; };
 
-function DatasetBanner(props: Pick<OverviewPageProps, "datasetState" | "header">) {
-  const { datasetState, header } = props;
-  if (datasetState.hasDataset && !datasetState.error) return null;
+function DatabaseBanner(props: { hasLoadedDatabase: boolean; hasDatabase: boolean; error: string; onOpenLocalFilePicker: () => void }) {
+  if (props.hasDatabase && !props.error) return null;
 
-  const title = datasetState.error
+  const title = props.error
     ? "Database load failed"
-    : datasetState.hasLoadedDatabase
+    : props.hasLoadedDatabase
       ? "No benchmark rows found"
       : "No database is loaded";
-  const description = datasetState.error || (
-    datasetState.hasLoadedDatabase
+  const description = props.error || (
+    props.hasLoadedDatabase
       ? "The loaded SQLite database does not contain benchmark result rows."
       : "Choose a local SQLite file to inspect benchmark history."
   );
 
   return (
     <Banner
-      tone={!datasetState.hasLoadedDatabase || Boolean(datasetState.error) ? "warning" : "default"}
+      tone={!props.hasLoadedDatabase || Boolean(props.error) ? "warning" : "default"}
       title={title}
       description={description}
       action={
-        <Button variant="primary" onClick={header.onOpenLocalFilePicker}>
+        <Button variant="primary" onClick={props.onOpenLocalFilePicker}>
           Choose Local SQLite
         </Button>
       }
@@ -91,8 +65,8 @@ function DatasetBanner(props: Pick<OverviewPageProps, "datasetState" | "header">
   );
 }
 
-function RunContextPanel(props: { focusRun: BenchmarkRun | null }) {
-  const { focusRun } = props;
+function RepresentativeRunContextPanel(props: { focusRun: BenchmarkRun | null; focusPoint: DimensionSelectionPoint | null; dimensionLabel: string; }) {
+  const { focusRun, focusPoint } = props;
   const runtimeName = focusRun?.software_environment_identity.runtime?.name || "";
   const runtimeVersion = focusRun?.software_environment_identity.runtime?.version || "";
   const cpuModel = focusRun?.hardware_environment_identity.cpu?.model || "";
@@ -114,7 +88,10 @@ function RunContextPanel(props: { focusRun: BenchmarkRun | null }) {
     ["Run Metadata", focusRun.run_metadata]
   ] : [];
   const rows = [
-    ["Run", focusRun ? runHeadline(focusRun) : "n/a"],
+    ["Varying Dimension", props.dimensionLabel || "n/a"],
+    ["Focus Value", focusPoint?.label || "n/a"],
+    ["Exact Configurations", focusPoint ? focusPoint.configurationCount.toLocaleString() : "n/a"],
+    ["Representative Run", focusRun ? runHeadline(focusRun) : "n/a"],
     ["Code Date", focusRun ? formatDate(focusRun.code_date) : "n/a"],
     ["Measured", focusRun ? formatDate(focusRun.measured_at) : "n/a"],
     ["Branch", branch || "n/a"],
@@ -133,10 +110,10 @@ function RunContextPanel(props: { focusRun: BenchmarkRun | null }) {
 
   return (
     <Panel>
-      <SectionTitle title="Run Context" description="Execution metadata for the current focus run." />
+      <SectionTitle title="Representative Run Context" description="Latest exact run contributing to the current focus point." />
       <div className="mt-5 overflow-x-auto">
         <table className="type-body min-w-full border-separate border-spacing-0 text-left">
-          <caption className="visually-hidden">Current focus run identity and metadata</caption>
+          <caption className="visually-hidden">Current focus point and representative run identity metadata</caption>
           <tbody>
             {rows.map(([label, value]) => (
               <tr key={label}>
@@ -168,70 +145,115 @@ function RunContextPanel(props: { focusRun: BenchmarkRun | null }) {
   );
 }
 
-export function OverviewPage(props: OverviewPageProps) {
-  const {
-    header,
-    datasetState,
-    filters,
-    stats,
-    comparison
-  } = props;
+export function OverviewPage({ state, onOpenLocalFilePicker }: OverviewPageProps) {
+  const { settings, setSetting } = state;
+  const [runPairSort, setRunPairSort] = useState<RunPairSort | null>(null);
   const [benchmarkDiffPage, setBenchmarkDiffPage] = useState(1);
-  const benchmarkDiffTotalPages = Math.max(1, Math.ceil(comparison.sortedComparisonRows.length / comparison.benchmarkDiffPageSize));
+  const setYAxis = useUISettingSetter(setSetting, "yAxis");
+  const setSelectedBenchmarkKeys = useUISettingSetter(setSetting, "selectedBenchmarkKeys");
+  const setBranch = useUISettingSetter(setSetting, "branch");
+  const setFocusPointKey = useUISettingSetter(setSetting, "focusPointKey");
+  const setBaselinePointKey = useUISettingSetter(setSetting, "baselinePointKey");
+  const setTimeStart = useUISettingSetter(setSetting, "timeStart");
+  const setTimeEnd = useUISettingSetter(setSetting, "timeEnd");
+  const setDisplayStrategy = useUISettingSetter(setSetting, "displayStrategy");
+  const setBenchmarkDiffPageSize = useUISettingSetter(setSetting, "benchmarkDiffPageSize");
+
+  const slice = useBenchmarkViewSlice({
+    session: state.session,
+    catalog: state.benchmarkViewIndex,
+    benchmarksByKey: state.benchmarksByKey,
+    sourceRevision: state.databaseSourceRevision,
+    configurationKeys: state.dimensionSelection.configurationKeys,
+    yAxis: settings.yAxis,
+    onYAxisChange: setYAxis,
+    branch: settings.branch,
+    onBranchChange: setBranch,
+    timeStart: settings.timeStart,
+    timeEnd: settings.timeEnd,
+    displayStrategy: settings.displayStrategy
+  });
+
+  const overviewQuery = useMemo(() => ({ ...slice.resultQuery, benchmarkKeys: settings.selectedBenchmarkKeys.length ? settings.selectedBenchmarkKeys : undefined }), [settings.selectedBenchmarkKeys, slice.resultQuery]);
+  const model = useOverviewModel({
+    session: state.session,
+    query: overviewQuery,
+    sourceRevision: state.databaseSourceRevision,
+    benchmarkCount: slice.benchmarkOptions.length,
+    benchmarksByKey: state.benchmarksByKey,
+    allRuns: state.allRuns,
+    dimensionSelection: state.dimensionSelection,
+    focusPointKey: settings.focusPointKey,
+    onFocusPointKeyChange: setFocusPointKey,
+    baselinePointKey: settings.baselinePointKey,
+    onBaselinePointKeyChange: setBaselinePointKey,
+    runPairSort,
+    onRunPairSortChange: setRunPairSort,
+    conditionCount: state.dimensionSelection.fixedValueSelections.filter((selector) => selector.options.length > 1).length,
+    yAxis: settings.yAxis,
+    branch: settings.branch,
+    timeStart: settings.timeStart,
+    timeEnd: settings.timeEnd
+  });
+  const preferRunIdentityPointLabels = state.dimensionSelection.varyingDimension?.category === "code" && state.dimensionSelection.varyingDimension.path.length === 2 && state.dimensionSelection.varyingDimension.path[0] === "source" && state.dimensionSelection.varyingDimension.path[1] === "revision";
+  const benchmarkDiffTotalPages = Math.max(1, Math.ceil(model.sortedComparisonRows.length / settings.benchmarkDiffPageSize));
   const pagedComparisonRows = useMemo(() => {
-    const startIndex = (benchmarkDiffPage - 1) * comparison.benchmarkDiffPageSize;
-    return comparison.sortedComparisonRows.slice(startIndex, startIndex + comparison.benchmarkDiffPageSize);
-  }, [benchmarkDiffPage, comparison.benchmarkDiffPageSize, comparison.sortedComparisonRows]);
+    const startIndex = (benchmarkDiffPage - 1) * settings.benchmarkDiffPageSize;
+    return model.sortedComparisonRows.slice(startIndex, startIndex + settings.benchmarkDiffPageSize);
+  }, [benchmarkDiffPage, settings.benchmarkDiffPageSize, model.sortedComparisonRows]);
 
   useEffect(() => {
     setBenchmarkDiffPage(1);
-  }, [comparison.baselineRun?.run_id, comparison.focusRun?.run_id, comparison.sortedComparisonRows]);
+  }, [model.baselinePoint?.key, model.focusPoint?.key, model.sortedComparisonRows]);
 
   useEffect(() => {
     setBenchmarkDiffPage((currentPage) => Math.min(currentPage, benchmarkDiffTotalPages));
   }, [benchmarkDiffTotalPages]);
 
+  if (state.hasDatabase && state.dimensionSelection.dimensions.length && !state.dimensionSelection.validation.isValid) return (
+    <>
+      <PageHeader eyebrow="Benchmarking › Dashboard" title={state.siteTitle} description={state.siteDescription} actions={(<>
+        <Field className="max-sm:w-full"><FieldLabel className="invisible">Action</FieldLabel><Button variant="secondary" className="max-sm:w-full" onClick={onOpenLocalFilePicker}><FiFolder aria-hidden="true" /><span>SQLite</span></Button></Field>
+        {state.database?.source_url ? <Field className="max-sm:w-full"><FieldLabel className="invisible">Action</FieldLabel><Button variant="secondary" className="max-sm:w-full" href={state.database.source_url} download={state.database.source_label ?? "benchledger.sqlite"}>Download</Button></Field> : null}
+      </>)} />
+      <DatabaseBanner hasLoadedDatabase={Boolean(state.database)} hasDatabase={state.hasDatabase} error={state.error} onOpenLocalFilePicker={onOpenLocalFilePicker} />
+      <DimensionSelectorInvalidBanner issues={state.dimensionSelection.validation.issues} onOpenDimensionSelector={() => state.navigateToPage("dimension-selector")} />
+    </>
+  );
+
   return (
     <>
       <PageHeader
         eyebrow="Benchmarking › Dashboard"
-        title={header.siteTitle}
-        description={header.siteDescription}
+        title={state.siteTitle}
+        description={state.siteDescription}
         actions={(
           <>
             <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:min-w-[30rem]">
               <Field>
-                <FieldLabel>Baseline run</FieldLabel>
-                <RunSelectMenu
-                  disabled={!header.filteredRuns.length}
-                  runs={header.filteredRuns}
-                  selectedRunId={header.baselineRunId}
-                  onSelect={header.onBaselineRunChange}
-                  ariaLabel="Baseline run"
-                />
+                <FieldLabel>Baseline point</FieldLabel>
+                <DimensionPointSelectMenu disabled={!model.points.length} points={model.points} runsByPoint={model.runsByPoint} preferRunIdentity={preferRunIdentityPointLabels} selectedPointKey={settings.baselinePointKey} onSelect={setBaselinePointKey} ariaLabel="Baseline point" />
               </Field>
               <Field>
-                <FieldLabel>Focus run</FieldLabel>
-                <RunSelectMenu
-                  disabled={!header.filteredRuns.length}
-                  runs={header.filteredRuns}
-                  selectedRunId={header.focusRunId}
-                  onSelect={header.onFocusRunChange}
-                  ariaLabel="Focus run"
-                />
+                <FieldLabel>Focus point</FieldLabel>
+                <DimensionPointSelectMenu disabled={!model.points.length} points={model.points} runsByPoint={model.runsByPoint} preferRunIdentity={preferRunIdentityPointLabels} selectedPointKey={settings.focusPointKey} onSelect={setFocusPointKey} ariaLabel="Focus point" />
               </Field>
             </div>
+            <Field className="min-w-0 flex-1 xl:min-w-[20rem] xl:max-w-[30rem]">
+              <FieldLabel>Benchmark Keys</FieldLabel>
+              <BenchmarkKeyCascadeFilter options={slice.benchmarkOptions} selectedValues={settings.selectedBenchmarkKeys} setSelectedValues={setSelectedBenchmarkKeys} disabled={!state.hasDatabase} stretchWidth ariaLabel="Benchmark keys" placeholder="All benchmark keys" />
+            </Field>
             <Field className="max-sm:w-full">
               <FieldLabel className="invisible">Action</FieldLabel>
-              <Button variant="secondary" className="max-sm:w-full" onClick={header.onOpenLocalFilePicker}>
+              <Button variant="secondary" className="max-sm:w-full" onClick={onOpenLocalFilePicker}>
                 <FiFolder aria-hidden="true" />
                 <span>SQLite</span>
               </Button>
             </Field>
-            {header.downloadUrl ? (
+            {state.database?.source_url ? (
               <Field className="max-sm:w-full">
                 <FieldLabel className="invisible">Action</FieldLabel>
-                <Button variant="secondary" className="max-sm:w-full" href={header.downloadUrl} download={header.downloadLabel}>
+                <Button variant="secondary" className="max-sm:w-full" href={state.database.source_url} download={state.database.source_label ?? "benchledger.sqlite"}>
                   Download
                 </Button>
               </Field>
@@ -240,12 +262,29 @@ export function OverviewPage(props: OverviewPageProps) {
         )}
       />
 
-      <DatasetBanner datasetState={datasetState} header={header} />
+      <DatabaseBanner hasLoadedDatabase={Boolean(state.database)} hasDatabase={state.hasDatabase} error={state.error} onOpenLocalFilePicker={onOpenLocalFilePicker} />
 
-      <BenchmarkFilterToolbar {...filters} hasDataset={datasetState.hasDataset} />
+      <BenchmarkFilterToolbar
+        yAxis={settings.yAxis}
+        yAxisOptions={slice.yAxisOptions}
+        onYAxisChange={setYAxis}
+        branch={settings.branch}
+        branchOptions={slice.branchOptions}
+        onBranchChange={setBranch}
+        timeRangeLabel={slice.runsEmptyTimeRangeLabel}
+        timeStart={settings.timeStart}
+        timeEnd={settings.timeEnd}
+        databaseTimeStart={slice.databaseTimeStart}
+        databaseTimeEnd={slice.databaseTimeEnd}
+        onTimeStartChange={setTimeStart}
+        onTimeEndChange={setTimeEnd}
+        displayStrategy={settings.displayStrategy}
+        onDisplayStrategyChange={setDisplayStrategy}
+        hasDatabase={state.hasDatabase}
+      />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {stats.map((stat) => (
+        {model.stats.map((stat) => (
           <StatCard
             key={stat.label}
             Icon={stat.Icon}
@@ -268,10 +307,10 @@ export function OverviewPage(props: OverviewPageProps) {
             action={(
               <div className="flex flex-wrap items-center justify-end gap-3">
                 <SegmentedToggle
-                  value={String(comparison.benchmarkDiffPageSize)}
+                  value={String(settings.benchmarkDiffPageSize)}
                   options={Benchmark_Diff_Page_Size_Options.map((pageSize) => ({ value: String(pageSize), label: String(pageSize) }))}
                   onChange={(value) => {
-                    comparison.onBenchmarkDiffPageSizeChange(Number(value) as BenchmarkDiffPageSize);
+                    setBenchmarkDiffPageSize(Number(value) as BenchmarkDiffPageSize);
                     setBenchmarkDiffPage(1);
                   }}
                   ariaLabel="Benchmark diff rows per page"
@@ -302,18 +341,11 @@ export function OverviewPage(props: OverviewPageProps) {
               </div>
             )}
           />
-          {comparison.environmentMismatch ? (
-            <Banner
-              className="mt-4"
-              tone="warning"
-              title="Comparing different hardware/software pairs"
-              description={`Focus run uses ${comparison.focusRun?.environment_pair_label || "n/a"}, while baseline uses ${comparison.baselineRun?.environment_pair_label || "n/a"}.`}
-            />
-          ) : null}
-          {comparison.sortedComparisonRows.length ? (
+
+          {model.sortedComparisonRows.length ? (
             <DataTableShell label="Run comparison results" className="mt-2">
               <DataTable className="table-fixed">
-                <caption className="visually-hidden">Benchmark values for the selected baseline and focus runs</caption>
+                <caption className="visually-hidden">Benchmark values for the selected baseline and focus points</caption>
                 <colgroup>
                   <col style={{ width: "64%" }} />
                   <col style={{ width: "12%" }} />
@@ -325,14 +357,14 @@ export function OverviewPage(props: OverviewPageProps) {
                     {runPairTableColumns.map((column) => (
                       <DataHeadCell
                         key={column.key}
-                        aria-sort={comparison.runPairSort?.key === column.key
-                          ? comparison.runPairSort.direction === "asc" ? "ascending" : "descending"
+                        aria-sort={runPairSort?.key === column.key
+                          ? runPairSort.direction === "asc" ? "ascending" : "descending"
                           : "none"}
                       >
                         <SortButton
-                          active={comparison.runPairSort?.key === column.key}
-                          onClick={() => comparison.onToggleRunPairSort(column.key)}
-                          indicator={comparison.runPairSort?.key === column.key ? (comparison.runPairSort.direction === "asc" ? "↑" : "↓") : "↕"}
+                          active={runPairSort?.key === column.key}
+                          onClick={() => model.toggleRunPairSort(column.key)}
+                          indicator={runPairSort?.key === column.key ? (runPairSort.direction === "asc" ? "↑" : "↓") : "↕"}
                         >
                           {column.label}
                         </SortButton>
@@ -361,11 +393,11 @@ export function OverviewPage(props: OverviewPageProps) {
               </DataTable>
             </DataTableShell>
           ) : (
-            <EmptyState className="surface-empty pad-empty mt-4 flex min-h-44 flex-col items-center justify-center text-center" title="No comparable benchmark rows" description="Adjust the selected runs or filters to compare benchmark rows." />
+            <EmptyState className="surface-empty pad-empty mt-4 flex min-h-44 flex-col items-center justify-center text-center" title="No comparable benchmark rows" description="Adjust the selected points or conditions to compare benchmark rows." />
           )}
         </Panel>
 
-        <RunContextPanel focusRun={comparison.focusRun} />
+        <RepresentativeRunContextPanel focusRun={model.focusRun} focusPoint={model.focusPoint} dimensionLabel={state.dimensionSelection.varyingDimension?.label ?? ""} />
       </section>
     </>
   );

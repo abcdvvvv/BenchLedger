@@ -1,31 +1,10 @@
-import { schemeTableau10 } from "d3-scale-chromatic";
-import { formatMetricValue, parseDate, unique } from "./format";
+import { formatMetricValue, unique } from "./format";
 import { metricUnitFamily, timeUnitNanoseconds, Time_Metric_Units } from "./metric-units";
 import type { TrendMarkerSymbol } from "./trend-marker-symbols";
-import type { BenchmarkBetter, BenchmarkRow } from "./types";
-import type { ThemeMode, TrendAxisMode, TrendLineShape, TrendMarkerFillMode } from "./dashboard-settings";
+import type { BenchmarkRow } from "./types";
+import type { ThemeMode, TrendLineShape, TrendMarkerFillMode } from "./dashboard-settings";
 
-export type TrendPlotRow = {
-  run_id: string;
-  benchmark_key: string;
-  metric_name: string;
-  statistic: string;
-  unit: string;
-  value: number;
-  better: BenchmarkBetter;
-  configuration_key: string;
-  code_state_id: string;
-  code_date: string;
-  environment_pair_key: string;
-  environment_pair_label: string;
-  measured_at: string;
-  date_value: Date | null;
-  run_axis_label: string;
-  run_headline: string;
-  run_tone: "tag" | "master" | "branch";
-  run_identity_title: string;
-  run_count: number;
-};
+export type TrendPlotRow = Pick<BenchmarkRow, "run_id" | "benchmark_key" | "metric_name" | "statistic" | "unit" | "value" | "better"> & { code_date: string; measured_at: string; date_value: Date | null; run_axis_label: string; run_identity_title: string; run_count: number; x_key: string; x_label: string; };
 
 export type PlotTheme = {
   paper: string;
@@ -51,29 +30,10 @@ export type TrendDisplayUnitContext = {
   formatMetricLabel: (label: string) => string;
 };
 
-export type TrendEnvironmentPairSeries = {
-  environmentPairKey: string;
-  environmentPairLabel: string;
-  rows: TrendPlotRow[];
-};
-
-export type PlotAxisTickLabels = {
-  type?: "date" | "linear";
-  tickmode: "array";
-  tickvals: Array<string | number>;
-  ticktext: string[];
-};
-
-export type CommitAxisLayout = {
-  positionsByCodeStateId: ReadonlyMap<string, number>;
-  tickLabels: PlotAxisTickLabels;
-};
-
 export const Trend_Y_Padding_Ratio = 0.08;
 export const Trend_Board_Plot_Height = 280;
-export const Commit_Axis_Max_Ticks = 60;
 
-const _Trend_Categorical_Colors = schemeTableau10;
+const _Trend_Categorical_Colors = ["#4e79a7", "#f28e2c", "#e15759", "#76b7b2", "#59a14f", "#edc949", "#af7aa1", "#ff9da7", "#9c755f", "#bab0ab"] as const;
 const _Trend_Time_Display_Units = Time_Metric_Units;
 const _Trend_Default_Display_Context: TrendDisplayUnitContext = {
   unit: "",
@@ -263,137 +223,9 @@ export function trendValueExtent(
   return min === Number.POSITIVE_INFINITY ? null : { min, max };
 }
 
-export function splitTrendRowsByEnvironmentPair(rows: TrendPlotRow[]): TrendEnvironmentPairSeries[] {
-  const rowsByEnvironmentPair = new Map<string, TrendPlotRow[]>();
-
-  for (const row of rows) {
-    const environmentPairKey = row.environment_pair_key || "unknown";
-    const bucket = rowsByEnvironmentPair.get(environmentPairKey);
-    if (bucket) {
-      bucket.push(row);
-      continue;
-    }
-    rowsByEnvironmentPair.set(environmentPairKey, [row]);
-  }
-
-  return Array.from(rowsByEnvironmentPair.entries())
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([environmentPairKey, pairRows]) => ({
-      environmentPairKey,
-      environmentPairLabel: pairRows[0]?.environment_pair_label || environmentPairKey,
-      rows: pairRows
-    }));
-}
-
-type CommitAxisState = {
-  codeStateId: string;
-  label: string;
-  isTag: boolean;
-};
-
-function _commitAxisStates(rows: TrendPlotRow[]): CommitAxisState[] {
-  const statesById = new Map<string, CommitAxisState>();
-
-  for (const row of [...rows].sort((left, right) => {
-    const leftValue = parseDate(left.code_date)?.valueOf() ?? 0;
-    const rightValue = parseDate(right.code_date)?.valueOf() ?? 0;
-    if (leftValue !== rightValue) return leftValue - rightValue;
-    return left.code_state_id.localeCompare(right.code_state_id);
-  })) {
-    if (statesById.has(row.code_state_id)) continue;
-    statesById.set(row.code_state_id, {
-      codeStateId: row.code_state_id,
-      label: row.run_axis_label,
-      isTag: row.run_tone === "tag"
-    });
-  }
-
-  return Array.from(statesById.values());
-}
-
-function _commitAxisAnchorIndices(states: CommitAxisState[]): number[] {
-  if (!states.length) return [];
-  if (states.length === 1) return [0];
-
-  const anchors = states.flatMap((state, index) => state.isTag ? [index] : []);
-
-  if (!anchors.length) return [0, states.length - 1];
-  if (anchors[0] !== 0) anchors.unshift(0);
-  if (anchors[anchors.length - 1] !== states.length - 1) anchors.push(states.length - 1);
-  return anchors;
-}
-
-function _sampleSortedIndices(indices: readonly number[], maximum: number): number[] {
-  if (indices.length <= maximum) return [...indices];
-  if (maximum <= 1) return [indices[0]];
-  return Array.from({ length: maximum }, (_, index) => (
-    indices[Math.round(index * (indices.length - 1) / (maximum - 1))]
-  ));
-}
-
-function _commitAxisTickIndices(states: readonly CommitAxisState[]): number[] {
-  if (states.length <= Commit_Axis_Max_Ticks) {
-    return states.map((_, index) => index);
-  }
-
-  const required = states.flatMap((state, index) => state.isTag ? [index] : []);
-  if (!required.includes(0)) required.unshift(0);
-  if (!required.includes(states.length - 1)) required.push(states.length - 1);
-  if (required.length >= Commit_Axis_Max_Ticks) {
-    return _sampleSortedIndices(required, Commit_Axis_Max_Ticks);
-  }
-
-  const selected = new Set(required);
-  for (let sampleIndex = 0; sampleIndex < Commit_Axis_Max_Ticks && selected.size < Commit_Axis_Max_Ticks; sampleIndex += 1) {
-    selected.add(Math.round(sampleIndex * (states.length - 1) / (Commit_Axis_Max_Ticks - 1)));
-  }
-  return Array.from(selected).sort((left, right) => left - right);
-}
-
-export function commitAxisLayout(rows: TrendPlotRow[]): CommitAxisLayout | undefined {
-  const states = _commitAxisStates(rows);
-  if (!states.length) return undefined;
-
-  const anchors = _commitAxisAnchorIndices(states);
-  const positionsByCodeStateId = new Map<string, number>();
-
-  if (anchors.length === 1) {
-    positionsByCodeStateId.set(states[0].codeStateId, 0);
-  } else {
-    for (let anchorIndex = 0; anchorIndex < anchors.length - 1; anchorIndex += 1) {
-      const startStateIndex = anchors[anchorIndex];
-      const endStateIndex = anchors[anchorIndex + 1];
-      const startPosition = anchorIndex / (anchors.length - 1);
-      const endPosition = (anchorIndex + 1) / (anchors.length - 1);
-      const stateCount = endStateIndex - startStateIndex;
-
-      for (let offset = 0; offset <= stateCount; offset += 1) {
-        const state = states[startStateIndex + offset];
-        const position = stateCount === 0
-          ? startPosition
-          : startPosition + ((endPosition - startPosition) * offset) / stateCount;
-        positionsByCodeStateId.set(state.codeStateId, position);
-      }
-    }
-  }
-
-  const tickIndices = _commitAxisTickIndices(states);
-  return {
-    positionsByCodeStateId,
-    tickLabels: {
-      type: "linear",
-      tickmode: "array",
-      tickvals: tickIndices.map((index) => positionsByCodeStateId.get(states[index].codeStateId) ?? 0),
-      ticktext: tickIndices.map((index) => states[index].label)
-    }
-  };
-}
-
 export function buildTrendTrace(
   rows: TrendPlotRow[],
   options: {
-    axisMode: TrendAxisMode;
-    commitAxisPositions?: ReadonlyMap<string, number>;
     lineShape: TrendLineShape;
     markerSymbol: TrendMarkerSymbol;
     markerFillMode: TrendMarkerFillMode;
@@ -410,8 +242,6 @@ export function buildTrendTrace(
 ): Array<Record<string, unknown>> {
   if (!rows.length) return [];
   const {
-    axisMode,
-    commitAxisPositions,
     lineShape,
     markerSymbol,
     markerFillMode,
@@ -425,9 +255,7 @@ export function buildTrendTrace(
     showLegend,
     fillGradientScale
   } = options;
-  const x = axisMode === "commit"
-    ? rows.map((row, index) => commitAxisPositions?.get(row.code_state_id) ?? index)
-    : rows.map((row) => row.code_date);
+  const x = rows.map((row) => row.x_label);
   const y = rows.map((row) => displayUnitContext.scaleValue(row.value, row.unit));
   const gradientStart = colorWithAlpha(color, 0);
   const gradientEnd = colorWithAlpha(color, theme === "dark" ? 0.2 : 0.2);

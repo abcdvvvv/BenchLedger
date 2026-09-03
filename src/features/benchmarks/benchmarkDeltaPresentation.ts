@@ -1,6 +1,4 @@
 import type { SemanticTone } from "../../components/common/semanticTone";
-import { deltaColorKey } from "../../lib/dashboard-data";
-import type { PlotTheme } from "../../lib/dashboard-plotting";
 import { metricDeltaClass } from "../../lib/format";
 import type { PairComparison } from "../../lib/types";
 
@@ -8,17 +6,9 @@ export type BenchmarkDeltaTone = Extract<SemanticTone, "positive" | "negative" |
 
 type BenchmarkBetter = PairComparison["better"];
 
-export function benchmarkDeltaDirection(value: number, better: BenchmarkBetter) {
-  return metricDeltaClass(value, better);
-}
-
 export function benchmarkDeltaTone(value: number, better: BenchmarkBetter): BenchmarkDeltaTone {
-  const direction = benchmarkDeltaDirection(value, better);
+  const direction = metricDeltaClass(value, better);
   if (direction === "down") return "positive";
   if (direction === "up") return "negative";
   return "neutral";
-}
-
-export function benchmarkDeltaColor(value: number, better: BenchmarkBetter, plotTheme: PlotTheme): string {
-  return plotTheme[deltaColorKey[benchmarkDeltaDirection(value, better)]];
 }

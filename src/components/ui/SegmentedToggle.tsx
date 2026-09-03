@@ -37,7 +37,7 @@ export function SegmentedToggle<T extends string>(props: {
             type="button"
             className={cn(
               "radius-theme relative z-10 border-0 bg-transparent text-center text-[0.82rem] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500",
-              active ? "text-stone-950" : "text-stone-500 dark:text-stone-400",
+              active ? "text-white dark:text-stone-950" : "text-stone-500 dark:text-stone-400",
               props.buttonClassName
             )}
             onClick={() => props.onChange(option.value)}

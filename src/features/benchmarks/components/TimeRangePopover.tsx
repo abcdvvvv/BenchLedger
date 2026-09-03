@@ -9,16 +9,16 @@ import { openNativeDatePicker } from "../../../lib/dashboard-settings";
 import { InputField } from "../../../components/ui/Field";
 import { DisclosureTriggerContent, menuTriggerClassName } from "../../../components/ui/Menu";
 
-type TimeRangePopoverProps = {
-  disabled: boolean;
-  label: string;
+export type TimeRangeSelectionProps = {
   timeStart: string;
   timeEnd: string;
-  datasetTimeStart: string;
-  datasetTimeEnd: string;
+  databaseTimeStart: string;
+  databaseTimeEnd: string;
   onTimeStartChange: (value: string) => void;
   onTimeEndChange: (value: string) => void;
 };
+
+type TimeRangePopoverProps = TimeRangeSelectionProps & { disabled: boolean; label: string };
 
 export function TimeRangePopover(props: TimeRangePopoverProps) {
   const {
@@ -26,8 +26,8 @@ export function TimeRangePopover(props: TimeRangePopoverProps) {
     label,
     timeStart,
     timeEnd,
-    datasetTimeStart,
-    datasetTimeEnd,
+    databaseTimeStart,
+    databaseTimeEnd,
     onTimeStartChange,
     onTimeEndChange
   } = props;
@@ -67,8 +67,8 @@ export function TimeRangePopover(props: TimeRangePopoverProps) {
               ref={timeStartInputRef}
               type="date"
               value={timeStart}
-              min={datasetTimeStart}
-              max={timeEnd || datasetTimeEnd}
+              min={databaseTimeStart}
+              max={timeEnd || databaseTimeEnd}
               onChange={(event) => onTimeStartChange(event.target.value)}
             />
           </label>
@@ -77,8 +77,8 @@ export function TimeRangePopover(props: TimeRangePopoverProps) {
             <InputField
               type="date"
               value={timeEnd}
-              min={timeStart || datasetTimeStart}
-              max={datasetTimeEnd}
+              min={timeStart || databaseTimeStart}
+              max={databaseTimeEnd}
               onChange={(event) => onTimeEndChange(event.target.value)}
             />
           </label>

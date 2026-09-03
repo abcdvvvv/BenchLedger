@@ -59,7 +59,7 @@ export function DatabasesPage(props: DatabasesPageProps) {
       <PageHeader
         eyebrow="Benchmarking › Databases"
         title="Databases"
-        description="All benchmark databases currently visible to the frontend, plus metadata and loaded-dataset statistics when available."
+        description="All benchmark databases currently visible to the frontend, plus metadata and loaded-database statistics when available."
         actions={<Button variant="secondary" className="max-sm:w-full" onClick={onOpenLocalFilePicker}>Choose SQLite</Button>}
       />
 

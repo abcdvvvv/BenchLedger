@@ -3,7 +3,7 @@ import {
   buildUISettingsURL,
   persistedUISettings,
   readUISettings,
-  settingsForDatasetSource,
+  settingsForDatabaseSource,
   settingsWithURLState,
   UI_SETTINGS_STORAGE_KEY,
   type ActivePage,
@@ -17,7 +17,7 @@ type UseStoredUISettingsResult = {
   settings: UISettings;
   setSetting: SetUISetting;
   navigateToPage: (page: ActivePage) => void;
-  setDatasetSource: (selectedDatabaseId: string, resetDatasetScope: boolean) => void;
+  setDatabaseSource: (selectedDatabaseId: string, resetDatabaseScope: boolean) => void;
 };
 
 function applyTheme(theme: ThemeMode) {
@@ -28,7 +28,7 @@ function applyTheme(theme: ThemeMode) {
 function settingsValueEqual(left: UISettings[keyof UISettings], right: UISettings[keyof UISettings]): boolean {
   if (Object.is(left, right)) return true;
   if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
-  return left.every((value, index) => value === right[index]);
+  return left.every((value, index) => Object.is(value, right[index])) || JSON.stringify(left) === JSON.stringify(right);
 }
 
 function settingsEqual(left: UISettings, right: UISettings): boolean {
@@ -66,14 +66,7 @@ export function useStoredUISettings(): UseStoredUISettingsResult {
   useEffect(() => {
     const nextURL = buildUISettingsURL(settings, window.location.href);
     if (nextURL !== currentBrowserURL()) window.history.replaceState(null, "", nextURL);
-  }, [
-    settings.activePage,
-    settings.compareBaselineConfigurationKey,
-    settings.compareBenchmarkKey,
-    settings.compareMetricKey,
-    settings.compareVariableCategory,
-    settings.compareVariableFieldPathIds
-  ]);
+  }, [settings.activePage]);
 
   useEffect(() => {
     function handlePopState() {
@@ -113,10 +106,10 @@ export function useStoredUISettings(): UseStoredUISettingsResult {
     setSettings(next);
   }, []);
 
-  const setDatasetSource = useCallback((selectedDatabaseId: string, resetDatasetScope: boolean) => {
+  const setDatabaseSource = useCallback((selectedDatabaseId: string, resetDatabaseScope: boolean) => {
     setSettings((current) => {
-      const next = resetDatasetScope
-        ? settingsForDatasetSource(current, selectedDatabaseId)
+      const next = resetDatabaseScope
+        ? settingsForDatabaseSource(current, selectedDatabaseId)
         : current.selectedDatabaseId === selectedDatabaseId
           ? current
           : { ...current, selectedDatabaseId };
@@ -130,6 +123,6 @@ export function useStoredUISettings(): UseStoredUISettingsResult {
     settings,
     setSetting,
     navigateToPage,
-    setDatasetSource
+    setDatabaseSource
   };
 }

@@ -13,7 +13,7 @@ export function Toolbar(props: ToolbarProps) {
 
 export function ToolbarGrid(props: HTMLAttributes<HTMLDivElement>) {
   const { className, ...rest } = props;
-  return <div {...rest} className={cn("grid gap-4 sidebar-icon:grid-cols-3 sidebar-expanded:grid-cols-6", className)} />;
+  return <div {...rest} className={cn("grid gap-4 sidebar-icon:grid-cols-2 sidebar-expanded:grid-cols-4", className)} />;
 }
 
 export function Field(props: HTMLAttributes<HTMLDivElement>) {

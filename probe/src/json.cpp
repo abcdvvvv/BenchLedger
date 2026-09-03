@@ -16,7 +16,7 @@ public:
 
     Json parse_document() {
         skip_space();
-        Json result = parse_value();
+        Json result = parse_value(0);
         skip_space();
         if (position_ != input_.size()) fail("unexpected trailing data");
         return result;
@@ -25,6 +25,7 @@ public:
 private:
     std::string_view input_;
     std::size_t position_{};
+    static constexpr std::size_t Max_Nesting_Depth = 256;
 
     [[noreturn]] void fail(const std::string& message) const {
         throw std::runtime_error("JSON parse error at byte " + std::to_string(position_) + ": " + message);
@@ -50,15 +51,19 @@ private:
         if (!consume(expected)) fail(std::string("expected '") + expected + "'");
     }
 
-    Json parse_value() {
+    Json parse_value(std::size_t depth) {
         if (position_ >= input_.size()) fail("expected a value");
         switch (input_[position_]) {
             case 'n': parse_literal("null"); return nullptr;
             case 't': parse_literal("true"); return true;
             case 'f': parse_literal("false"); return false;
             case '"': return parse_string();
-            case '[': return parse_array();
-            case '{': return parse_object();
+            case '[':
+                if (depth >= Max_Nesting_Depth) fail("maximum nesting depth exceeded");
+                return parse_array(depth + 1);
+            case '{':
+                if (depth >= Max_Nesting_Depth) fail("maximum nesting depth exceeded");
+                return parse_object(depth + 1);
             default:
                 if (input_[position_] == '-' || (input_[position_] >= '0' && input_[position_] <= '9')) return parse_number();
                 fail("invalid value");
@@ -87,6 +92,33 @@ private:
         } else throw std::runtime_error("invalid Unicode code point");
     }
 
+    void append_raw_utf8(std::string& output, unsigned char first) {
+        std::size_t continuationCount = 0;
+        unsigned char secondMin = 0x80;
+        unsigned char secondMax = 0xBF;
+        if (first >= 0xC2 && first <= 0xDF) continuationCount = 1;
+        else if (first >= 0xE0 && first <= 0xEF) {
+            continuationCount = 2;
+            if (first == 0xE0) secondMin = 0xA0;
+            else if (first == 0xED) secondMax = 0x9F;
+        } else if (first >= 0xF0 && first <= 0xF4) {
+            continuationCount = 3;
+            if (first == 0xF0) secondMin = 0x90;
+            else if (first == 0xF4) secondMax = 0x8F;
+        } else fail("invalid UTF-8 sequence");
+
+        if (position_ + continuationCount > input_.size()) fail("incomplete UTF-8 sequence");
+        const auto second = static_cast<unsigned char>(input_[position_]);
+        if (second < secondMin || second > secondMax) fail("invalid UTF-8 sequence");
+        for (std::size_t i = 1; i < continuationCount; ++i) {
+            const auto continuation = static_cast<unsigned char>(input_[position_ + i]);
+            if (continuation < 0x80 || continuation > 0xBF) fail("invalid UTF-8 sequence");
+        }
+        output.push_back(static_cast<char>(first));
+        output.append(input_.substr(position_, continuationCount));
+        position_ += continuationCount;
+    }
+
     std::uint32_t parse_hex4() {
         if (position_ + 4 > input_.size()) fail("incomplete Unicode escape");
         std::uint32_t value = 0;
@@ -109,7 +141,8 @@ private:
             if (c == '"') return output;
             if (c < 0x20) fail("unescaped control character in string");
             if (c != '\\') {
-                output.push_back(static_cast<char>(c));
+                if (c < 0x80) output.push_back(static_cast<char>(c));
+                else append_raw_utf8(output, c);
                 continue;
             }
             if (position_ >= input_.size()) fail("incomplete escape sequence");
@@ -141,21 +174,21 @@ private:
         fail("unterminated string");
     }
 
-    Json parse_array() {
+    Json parse_array(std::size_t depth) {
         expect('[');
         skip_space();
         Json::array result;
         if (consume(']')) return result;
         while (true) {
             skip_space();
-            result.push_back(parse_value());
+            result.push_back(parse_value(depth));
             skip_space();
             if (consume(']')) return result;
             expect(',');
         }
     }
 
-    Json parse_object() {
+    Json parse_object(std::size_t depth) {
         expect('{');
         skip_space();
         Json::object result;
@@ -167,7 +200,7 @@ private:
             skip_space();
             expect(':');
             skip_space();
-            auto [_, inserted] = result.emplace(std::move(key), parse_value());
+            auto [_, inserted] = result.emplace(std::move(key), parse_value(depth));
             if (!inserted) fail("duplicate object key");
             skip_space();
             if (consume('}')) return result;

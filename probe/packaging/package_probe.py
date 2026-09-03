@@ -28,12 +28,30 @@ from release import (
     write_json,
 )
 
+MAX_ARCHIVE_MEMBERS = 4096
+MAX_ARCHIVE_MEMBER_BYTES = 256 * 1024 * 1024
+MAX_ARCHIVE_TOTAL_BYTES = 1024 * 1024 * 1024
+
 
 def _safe_member_path(name: str) -> PurePosixPath:
     path = PurePosixPath(name.replace("\\", "/"))
     if path.is_absolute() or ".." in path.parts:
         raise RuntimeError(f"archive contains unsafe path: {name}")
     return path
+
+
+def _validate_archive_limits(members: Iterable[tuple[str, int]]) -> None:
+    count = 0
+    total = 0
+    for name, size in members:
+        count += 1
+        if count > MAX_ARCHIVE_MEMBERS:
+            raise RuntimeError(f"archive contains too many members: more than {MAX_ARCHIVE_MEMBERS}")
+        if size < 0 or size > MAX_ARCHIVE_MEMBER_BYTES:
+            raise RuntimeError(f"archive member is too large: {name}")
+        total += size
+        if total > MAX_ARCHIVE_TOTAL_BYTES:
+            raise RuntimeError(f"archive expands beyond {MAX_ARCHIVE_TOTAL_BYTES} bytes")
 
 
 def extract_archive(archive: Path, destination: Path) -> None:
@@ -50,7 +68,9 @@ def extract_archive(archive: Path, destination: Path) -> None:
 
     if zipfile.is_zipfile(archive):
         with zipfile.ZipFile(archive) as source:
-            for member in source.infolist():
+            members = source.infolist()
+            _validate_archive_limits((member.filename, 0 if member.is_dir() else member.file_size) for member in members)
+            for member in members:
                 relative = _safe_member_path(member.filename)
                 output = destination.joinpath(*relative.parts)
                 if member.is_dir():
@@ -69,7 +89,9 @@ def extract_archive(archive: Path, destination: Path) -> None:
 
     if tarfile.is_tarfile(archive):
         with tarfile.open(archive, "r:*") as source:
-            for member in source.getmembers():
+            members = source.getmembers()
+            _validate_archive_limits((member.name, member.size if member.isfile() else 0) for member in members)
+            for member in members:
                 relative = _safe_member_path(member.name)
                 if member.issym() or member.islnk():
                     raise RuntimeError(f"archive contains unsupported link: {member.name}")

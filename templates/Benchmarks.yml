@@ -149,9 +149,6 @@ jobs:
       - name: Cache Julia packages
         uses: julia-actions/cache@v2
 
-      - name: Instantiate benchmark project
-        run: julia --project=benchmark -e 'using Pkg; Pkg.instantiate()'
-
       - name: Install matching BenchLedger probe
         env:
           GH_TOKEN: ${{ github.token }}

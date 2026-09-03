@@ -1,28 +1,13 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
-import {
-  loadBenchmarkDatasetFromFile,
-  loadBenchmarkDatasetFromManifestDatabase,
-  loadBenchmarkDatasetFromUrl,
-  loadManifest
-} from "./sqlite";
-import type {
-  BenchmarkRow,
-  BenchLedgerManifest,
-  BenchLedgerManifestDatabase,
-  LoadedBenchmarkDataset
-} from "./types";
+import { BenchmarkDatabaseSession } from "./benchmark-database";
+import { assertLocalDatabaseSize, loadManifest, loadManifestDatabaseFile, refreshDatabaseFileFromUrl } from "./sqlite";
+import type { BenchLedgerManifest, BenchLedgerManifestDatabase, LoadedBenchmarkDatabase } from "./types";
 import type { AppPhase } from "./dashboard-settings";
 
-type UseBenchmarkDataSourceOptions = {
-  selectedDatabaseId: string;
-  onSourceStateChange: (databaseId: string, resetDatasetScope: boolean) => void;
-};
-
-const EMPTY_BENCHMARK_ROWS: BenchmarkRow[] = [];
-
+type UseBenchmarkDataSourceOptions = { selectedDatabaseId: string; onSourceStateChange: (databaseId: string, resetDatabaseScope: boolean) => void; };
 type UseBenchmarkDataSourceResult = {
-  rows: BenchmarkRow[];
-  dataset: LoadedBenchmarkDataset | null;
+  database: LoadedBenchmarkDatabase | null;
+  session: BenchmarkDatabaseSession | null;
   manifest: BenchLedgerManifest | null;
   phase: AppPhase;
   error: string;
@@ -36,39 +21,35 @@ function isLocalHost(): boolean {
   return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
 }
 
-export function selectInitialManifestDatabase(
-  databases: readonly BenchLedgerManifestDatabase[],
-  selectedDatabaseId: string
-): BenchLedgerManifestDatabase | null {
+function selectInitialManifestDatabase(databases: readonly BenchLedgerManifestDatabase[], selectedDatabaseId: string): BenchLedgerManifestDatabase | null {
   return databases.find((database) => database.id === selectedDatabaseId) ?? databases[0] ?? null;
 }
 
-function datasetSignature(sourceDataset: LoadedBenchmarkDataset): string {
-  const lastRow = sourceDataset.rows[sourceDataset.rows.length - 1];
-  return [
-    sourceDataset.metadata.updated_at,
-    sourceDataset.rows.length,
-    lastRow?.run_id ?? "",
-    lastRow ? sourceDataset.runsById.get(lastRow.run_id)?.measured_at ?? "" : "",
-    lastRow?.benchmark_key ?? "",
-    lastRow?.value ?? ""
-  ].join("|");
-}
-
-export function useBenchmarkDataSource(
-  options: UseBenchmarkDataSourceOptions
-): UseBenchmarkDataSourceResult {
+export function useBenchmarkDataSource(options: UseBenchmarkDataSourceOptions): UseBenchmarkDataSourceResult {
   const { selectedDatabaseId, onSourceStateChange } = options;
-  const [dataset, setDataset] = useState<LoadedBenchmarkDataset | null>(null);
+  const [database, setDatabase] = useState<LoadedBenchmarkDatabase | null>(null);
+  const [session, setSession] = useState<BenchmarkDatabaseSession | null>(null);
   const [manifest, setManifest] = useState<BenchLedgerManifest | null>(null);
   const [manifestUrl, setManifestUrl] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [phase, setPhase] = useState<AppPhase>("booting");
   const [sourceRevision, setSourceRevision] = useState(0);
+  const sessionRef = useRef<BenchmarkDatabaseSession | null>(null);
   const loadGenerationRef = useRef(0);
+  const loadAbortControllerRef = useRef<AbortController | null>(null);
   const loadedSourceKeyRef = useRef(selectedDatabaseId ? `manifest:${selectedDatabaseId}` : "");
 
+  function getSession(): BenchmarkDatabaseSession {
+    if (sessionRef.current) return sessionRef.current;
+    const created = new BenchmarkDatabaseSession();
+    sessionRef.current = created;
+    setSession(created);
+    return created;
+  }
+
   function beginLoadRequest(): number {
+    loadAbortControllerRef.current?.abort();
+    loadAbortControllerRef.current = new AbortController();
     loadGenerationRef.current += 1;
     return loadGenerationRef.current;
   }
@@ -77,40 +58,34 @@ export function useBenchmarkDataSource(
     return generation === loadGenerationRef.current;
   }
 
-  async function selectManifestDatabase(
-    database: BenchLedgerManifestDatabase,
-    activeManifestUrl: string,
-    generation = beginLoadRequest()
-  ) {
+  async function selectManifestDatabase(databaseEntry: BenchLedgerManifestDatabase, activeManifestUrl: string, generation = beginLoadRequest()) {
     setPhase("loading-database");
     setError("");
     try {
-      const loadedDataset = await loadBenchmarkDatasetFromManifestDatabase(database, activeManifestUrl);
+      const source = await loadManifestDatabaseFile(databaseEntry, activeManifestUrl, loadAbortControllerRef.current?.signal);
       if (!isCurrentLoadRequest(generation)) return;
-      const sourceKey = `manifest:${database.id}`;
+      const loadedDatabase = await getSession().replaceDatabaseFile(source.bytes, source.sourceLabel, source.sourceUrl);
+      if (!isCurrentLoadRequest(generation)) return;
+      const sourceKey = `manifest:${databaseEntry.id}`;
       const sourceChanged = loadedSourceKeyRef.current !== sourceKey;
       loadedSourceKeyRef.current = sourceKey;
-      onSourceStateChange(database.id, sourceChanged);
-      setDataset(loadedDataset);
+      onSourceStateChange(databaseEntry.id, sourceChanged);
+      setDatabase(loadedDatabase);
       setSourceRevision((current) => current + 1);
       setPhase("ready");
     } catch (loadError: unknown) {
       if (!isCurrentLoadRequest(generation)) return;
       setError(loadError instanceof Error ? loadError.message : "Failed to load the selected database.");
-      if (dataset) setPhase("ready");
-      else {
-        onSourceStateChange("", false);
-        setPhase("select-source");
-      }
+      if (database) setPhase("ready");
+      else { onSourceStateChange("", false); setPhase("select-source"); }
     }
   }
 
   async function handleDatabaseSelection(databaseId: string) {
     if (!manifest || !manifestUrl) return;
-    const database = manifest.databases.find((entry) => entry.id === databaseId);
-    if (!database) return;
-    const generation = beginLoadRequest();
-    await selectManifestDatabase(database, manifestUrl, generation);
+    const databaseEntry = manifest.databases.find((entry) => entry.id === databaseId);
+    if (!databaseEntry) return;
+    await selectManifestDatabase(databaseEntry, manifestUrl, beginLoadRequest());
   }
 
   async function handleLocalFileChange(event: ChangeEvent<HTMLInputElement>) {
@@ -120,17 +95,18 @@ export function useBenchmarkDataSource(
     setPhase("loading-database");
     setError("");
     try {
-      const loadedDataset = await loadBenchmarkDatasetFromFile(file);
+      assertLocalDatabaseSize(file);
+      const loadedDatabase = await getSession().replaceDatabaseFile(file, file.name, null);
       if (!isCurrentLoadRequest(generation)) return;
       loadedSourceKeyRef.current = `local:${generation}`;
       onSourceStateChange("", true);
-      setDataset(loadedDataset);
+      setDatabase(loadedDatabase);
       setSourceRevision((current) => current + 1);
       setPhase("ready");
     } catch (loadError: unknown) {
       if (!isCurrentLoadRequest(generation)) return;
       setError(loadError instanceof Error ? loadError.message : "Failed to load the selected SQLite file.");
-      setPhase(dataset ? "ready" : "select-source");
+      setPhase(database ? "ready" : "select-source");
     } finally {
       event.target.value = "";
     }
@@ -138,33 +114,15 @@ export function useBenchmarkDataSource(
 
   useEffect(() => {
     const generation = beginLoadRequest();
-
     async function boot() {
-      setPhase("booting");
-      setError("");
+      setPhase("booting"); setError("");
       try {
-        const manifestEntry = await loadManifest();
+        const manifestEntry = await loadManifest(undefined, loadAbortControllerRef.current?.signal);
         if (!isCurrentLoadRequest(generation)) return;
-        if (!manifestEntry) {
-          setManifest(null);
-          setManifestUrl(null);
-          onSourceStateChange("", false);
-          setPhase("select-source");
-          return;
-        }
-        setManifest(manifestEntry.manifest);
-        setManifestUrl(manifestEntry.url);
-        const databases = manifestEntry.manifest.databases;
-        if (!databases.length) {
-          onSourceStateChange("", false);
-          setPhase("select-source");
-          return;
-        }
-        const initialDatabase = selectInitialManifestDatabase(databases, selectedDatabaseId);
-        if (!initialDatabase) {
-          setPhase("select-source");
-          return;
-        }
+        if (!manifestEntry) { setManifest(null); setManifestUrl(null); onSourceStateChange("", false); setPhase("select-source"); return; }
+        setManifest(manifestEntry.manifest); setManifestUrl(manifestEntry.url);
+        const initialDatabase = selectInitialManifestDatabase(manifestEntry.manifest.databases, selectedDatabaseId);
+        if (!initialDatabase) { onSourceStateChange("", false); setPhase("select-source"); return; }
         await selectManifestDatabase(initialDatabase, manifestEntry.url, generation);
       } catch (loadError: unknown) {
         if (!isCurrentLoadRequest(generation)) return;
@@ -172,48 +130,35 @@ export function useBenchmarkDataSource(
         setPhase("select-source");
       }
     }
-
     void boot();
     return () => {
-      if (isCurrentLoadRequest(generation)) beginLoadRequest();
+      if (isCurrentLoadRequest(generation)) { loadAbortControllerRef.current?.abort(); loadGenerationRef.current += 1; }
+      const activeSession = sessionRef.current;
+      sessionRef.current = null;
+      if (activeSession) void activeSession.destroy().catch(() => undefined);
     };
   }, []);
 
   useEffect(() => {
-    if (!dataset?.source_url || phase !== "ready" || !isLocalHost()) return;
-
+    if (!database?.source_url || !session || phase !== "ready" || !isLocalHost()) return;
     let cancelled = false;
     let refreshing = false;
+    const refreshAbortController = new AbortController();
     const refresh = async () => {
       if (refreshing) return;
       refreshing = true;
       try {
-        const loadedDataset = await loadBenchmarkDatasetFromUrl(dataset.source_url!, dataset.source_label);
-        if (!cancelled && datasetSignature(loadedDataset) !== datasetSignature(dataset)) {
-          setDataset(loadedDataset);
-          setError("");
-        }
+        const source = await refreshDatabaseFileFromUrl(database.source_url!, database.source_label, refreshAbortController.signal);
+        if (!source) return;
+        const refreshed = await session.replaceDatabaseFile(source.bytes, source.sourceLabel, source.sourceUrl);
+        if (!cancelled) { setDatabase(refreshed); setSourceRevision((current) => current + 1); setError(""); }
       } catch (refreshError) {
-        if (!cancelled) console.warn("BenchLedger auto-refresh failed:", refreshError);
-      } finally {
-        refreshing = false;
-      }
+        if (!cancelled && !refreshAbortController.signal.aborted) console.warn("BenchLedger auto-refresh failed:", refreshError);
+      } finally { refreshing = false; }
     };
     const refreshInterval = window.setInterval(() => void refresh(), 10000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(refreshInterval);
-    };
-  }, [dataset, phase]);
+    return () => { cancelled = true; refreshAbortController.abort(); window.clearInterval(refreshInterval); };
+  }, [database, phase, session]);
 
-  return {
-    rows: dataset?.rows ?? EMPTY_BENCHMARK_ROWS,
-    dataset,
-    manifest,
-    phase,
-    error,
-    handleDatabaseSelection,
-    handleLocalFileChange,
-    sourceRevision
-  };
+  return { database, session, manifest, phase, error, handleDatabaseSelection, handleLocalFileChange, sourceRevision };
 }

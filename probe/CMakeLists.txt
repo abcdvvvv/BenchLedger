@@ -43,6 +43,16 @@ if(BENCHLEDGER_PROBE_BUILD_TESTS)
     target_compile_definitions(benchledger_fake_fastfetch_fail PRIVATE
         BENCHLEDGER_FAKE_FASTFETCH_FAIL=1)
 
+    add_executable(benchledger_fake_fastfetch_hang tests/fake_fastfetch.cpp)
+    target_compile_definitions(benchledger_fake_fastfetch_hang PRIVATE BENCHLEDGER_FAKE_FASTFETCH_HANG=1)
+    target_compile_definitions(benchledger_probe_tests PRIVATE BENCHLEDGER_FAKE_FASTFETCH_HANG_PATH="$<TARGET_FILE:benchledger_fake_fastfetch_hang>")
+    add_dependencies(benchledger_probe_tests benchledger_fake_fastfetch_hang)
+
+    add_executable(benchledger_fake_fastfetch_large_output tests/fake_fastfetch.cpp)
+    target_compile_definitions(benchledger_fake_fastfetch_large_output PRIVATE BENCHLEDGER_FAKE_FASTFETCH_LARGE_OUTPUT=1)
+    target_compile_definitions(benchledger_probe_tests PRIVATE BENCHLEDGER_FAKE_FASTFETCH_LARGE_OUTPUT_PATH="$<TARGET_FILE:benchledger_fake_fastfetch_large_output>")
+    add_dependencies(benchledger_probe_tests benchledger_fake_fastfetch_large_output)
+
     add_test(NAME benchledger_probe_tests COMMAND benchledger_probe_tests)
     add_test(NAME benchledger_probe_cli_linux_fixture
         COMMAND benchledger-probe --input ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/linux.json)

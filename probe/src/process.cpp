@@ -1,10 +1,12 @@
 #include "benchledger_probe/process.hpp"
 
+#include <chrono>
 #include <cstdlib>
 #include <fstream>
 #include <limits>
 #include <random>
 #include <stdexcept>
+#include <thread>
 
 #ifdef _WIN32
 #define NOMINMAX
@@ -12,6 +14,7 @@
 #else
 #include <cerrno>
 #include <fcntl.h>
+#include <signal.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -20,10 +23,21 @@
 namespace benchledger::probe {
 namespace {
 
-std::string read_file(const std::filesystem::path& path) {
+std::uintmax_t file_size_or_zero(const std::filesystem::path& path) {
+    std::error_code error;
+    const auto size = std::filesystem::file_size(path, error);
+    return error ? 0 : size;
+}
+
+std::string read_file(const std::filesystem::path& path, std::uintmax_t max_bytes) {
+    if (file_size_or_zero(path) > max_bytes) throw std::runtime_error("Fastfetch output exceeded " + std::to_string(max_bytes) + " bytes");
     std::ifstream stream(path, std::ios::binary);
     if (!stream) throw std::runtime_error("failed to read process output: " + path.string());
     return {std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
+}
+
+bool output_exceeds_limit(const std::filesystem::path& output, const std::filesystem::path& error, std::uintmax_t max_bytes) {
+    return file_size_or_zero(output) > max_bytes || file_size_or_zero(error) > max_bytes;
 }
 
 std::filesystem::path temporary_path(std::string_view suffix) {
@@ -148,7 +162,9 @@ std::wstring quote_windows(std::wstring_view argument) {
 
 } // namespace
 
-ProcessResult run_process(const std::filesystem::path& executable, const std::vector<std::string>& arguments) {
+ProcessResult run_process(const std::filesystem::path& executable, const std::vector<std::string>& arguments, std::chrono::milliseconds timeout, std::uintmax_t max_output_bytes) {
+    if (timeout <= std::chrono::milliseconds::zero()) throw std::runtime_error("Fastfetch timeout must be positive");
+    if (max_output_bytes == 0) throw std::runtime_error("Fastfetch output limit must be positive");
     const auto output_path = temporary_path(".out");
     const auto error_path = temporary_path(".err");
     struct Cleanup {
@@ -185,11 +201,26 @@ ProcessResult run_process(const std::filesystem::path& executable, const std::ve
     output.reset();
     error.reset();
 
-    if (WaitForSingleObject(process.get(), INFINITE) != WAIT_OBJECT_0) throw std::runtime_error("failed to wait for Fastfetch");
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (true) {
+        const DWORD wait_result = WaitForSingleObject(process.get(), 20);
+        if (wait_result == WAIT_OBJECT_0) break;
+        if (wait_result != WAIT_TIMEOUT) throw std::runtime_error("failed to wait for Fastfetch");
+        if (output_exceeds_limit(output_path, error_path, max_output_bytes)) {
+            TerminateProcess(process.get(), 125);
+            WaitForSingleObject(process.get(), INFINITE);
+            throw std::runtime_error("Fastfetch output exceeded " + std::to_string(max_output_bytes) + " bytes");
+        }
+        if (std::chrono::steady_clock::now() >= deadline) {
+            TerminateProcess(process.get(), 124);
+            WaitForSingleObject(process.get(), INFINITE);
+            throw std::runtime_error("Fastfetch timed out after " + std::to_string(timeout.count()) + " ms");
+        }
+    }
     DWORD raw_exit_code = 0;
     if (!GetExitCodeProcess(process.get(), &raw_exit_code)) throw std::runtime_error("failed to read Fastfetch exit code");
     const int exit_code = raw_exit_code <= static_cast<DWORD>(std::numeric_limits<int>::max()) ? static_cast<int>(raw_exit_code) : 125;
-    return {exit_code, read_file(output_path), read_file(error_path)};
+    return {exit_code, read_file(output_path, max_output_bytes), read_file(error_path, max_output_bytes)};
 #else
     const pid_t pid = fork();
     if (pid < 0) throw std::runtime_error("failed to fork Fastfetch process");
@@ -214,14 +245,27 @@ ProcessResult run_process(const std::filesystem::path& executable, const std::ve
     }
 
     int status = 0;
-    while (waitpid(pid, &status, 0) < 0) {
-        if (errno == EINTR) continue;
-        throw std::runtime_error("failed to wait for Fastfetch");
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (true) {
+        const pid_t result = waitpid(pid, &status, WNOHANG);
+        if (result == pid) break;
+        if (result < 0 && errno != EINTR) throw std::runtime_error("failed to wait for Fastfetch");
+        if (output_exceeds_limit(output_path, error_path, max_output_bytes)) {
+            ::kill(pid, SIGKILL);
+            while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {}
+            throw std::runtime_error("Fastfetch output exceeded " + std::to_string(max_output_bytes) + " bytes");
+        }
+        if (std::chrono::steady_clock::now() >= deadline) {
+            ::kill(pid, SIGKILL);
+            while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {}
+            throw std::runtime_error("Fastfetch timed out after " + std::to_string(timeout.count()) + " ms");
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
     }
     int exit_code = 125;
     if (WIFEXITED(status)) exit_code = WEXITSTATUS(status);
     else if (WIFSIGNALED(status)) exit_code = 128 + WTERMSIG(status);
-    return {exit_code, read_file(output_path), read_file(error_path)};
+    return {exit_code, read_file(output_path, max_output_bytes), read_file(error_path, max_output_bytes)};
 #endif
 }
 

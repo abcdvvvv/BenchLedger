@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-declare module "react-plotly.js/factory";
+declare const __BENCHLEDGER_VERSION__: string;
 
 declare module "plotly.js-basic-dist-min" {
   import Plotly from "plotly.js";

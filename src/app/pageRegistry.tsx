@@ -4,11 +4,11 @@ import {
   FiDatabase,
   FiInfo,
   FiLayers,
-  FiGitMerge,
   FiSettings,
   FiTrendingUp
 } from "react-icons/fi";
 import type { IconType } from "react-icons";
+import { TbCube } from "react-icons/tb";
 import type { ActivePage } from "../lib/dashboard-settings";
 
 export type AppPageDefinition = {
@@ -20,7 +20,7 @@ export type AppPageDefinition = {
 export const App_Page_Definitions: AppPageDefinition[] = [
   { id: "overview", navigationLabel: "Dashboard", Icon: FiBarChart2 },
   { id: "trend-board", navigationLabel: "Trend Board", Icon: FiTrendingUp },
-  { id: "compare", navigationLabel: "Compare", Icon: FiGitMerge },
+  { id: "dimension-selector", navigationLabel: "Dimensions", Icon: TbCube },
   { id: "benchmark-keys", navigationLabel: "Benchmark Keys", Icon: FiLayers },
   { id: "database-catalog", navigationLabel: "Databases", Icon: FiDatabase },
   { id: "settings", navigationLabel: "Settings", Icon: FiSettings },
@@ -35,10 +35,10 @@ function lazyPage<M, K extends keyof M>(load: () => Promise<M>, name: K) {
   }));
 }
 
-export const OverviewFeature = lazyPage(() => import("../features/overview/OverviewFeature"), "OverviewFeature");
-export const TrendBoardFeature = lazyPage(() => import("../features/trend-board/TrendBoardFeature"), "TrendBoardFeature");
+export const OverviewPage = lazyPage(() => import("../features/overview/OverviewPage"), "OverviewPage");
+export const TrendBoardPage = lazyPage(() => import("../features/trend-board/TrendBoardPage"), "TrendBoardPage");
 export const BenchmarkKeysPage = lazyPage(() => import("../features/benchmark-keys/BenchmarkKeysPage"), "BenchmarkKeysPage");
 export const SettingsPage = lazyPage(() => import("../features/settings/SettingsPage"), "SettingsPage");
 export const DatabasesPage = lazyPage(() => import("../features/databases/DatabasesPage"), "DatabasesPage");
 export const AboutPage = lazyPage(() => import("../features/about/AboutPage"), "AboutPage");
-export const CompareFeature = lazyPage(() => import("../features/compare/CompareFeature"), "CompareFeature");
+export const DimensionSelectorPage = lazyPage(() => import("../features/dimension-selector/DimensionSelectorPage"), "DimensionSelectorPage");

@@ -1,5 +1,8 @@
-import type { ChangeEvent, CSSProperties } from "react";
-import { BenchmarkKeyCascadeFilter, type BenchmarkKeyFilterOption } from "../benchmarks/components/BenchmarkKeyCascadeFilter";
+import { memo, useMemo, type ChangeEvent, type CSSProperties } from "react";
+import type { Config, Layout } from "plotly.js";
+import type { BenchmarkDatabaseState } from "../../app/useBenchmarkDatabaseState";
+import { useUISettingSetter } from "../../app/useUISettingSetter";
+import { BenchmarkKeyCascadeFilter } from "../benchmarks/components/BenchmarkKeyCascadeFilter";
 import Plot from "../benchmarks/components/Plot";
 import { Button } from "../../components/ui/Button";
 import { EmptyState } from "../../components/common/EmptyState";
@@ -10,44 +13,77 @@ import { Trend_Board_Plot_Height, type PlotTheme } from "../../lib/dashboard-plo
 import {
   Trend_Board_Max_Columns,
   Trend_Board_Min_Columns,
-  clampTrendBoardColumns,
-  type TrendAxisMode,
-  type TrendBoardViewMode
+  clampTrendBoardColumns
 } from "../../lib/dashboard-settings";
-import type { TrendBoardCard, TrendBoardCombinedChart } from "./useTrendBoardModel";
-import { BenchmarkFilterToolbar, type BenchmarkFilterToolbarProps } from "../benchmarks/components/BenchmarkFilterToolbar";
+import { BenchmarkFilterToolbar } from "../benchmarks/components/BenchmarkFilterToolbar";
+import { useBenchmarkViewSlice } from "../benchmarks/useBenchmarkViewSlice";
+import { useTrendBoardModel } from "./useTrendBoardModel";
+import { DimensionSelectorInvalidBanner } from "../dimension-selector/DimensionSelectorInvalidBanner";
 
-export type TrendBoardPageProps = {
-  header: {
-    benchmarkOptions: BenchmarkKeyFilterOption[];
-    selectedBenchmarkKeys: string[];
-    onSelectedBenchmarkKeysChange: (values: string[]) => void;
-    hasDataset: boolean;
-    trendBoardColumns: number;
-    onTrendBoardColumnsChange: (value: number) => void;
-    trendBoardViewMode: TrendBoardViewMode;
-    onToggleTrendBoardViewMode: () => void;
-    trendAxisMode: TrendAxisMode;
-    onToggleTrendAxisMode: () => void;
-  };
-  filters: Omit<BenchmarkFilterToolbarProps, "hasDataset">;
-  trend: {
-    selectedMetricLabel: string;
-    trendBoardCards: TrendBoardCard[];
-    combinedTrendChart: TrendBoardCombinedChart | null;
-    showCombinedTrendChart: boolean;
-    trendPlotMargin: { t: number; r: number; b: number; l: number };
-    plotTheme: PlotTheme;
-    hasTrendRows: boolean;
-  };
-};
 
-export function TrendBoardPage(props: TrendBoardPageProps) {
-  const { header, filters, trend } = props;
-  const showCombinedTrendChart = trend.showCombinedTrendChart;
+const Trend_Plot_Config: Partial<Config> = { displayModeBar: "hover", responsive: true };
+const Trend_Plot_Style = { width: "100%", height: "100%" } as const;
+type TrendPlotProps = { data: Array<Record<string, unknown>>; margin: { t: number; r: number; b: number; l: number }; metricLabel: string; xAxisTitle: string; plotTheme: PlotTheme; showLegend: boolean; };
+
+const TrendPlot = memo(function TrendPlot({ data, margin, metricLabel, xAxisTitle, plotTheme, showLegend }: TrendPlotProps) {
+  const layout = useMemo<Partial<Layout>>(() => ({ autosize: true, margin, paper_bgcolor: "rgba(0, 0, 0, 0)", plot_bgcolor: "rgba(0, 0, 0, 0)", font: { color: plotTheme.axis }, xaxis: { showgrid: false, color: plotTheme.axis, tickfont: { size: 14 }, title: { text: xAxisTitle }, type: "category" }, yaxis: { title: { text: metricLabel }, gridcolor: plotTheme.grid, zeroline: false, color: plotTheme.axis, tickfont: { size: 14 } }, modebar: { bgcolor: "rgba(0, 0, 0, 0)", color: plotTheme.axis, activecolor: plotTheme.line }, showlegend: showLegend, legend: showLegend ? { orientation: "h", x: 0, y: -0.2, font: { color: plotTheme.axis } } : undefined }), [margin, metricLabel, plotTheme, showLegend, xAxisTitle]);
+  return <Plot useResizeHandler style={Trend_Plot_Style} data={data} layout={layout} config={Trend_Plot_Config} />;
+});
+
+export type TrendBoardPageProps = { state: BenchmarkDatabaseState; };
+
+export function TrendBoardPage({ state }: TrendBoardPageProps) {
+  const { settings, setSetting } = state;
+  const setYAxis = useUISettingSetter(setSetting, "yAxis");
+  const setBranch = useUISettingSetter(setSetting, "trendBoardBranch");
+  const setSelectedBenchmarkKeys = useUISettingSetter(setSetting, "selectedBenchmarkKeys");
+  const setColumns = useUISettingSetter(setSetting, "trendBoardColumns");
+  const setDisplayStrategy = useUISettingSetter(setSetting, "trendBoardDisplayStrategy");
+  const setTimeStart = useUISettingSetter(setSetting, "trendBoardTimeStart");
+  const setTimeEnd = useUISettingSetter(setSetting, "trendBoardTimeEnd");
+
+  const slice = useBenchmarkViewSlice({
+    session: state.session,
+    catalog: state.benchmarkViewIndex,
+    benchmarksByKey: state.benchmarksByKey,
+    sourceRevision: state.databaseSourceRevision,
+    configurationKeys: state.dimensionSelection.configurationKeys,
+    yAxis: settings.yAxis,
+    onYAxisChange: setYAxis,
+    branch: settings.trendBoardBranch,
+    onBranchChange: setBranch,
+    timeStart: settings.trendBoardTimeStart,
+    timeEnd: settings.trendBoardTimeEnd,
+    displayStrategy: settings.trendBoardDisplayStrategy
+  });
+
+  const model = useTrendBoardModel({
+    session: state.session,
+    query: slice.resultQuery,
+    sourceRevision: state.databaseSourceRevision,
+    runsById: state.runsById,
+    benchmarkOptions: slice.benchmarkOptions,
+    selectedBenchmarkKeys: settings.selectedBenchmarkKeys,
+    onSelectedBenchmarkKeysChange: setSelectedBenchmarkKeys,
+    yAxis: settings.yAxis,
+    dimensionSelection: state.dimensionSelection,
+    trendLineShape: settings.trendLineShape,
+    trendMarkerSymbol: settings.trendMarkerSymbol,
+    trendMarkerFillMode: settings.trendMarkerFillMode,
+    plotTheme: state.plotTheme,
+    theme: settings.theme
+  });
+  const showCombinedTrendChart = settings.trendBoardViewMode === "combined";
   const pageDescription = showCombinedTrendChart
     ? "All selected benchmark keys are rendered together in one shared trend chart."
     : "Each selected benchmark key is rendered as its own independent trend chart.";
+
+  if (state.hasDatabase && state.dimensionSelection.dimensions.length && !state.dimensionSelection.validation.isValid) return (
+    <>
+      <PageHeader eyebrow="Benchmarking › Trend Board" title="Trend Board" description={pageDescription} />
+      <DimensionSelectorInvalidBanner issues={state.dimensionSelection.validation.issues} onOpenDimensionSelector={() => state.navigateToPage("dimension-selector")} />
+    </>
+  );
 
   return (
     <>
@@ -60,10 +96,10 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
             <Field className="min-w-0 flex-1 xl:min-w-[22rem] xl:max-w-[34rem]">
               <FieldLabel className="invisible">Benchmark key</FieldLabel>
               <BenchmarkKeyCascadeFilter
-                options={header.benchmarkOptions}
-                selectedValues={header.selectedBenchmarkKeys}
-                setSelectedValues={header.onSelectedBenchmarkKeysChange}
-                disabled={!header.hasDataset}
+                options={slice.benchmarkOptions}
+                selectedValues={settings.selectedBenchmarkKeys}
+                setSelectedValues={setSelectedBenchmarkKeys}
+                disabled={!state.hasDatabase}
                 stretchWidth
                 ariaLabel="Benchmark keys"
               />
@@ -75,12 +111,12 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
                 aria-label="Trend board columns"
                 min={Trend_Board_Min_Columns}
                 max={Trend_Board_Max_Columns}
-                value={header.trendBoardColumns}
+                value={settings.trendBoardColumns}
                 onChange={(event: ChangeEvent<HTMLInputElement>) => {
                   const nextValue = Number(event.target.value);
-                  header.onTrendBoardColumnsChange(clampTrendBoardColumns(nextValue));
+                  setColumns(clampTrendBoardColumns(nextValue));
                 }}
-                disabled={!header.hasDataset || showCombinedTrendChart}
+                disabled={!state.hasDatabase || showCombinedTrendChart}
               />
             </Field>
             <Field className="max-sm:w-full">
@@ -88,117 +124,56 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
               <Button
                 variant="secondary"
                 className="max-sm:w-full"
-                onClick={header.onToggleTrendBoardViewMode}
-                aria-pressed={header.trendBoardViewMode === "combined"}
+                onClick={() => setSetting("trendBoardViewMode", settings.trendBoardViewMode === "combined" ? "separate" : "combined")}
+                aria-pressed={settings.trendBoardViewMode === "combined"}
               >
-                View: {header.trendBoardViewMode === "combined" ? "Combined" : "Separate"}
+                View: {settings.trendBoardViewMode === "combined" ? "Combined" : "Separate"}
               </Button>
             </Field>
-            <Field className="max-sm:w-full">
-              <FieldLabel className="invisible">Axis mode</FieldLabel>
-              <Button
-                variant="secondary"
-                className="w-34 max-sm:w-full"
-                onClick={header.onToggleTrendAxisMode}
-                aria-pressed={header.trendAxisMode === "time"}
-              >
-                X-Axis: {header.trendAxisMode === "commit" ? "Commit" : "Time"}
-              </Button>
-            </Field>
+
           </>
         )}
       />
 
-      <BenchmarkFilterToolbar {...filters} hasDataset={header.hasDataset} />
+      <BenchmarkFilterToolbar
+        yAxis={settings.yAxis}
+        yAxisOptions={slice.yAxisOptions}
+        onYAxisChange={setYAxis}
+        displayStrategy={settings.trendBoardDisplayStrategy}
+        onDisplayStrategyChange={setDisplayStrategy}
+        branch={settings.trendBoardBranch}
+        branchOptions={slice.branchOptions}
+        onBranchChange={setBranch}
+        timeRangeLabel={slice.runsEmptyTimeRangeLabel}
+        timeStart={settings.trendBoardTimeStart}
+        timeEnd={settings.trendBoardTimeEnd}
+        databaseTimeStart={slice.databaseTimeStart}
+        databaseTimeEnd={slice.databaseTimeEnd}
+        onTimeStartChange={setTimeStart}
+        onTimeEndChange={setTimeEnd}
+        hasDatabase={state.hasDatabase}
+      />
 
-      {showCombinedTrendChart && trend.combinedTrendChart ? (
+      {showCombinedTrendChart && model.combinedTrendChart ? (
         <Panel className="surface-card-trend-board pad-trend-board-card min-w-0">
           <SectionTitle title="Combined Trend" description="Trend Board benchmarks overlaid in one chart." />
           <div className="mt-5" style={{ height: `${Trend_Board_Plot_Height}px` }}>
-            <Plot
-              useResizeHandler
-              style={{ width: "100%", height: "100%" }}
-              data={trend.combinedTrendChart.traces}
-              layout={{
-                autosize: true,
-                margin: trend.trendPlotMargin,
-                paper_bgcolor: "rgba(0, 0, 0, 0)",
-                plot_bgcolor: "rgba(0, 0, 0, 0)",
-                font: { color: trend.plotTheme.axis },
-                xaxis: {
-                  showgrid: false,
-                  color: trend.plotTheme.axis,
-                  tickfont: { size: 14 },
-                  ...(header.trendAxisMode === "commit" ? trend.combinedTrendChart.commitAxisLabels : undefined)
-                },
-                yaxis: {
-                  title: { text: trend.combinedTrendChart.metricLabel || trend.selectedMetricLabel || "Metric value" },
-                  gridcolor: trend.plotTheme.grid,
-                  zeroline: false,
-                  color: trend.plotTheme.axis,
-                  tickfont: { size: 14 }
-                },
-                modebar: {
-                  bgcolor: "rgba(0, 0, 0, 0)",
-                  color: trend.plotTheme.axis,
-                  activecolor: trend.plotTheme.line
-                },
-                showlegend: trend.combinedTrendChart.showLegend,
-                legend: trend.combinedTrendChart.showLegend ? {
-                  orientation: "h",
-                  x: 0,
-                  y: -0.2,
-                  font: { color: trend.plotTheme.axis }
-                } : undefined
-              }}
-              config={{ displayModeBar: "hover", responsive: true }}
-            />
+            <TrendPlot data={model.combinedTrendChart.traces} margin={model.trendPlotMargin} metricLabel={model.combinedTrendChart.metricLabel || settings.yAxis || "Metric value"} xAxisTitle={model.xAxisTitle} plotTheme={state.plotTheme} showLegend={model.combinedTrendChart.showLegend} />
           </div>
         </Panel>
-      ) : trend.trendBoardCards.length ? (
+      ) : model.trendBoardCards.length ? (
         <section
           className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:[grid-template-columns:repeat(var(--trend-board-columns),minmax(0,1fr))]"
-          style={{ "--trend-board-columns": String(header.trendBoardColumns) } as CSSProperties}
+          style={{ "--trend-board-columns": String(settings.trendBoardColumns) } as CSSProperties}
         >
-          {trend.trendBoardCards.map((card) => (
+          {model.trendBoardCards.map((card) => (
             <Panel key={card.benchmarkKey} className="surface-card-trend-board pad-trend-board-card min-w-0">
               <SectionTitle
                 title={card.label}
                 description={card.path[card.path.length - 1] ?? card.label}
               />
               <div className="mt-5" style={{ height: `${Trend_Board_Plot_Height}px` }}>
-                <Plot
-                  useResizeHandler
-                  style={{ width: "100%", height: "100%" }}
-                  data={card.traces}
-                  layout={{
-                    autosize: true,
-                    margin: trend.trendPlotMargin,
-                    paper_bgcolor: "rgba(0, 0, 0, 0)",
-                    plot_bgcolor: "rgba(0, 0, 0, 0)",
-                    font: { color: trend.plotTheme.axis },
-                    xaxis: {
-                      showgrid: false,
-                      color: trend.plotTheme.axis,
-                      tickfont: { size: 14 },
-                      ...(header.trendAxisMode === "commit" ? card.commitAxisLabels : undefined)
-                    },
-                    yaxis: {
-                      title: { text: card.metricLabel || trend.selectedMetricLabel || "Metric value" },
-                      gridcolor: trend.plotTheme.grid,
-                      zeroline: false,
-                      color: trend.plotTheme.axis,
-                      tickfont: { size: 14 }
-                    },
-                    modebar: {
-                      bgcolor: "rgba(0, 0, 0, 0)",
-                      color: trend.plotTheme.axis,
-                      activecolor: trend.plotTheme.line
-                    },
-                    showlegend: false
-                  }}
-                  config={{ displayModeBar: "hover", responsive: true }}
-                />
+                <TrendPlot data={card.traces} margin={model.trendPlotMargin} metricLabel={card.metricLabel || settings.yAxis || "Metric value"} xAxisTitle={model.xAxisTitle} plotTheme={state.plotTheme} showLegend={false} />
               </div>
             </Panel>
           ))}
@@ -207,19 +182,19 @@ export function TrendBoardPage(props: TrendBoardPageProps) {
         <EmptyState
           className="pad-empty flex min-h-60 flex-col items-center justify-center text-center"
           title={
-            !header.hasDataset
+            !state.hasDatabase
               ? "No benchmark data loaded"
-              : !header.benchmarkOptions.length
+              : !slice.benchmarkOptions.length
                 ? "No benchmarks match the current filters"
-                : header.selectedBenchmarkKeys.length
+                : settings.selectedBenchmarkKeys.length
                   ? "No trend data matches the current filters"
                   : "No benchmark key selected"
           }
           description={
-            !header.hasDataset
+            !state.hasDatabase
               ? "Load a benchmark database to build trend charts."
-              : !header.benchmarkOptions.length || (header.selectedBenchmarkKeys.length && !trend.hasTrendRows)
-                ? "Adjust the hardware/software pair, metric, group, branch, time range, or display strategy."
+              : !slice.benchmarkOptions.length || (settings.selectedBenchmarkKeys.length && !model.hasTrendRows)
+                ? "Adjust the Dimension Selector, Y-axis, branch, time range, or display strategy."
                 : "Choose one or more benchmark keys to render trend charts."
           }
         />

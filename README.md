@@ -160,11 +160,11 @@ benchmark_results
 └── better
 ```
 
-`benchmark_key` is a canonical JSON array of nonempty string segments. Each run references one code state, one hardware environment, and one software environment, while repeated runs remain separate measurement batches. Overview uses raw rows for direct run-to-run comparison; Trend Board and Compare use configuration aggregates keyed by code state, hardware environment, software environment, benchmark key, metric, and statistic. Repeated runs contribute their arithmetic mean after compatible time-unit normalization, missing results are excluded rather than treated as zero, and each aggregate records its contributing `run_count`. Trend Board applies its active filters before aggregation, while page and Compare sharing state is stored in the URL and durable display preferences remain in `localStorage`.
+`benchmark_key` is a canonical JSON array of nonempty string segments. Each run references one code state, one hardware environment, and one software environment, while repeated runs remain separate measurement batches. Dashboard and Trend Board consume configuration aggregates keyed by code state, hardware environment, software environment, benchmark key, metric, and statistic. Repeated runs contribute their arithmetic mean after compatible time-unit normalization, missing results are excluded rather than treated as zero, and each aggregate records its contributing `run_count`. When a fixed identity dimension selects multiple values, BenchLedger pools the matching exact configurations at the resulting varying-dimension point and weights their values by contributing `run_count`. Durable analysis and display preferences are stored in `localStorage`; page navigation alone is represented in the URL.
 
-### Compare
+### Dimension Selector
 
-Compare provides field-level orthogonal comparisons against an existing code/hardware/software configuration. Uncheck the identity fields that may vary; all checked fields must match the baseline, and only one of Code, Hardware, or Software can vary at a time. Identity arrays are compared without relying on element order while preserving relationships inside arrays of objects. Charts and tables use repeated-run aggregates, show `run_count`, exclude missing or incompatible results from delta calculations, list each baseline-to-candidate identity change, and restore the selected baseline, fields, benchmark, and metric from shared URLs.
+Dimension Selector configures the identity dimensions used globally by Dashboard and Trend Board. The editor permits temporary incomplete states while rules and values are being changed, and its validation checker requires exactly one discovered identity dimension to be `Varying` and every `Fixed` dimension to select at least one observed value before dependent benchmark views are available. BenchLedger admits all observed values of the valid varying dimension and maps them to the varying-dimension axis. Selecting one fixed value gives that dimension `Exact` resolution, while selecting multiple values automatically gives it `Grouped` resolution and pools those exact values into the same fixed condition. Dashboard compares two points from the resulting varying dimension, while Trend Board plots all matching points. Y-Axis, Branch, Time Range, Display Strategy, and benchmark-key selection remain view-level controls rather than identity dimensions.
 
 ### benchledger.json
 
@@ -204,10 +204,14 @@ julia --project=benchmark benchmark/runbench.jl
 ```
 
 In this setup, BenchLedger on `localhost` will automatically poll the current SQLite URL
-and refresh the UI when the database changes.
+and refresh the UI when the database changes. The poll checks HTTP cache validators first,
+so unchanged databases are not downloaded and parsed again; servers without usable validators
+fall back to a full refresh check.
 
 If you instead load a database through `Choose SQLite`, the browser treats it as a one-off
 local file selection and automatic refresh is not available.
+
+The browser viewer rejects SQLite files larger than 512 MiB before importing them into the SQLocal worker to avoid exhausting browser memory. Benchmark result values remain in the worker-owned SQLite database and are queried or aggregated on demand instead of being copied into a full main-thread result snapshot.
 
 ## Local Validation
 
@@ -215,13 +219,14 @@ Before creating a BenchLedger release, run the checks that are available on your
 
 ```bash
 npm run check
+npm run build
 cmake -S probe -B probe/build -DCMAKE_BUILD_TYPE=Release
 cmake --build probe/build
 ctest --test-dir probe/build --output-on-failure
 python3 -m unittest discover -s probe/packaging/tests -v
 ```
 
-`npm run check` runs lint, frontend tests, TypeScript checking, and the production Vite build. The release workflow repeats these checks, builds the selected native Probe targets, pins one Fastfetch release, validates every checksum and bundle manifest, and publishes only after the complete selected artifact set is present.
+`npm run check` runs lint, frontend tests, and TypeScript checking without creating `dist`; `npm run build` performs the production Vite build. Keeping validation and artifact creation separate avoids duplicate frontend builds and keeps `dist` owned by the explicit build step. The release workflow repeats the required checks, builds the selected native Probe targets, pins one Fastfetch release, validates every checksum and bundle manifest, and publishes only after the complete selected artifact set is present.
 
 ## Target Modes and Backfill
 

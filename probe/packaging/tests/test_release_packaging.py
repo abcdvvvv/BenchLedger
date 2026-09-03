@@ -10,6 +10,7 @@ import tarfile
 import tempfile
 import time
 import unittest
+from unittest import mock
 import warnings
 import zipfile
 from pathlib import Path
@@ -94,6 +95,26 @@ class PackagingTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 package_probe.extract_archive(archive, root / "out")
 
+    def test_archive_resource_limits(self):
+        with mock.patch.object(package_probe, "MAX_ARCHIVE_MEMBERS", 1):
+            with self.assertRaisesRegex(RuntimeError, "too many members"):
+                package_probe._validate_archive_limits([("a", 1), ("b", 1)])
+        with mock.patch.object(package_probe, "MAX_ARCHIVE_MEMBER_BYTES", 3):
+            with self.assertRaisesRegex(RuntimeError, "member is too large"):
+                package_probe._validate_archive_limits([("large", 4)])
+        with mock.patch.object(package_probe, "MAX_ARCHIVE_TOTAL_BYTES", 3):
+            with self.assertRaisesRegex(RuntimeError, "expands beyond"):
+                package_probe._validate_archive_limits([("a", 2), ("b", 2)])
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive = root / "limited.zip"
+            with zipfile.ZipFile(archive, "w") as target:
+                target.writestr("a", b"a")
+                target.writestr("b", b"b")
+            with mock.patch.object(package_probe, "MAX_ARCHIVE_MEMBERS", 1):
+                with self.assertRaisesRegex(RuntimeError, "too many members"):
+                    package_probe.extract_archive(archive, root / "out")
+
     def test_resolve_release_pins_all_requested_assets(self):
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / "manifest.json"
@@ -149,16 +170,24 @@ class PackagingTests(unittest.TestCase):
                 "fastfetch-cli/fastfetch", url, "fastfetch-linux-aarch64.tar.gz"
             )
 
-    def test_release_manifest_digest_format(self):
-        digest = "a" * 64
-        self.assertIsNotNone(release.GITHUB_DIGEST_RE.fullmatch(f"sha256:{digest}"))
-        self.assertIsNone(release.GITHUB_DIGEST_RE.fullmatch(digest))
-
-    def test_sha256(self):
+    def test_fastfetch_download_is_atomic_and_cleans_temporary_files(self):
+        payload = b"verified Fastfetch payload"
+        expected = hashlib.sha256(payload).hexdigest()
         with tempfile.TemporaryDirectory() as temporary:
-            path = Path(temporary) / "value"
-            path.write_bytes(b"BenchLedger")
-            self.assertEqual(release.sha256(path), hashlib.sha256(b"BenchLedger").hexdigest())
+            root = Path(temporary)
+            output = root / "fastfetch.tar.gz"
+            output.write_bytes(b"previous")
+            with mock.patch.object(release.urllib.request, "urlopen", return_value=io.BytesIO(payload)):
+                self.assertEqual(release._stream_download("https://example.test/fastfetch", output, expected, len(payload), "fastfetch.tar.gz"), expected)
+            self.assertEqual(output.read_bytes(), payload)
+            self.assertEqual(list(root.glob(".fastfetch.tar.gz.*.part")), [])
+
+            output.write_bytes(b"keep-me")
+            with mock.patch.object(release.urllib.request, "urlopen", return_value=io.BytesIO(payload)):
+                with self.assertRaisesRegex(RuntimeError, "SHA-256 mismatch"):
+                    release._stream_download("https://example.test/fastfetch", output, "0" * 64, len(payload), "fastfetch.tar.gz")
+            self.assertEqual(output.read_bytes(), b"keep-me")
+            self.assertEqual(list(root.glob(".fastfetch.tar.gz.*.part")), [])
 
     def test_release_archives_are_reproducible_and_zip_is_deflated(self):
         with tempfile.TemporaryDirectory() as temporary:

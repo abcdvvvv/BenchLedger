@@ -54,6 +54,21 @@ void test_json() {
     require(at(value, "emoji").as_string() == "🚀", "Unicode surrogate pair failed");
     require(at(value, "n").as_uint64() == 18446744073709551615ULL, "uint64 parse failed");
     require(Json::parse(value.dump()).dump() == value.dump(), "JSON round trip failed");
+    require(at(Json::parse(R"({"text":"é🚀"})"), "text").as_string() == "é🚀", "raw UTF-8 failed");
+
+    std::string invalidUtf8 = "{\"text\":\"";
+    invalidUtf8.push_back(static_cast<char>(0xFF));
+    invalidUtf8 += "\"}";
+    require_throws_contains([&] { (void) Json::parse(invalidUtf8); }, "invalid UTF-8");
+
+    std::string maximumDepth(256, '[');
+    maximumDepth += '0';
+    maximumDepth.append(256, ']');
+    (void) Json::parse(maximumDepth);
+    std::string excessiveDepth(257, '[');
+    excessiveDepth += '0';
+    excessiveDepth.append(257, ']');
+    require_throws_contains([&] { (void) Json::parse(excessiveDepth); }, "maximum nesting depth exceeded");
 }
 
 void test_linux() {
@@ -192,6 +207,18 @@ void test_invalid_explicit_fastfetch_failure() {
         "--fastfetch");
 }
 
+void test_fastfetch_timeout() {
+    require_throws_contains(
+        [] { (void) benchledger::probe::run_process(BENCHLEDGER_FAKE_FASTFETCH_HANG_PATH, {}, std::chrono::milliseconds(100)); },
+        "timed out");
+}
+
+void test_fastfetch_output_limit() {
+    require_throws_contains(
+        [] { (void) benchledger::probe::run_process(BENCHLEDGER_FAKE_FASTFETCH_LARGE_OUTPUT_PATH, {}, std::chrono::seconds(1), 1024); },
+        "output exceeded 1024 bytes");
+}
+
 void test_critical_failure() {
     require_throws_contains(
         [] { (void) normalize("missing-cpu.json"); },
@@ -215,6 +242,8 @@ int main() {
         test_os_without_name_is_omitted();
         test_incomplete_kernel_failure();
         test_invalid_explicit_fastfetch_failure();
+        test_fastfetch_timeout();
+        test_fastfetch_output_limit();
         test_critical_failure();
         std::cout << "All benchledger-probe tests passed\n";
         return 0;

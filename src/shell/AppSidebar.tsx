@@ -1,19 +1,19 @@
 import { useEffect, useRef, useState } from "react";
-import { FiDatabase, FiMoon, FiSun } from "react-icons/fi";
+import { FiDatabase } from "react-icons/fi";
 import { formatDate } from "../lib/format";
 import { App_Page_Definitions } from "../app/pageRegistry";
 import { databaseTitle, metadataTitle, sourceSummary } from "../lib/dashboard-data";
 import type { ActivePage, ThemeMode } from "../lib/dashboard-settings";
 import type {
-  BenchmarkRun,
   BenchLedgerManifestDatabase,
   BenchLedgerMetadata,
-  LoadedBenchmarkDataset
+  LoadedBenchmarkDatabase
 } from "../lib/types";
 import { buttonClassName } from "../components/ui/Button";
 import { SelectField } from "../components/ui/Field";
 import { IconButton } from "../components/ui/IconButton";
 import { cn } from "../components/ui/cn";
+import { resolveSafeUserUrl } from "../lib/url";
 import type { SidebarMode } from "./layoutConfig";
 
 export type AppSidebarProps = {
@@ -23,11 +23,9 @@ export type AppSidebarProps = {
   sourceDatabases: BenchLedgerManifestDatabase[];
   selectedDatabaseId: string;
   onDatabaseChange: (databaseId: string) => void | Promise<void>;
-  dataset: LoadedBenchmarkDataset | null;
+  database: LoadedBenchmarkDatabase | null;
   currentMetadata: BenchLedgerMetadata | null;
   theme: ThemeMode;
-  onThemeToggle: () => void;
-  latestRun: BenchmarkRun | null;
   assetBaseUrl: string;
   siteTitle: string;
   onRequestClose: (restoreFocus?: boolean) => void;
@@ -57,18 +55,6 @@ function DatabaseSelect(props: {
   );
 }
 
-function resolveLogoUrl(value: string): string | null {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed;
-  if (/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(trimmed)) return null;
-  try {
-    return new URL(trimmed, window.location.href).toString();
-  } catch {
-    return null;
-  }
-}
-
 export function AppSidebar(props: AppSidebarProps) {
   const {
     mode,
@@ -77,23 +63,21 @@ export function AppSidebar(props: AppSidebarProps) {
     sourceDatabases,
     selectedDatabaseId,
     onDatabaseChange,
-    dataset,
+    database,
     currentMetadata,
     theme,
-    onThemeToggle,
-    latestRun,
     assetBaseUrl,
     siteTitle,
     onRequestClose
   } = props;
-  const ThemeIcon = theme === "dark" ? FiSun : FiMoon;
   const defaultLogoSrc = `${assetBaseUrl}${theme === "dark" ? "LightLogo.png" : "DarkLogo.png"}`;
   const defaultLogoHref = "https://github.com/abcdvvvv/BenchLedger";
   const customLogoUrl = theme === "dark"
     ? currentMetadata?.logo_url_dark.trim() || currentMetadata?.logo_url.trim() || ""
     : currentMetadata?.logo_url.trim() || "";
   const customProjectUrl = currentMetadata?.project_url.trim() || "";
-  const resolvedCustomLogoUrl = resolveLogoUrl(customLogoUrl);
+  const resolvedCustomLogoUrl = resolveSafeUserUrl(customLogoUrl, window.location.href);
+  const resolvedCustomProjectUrl = resolveSafeUserUrl(customProjectUrl, window.location.href);
   const [brandLogoKind, setBrandLogoKind] = useState<"rectangular" | "square">("rectangular");
   const [customLogoFailed, setCustomLogoFailed] = useState(false);
   const [databasePickerOpen, setDatabasePickerOpen] = useState(false);
@@ -102,9 +86,8 @@ export function AppSidebar(props: AppSidebarProps) {
 
   const iconMode = mode === "icon";
   const fullMode = mode !== "icon";
-  const latestRunLabel = latestRun ? `${latestRun.environment_pair_label} · ${formatDate(latestRun.measured_at)}` : dataset?.source_label ?? "No database";
-  const localFileActive = Boolean(dataset && !dataset.source_url);
-  const canChooseDatabase = sourceDatabases.length > 1 || (sourceDatabases.length > 0 && (!dataset || localFileActive));
+  const localFileActive = Boolean(database && !database.source_url);
+  const canChooseDatabase = sourceDatabases.length > 1 || (sourceDatabases.length > 0 && (!database || localFileActive));
 
   useEffect(() => {
     if (!resolvedCustomLogoUrl) {
@@ -168,7 +151,7 @@ export function AppSidebar(props: AppSidebarProps) {
   }, [databasePickerOpen]);
 
   const isCustomLogo = Boolean(resolvedCustomLogoUrl) && !customLogoFailed;
-  const brandHref = isCustomLogo ? customProjectUrl : defaultLogoHref;
+  const brandHref = isCustomLogo ? resolvedCustomProjectUrl : defaultLogoHref;
   const brandLogoSrc = isCustomLogo ? resolvedCustomLogoUrl! : defaultLogoSrc;
   const brandName = currentMetadata ? metadataTitle(currentMetadata) : siteTitle;
   const isSquareLogo = isCustomLogo && brandLogoKind === "square";
@@ -278,20 +261,20 @@ export function AppSidebar(props: AppSidebarProps) {
       ) : null}
 
       {fullMode ? (
-        <div className="surface-card pad-panel">
+        <div className="surface-card pad-panel mt-auto">
           <div className="type-card-title flex items-center gap-2">
             <FiDatabase className="size-4" aria-hidden="true" />
             Source
           </div>
-          <p className="type-body mt-2">{sourceSummary(dataset)}</p>
+          <p className="type-body mt-2">{sourceSummary(database)}</p>
           {currentMetadata?.updated_at ? (
             <p className="type-meta mt-2">Updated {formatDate(currentMetadata.updated_at)}</p>
           ) : null}
         </div>
       ) : null}
 
-      <div className={cn("mt-auto w-full", iconMode ? "space-y-2" : "")}>
-        {iconMode && canChooseDatabase ? (
+      {iconMode && canChooseDatabase ? (
+        <div className="mt-auto w-full">
           <div ref={databasePickerRef} className="relative">
             <IconButton
               buttonRef={databasePickerButtonRef}
@@ -327,37 +310,8 @@ export function AppSidebar(props: AppSidebarProps) {
               </div>
             ) : null}
           </div>
-        ) : null}
-
-        {iconMode ? (
-          <div className="group relative">
-            <IconButton
-              onClick={onThemeToggle}
-              label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
-              title={latestRunLabel}
-            >
-              <ThemeIcon className="size-4" aria-hidden="true" />
-            </IconButton>
-            <span className="type-caption pointer-events-none absolute left-full top-1/2 z-20 ml-3 -translate-y-1/2 whitespace-nowrap radius-theme bg-[#1a1a1e] px-2 py-1 text-stone-100 opacity-0 shadow-theme-tooltip transition group-hover:opacity-100 group-focus-within:opacity-100 dark:bg-white dark:text-stone-900">
-              {theme === "dark" ? "Light theme" : "Dark theme"}
-            </span>
-          </div>
-        ) : (
-          <div className="surface-card pad-panel flex items-center gap-3">
-            <IconButton
-              onClick={onThemeToggle}
-              label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
-              title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
-            >
-              <ThemeIcon className="size-4" aria-hidden="true" />
-            </IconButton>
-            <div className="min-w-0">
-              <strong className="type-card-title block truncate">{latestRun?.environment_pair_label ?? dataset?.source_label ?? "No database"}</strong>
-              <span className="type-meta block truncate">{latestRun ? formatDate(latestRun.measured_at) : "No benchmark run"}</span>
-            </div>
-          </div>
-        )}
-      </div>
+        </div>
+      ) : null}
     </aside>
   );
 }

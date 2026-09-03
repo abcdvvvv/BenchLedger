@@ -19,11 +19,6 @@ export function Panel(props: HTMLAttributes<HTMLDivElement>) {
   return <Card {...rest} className={cn("pad-card", className)} />;
 }
 
-export function Inset(props: HTMLAttributes<HTMLDivElement>) {
-  const { className, ...rest } = props;
-  return <div {...rest} className={cn("surface-inset pad-panel", className)} />;
-}
-
 export function SectionTitle(props: { title: string; description?: string; action?: ReactNode; className?: string }) {
   return (
     <div className={cn("flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between", props.className)}>

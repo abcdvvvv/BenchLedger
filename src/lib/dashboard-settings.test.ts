@@ -1,103 +1,32 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  buildUISettingsURL,
-  defaultUISettings,
-  persistedUISettings,
-  readUISettings,
-  settingsForDatasetSource,
-  UI_SETTINGS_STORAGE_KEY
-} from "./dashboard-settings";
+import { buildUISettingsURL, dateRangeEnd, dateRangeStart, defaultUISettings, persistedUISettings, readUISettings, settingsForDatabaseSource, UI_SETTINGS_STORAGE_KEY } from "./dashboard-settings";
 
-function stubWindow(storedValue: string | null, search: string) {
-  vi.stubGlobal("window", {
-    matchMedia: () => ({ matches: false }),
-    localStorage: { getItem: (key: string) => key === UI_SETTINGS_STORAGE_KEY ? storedValue : null },
-    location: { search }
-  });
-}
-
+function stubWindow(storedValue: string | null, search: string) { vi.stubGlobal("window", { matchMedia: () => ({ matches: false }), localStorage: { getItem: (key: string) => key === UI_SETTINGS_STORAGE_KEY ? storedValue : null }, location: { search } }); }
 afterEach(() => vi.unstubAllGlobals());
 
 describe("dashboard settings", () => {
-  it("uses URL navigation and Compare state while restoring stored display preferences", () => {
-    stubWindow(JSON.stringify({
-      activePage: "settings",
-      theme: "dark",
-      compareBaselineConfigurationKey: "stale-baseline"
-    }), "?page=compare&compareBaseline=configuration-1&compareCategory=hardware" +
-      "&compareField=cpu.model&compareBenchmark=benchmark-1&compareMetric=time%3Amedian");
-
-    expect(readUISettings()).toMatchObject({
-      activePage: "compare",
-      theme: "dark",
-      compareBaselineConfigurationKey: "configuration-1",
-      compareVariableCategory: "hardware",
-      compareVariableFieldPathIds: ["cpu.model"],
-      compareBenchmarkKey: "benchmark-1",
-      compareMetricKey: "time:median"
-    });
+  it("restores persistent dimension selector rules while URL state only selects the active page", () => {
+    stubWindow(JSON.stringify({ theme: "dark", varyingDimensionKeys: ["dimension-1", "dimension-2"], dimensionValueSelections: [{ dimensionKey: "d2", valueKeys: [] }] }), "?page=dimension-selector");
+    expect(readUISettings()).toMatchObject({ activePage: "dimension-selector", theme: "dark", varyingDimensionKeys: ["dimension-1", "dimension-2"], dimensionValueSelections: [{ dimensionKey: "d2", valueKeys: [] }] });
   });
 
-  it("serializes page and Compare state without losing unrelated URL data", () => {
-    const compareSettings = {
-      ...defaultUISettings("light"),
-      activePage: "compare" as const,
-      compareBaselineConfigurationKey: "configuration-1",
-      compareVariableCategory: "hardware" as const,
-      compareVariableFieldPathIds: ["cpu.model", "cpu.model", "memory.total"],
-      compareBenchmarkKey: "benchmark-1",
-      compareMetricKey: "time:median"
-    };
-    const compareURL = buildUISettingsURL(compareSettings, "https://example.test/app?embed=1#results");
-    expect(compareURL).toBe(
-      "/app?embed=1&page=compare&compareBaseline=configuration-1&compareCategory=hardware" +
-      "&compareField=cpu.model&compareField=memory.total&compareBenchmark=benchmark-1&compareMetric=time%3Amedian#results"
-    );
-    expect(buildUISettingsURL(
-      { ...compareSettings, activePage: "benchmark-keys" },
-      `https://example.test${compareURL}`
-    )).toBe("/app?embed=1&page=benchmark-keys#results");
+  it("restores the previous single varying-dimension setting", () => {
+    stubWindow(JSON.stringify({ varyingDimensionKey: "dimension-1" }), ""); expect(readUISettings().varyingDimensionKeys).toEqual(["dimension-1"]);
   });
 
-  it("does not persist URL-owned navigation and Compare state", () => {
-    const persisted = persistedUISettings({
-      ...defaultUISettings("dark"),
-      activePage: "compare",
-      selectedDatabaseId: "db-1",
-      compareBaselineConfigurationKey: "configuration-1",
-      compareVariableCategory: "code",
-      compareVariableFieldPathIds: ["source.revision"],
-      compareBenchmarkKey: "benchmark-1",
-      compareMetricKey: "time:median"
-    });
-
-    expect(persisted).toMatchObject({ theme: "dark", selectedDatabaseId: "db-1" });
-    expect(persisted).not.toHaveProperty("activePage");
-    expect(persisted).not.toHaveProperty("compareBaselineConfigurationKey");
+  it("serializes only page navigation into the URL", () => {
+    expect(buildUISettingsURL({ ...defaultUISettings("light"), activePage: "dimension-selector" }, "https://example.test/app?embed=1#results")).toBe("/app?embed=1&page=dimension-selector#results");
   });
 
-  it("resets only dataset-scoped state when the source changes", () => {
-    const reset = settingsForDatasetSource({
-      ...defaultUISettings("dark"),
-      activePage: "trend-board",
-      environmentPair: "old-pair",
-      focusRunId: "old-run",
-      trendBoardSelectedBenchmarkKeys: ["old-benchmark"],
-      compareBaselineConfigurationKey: "old-configuration",
-      trendLineShape: "line",
-      trendBoardColumns: 5
-    }, "db-2");
+  it("persists dimension selector rules and excludes navigation", () => {
+    const persisted = persistedUISettings({ ...defaultUISettings("dark"), activePage: "dimension-selector", selectedDatabaseId: "db-1", varyingDimensionKeys: ["dimension-1"] });
+    expect(persisted).toMatchObject({ theme: "dark", selectedDatabaseId: "db-1", varyingDimensionKeys: ["dimension-1"] }); expect(persisted).not.toHaveProperty("activePage");
+  });
 
-    expect(reset).toMatchObject({
-      activePage: "trend-board",
-      theme: "dark",
-      selectedDatabaseId: "db-2",
-      environmentPair: "all",
-      focusRunId: "",
-      trendBoardSelectedBenchmarkKeys: [],
-      compareBaselineConfigurationKey: "",
-      trendLineShape: "line",
-      trendBoardColumns: 5
-    });
+  it("treats date-range inputs as UTC calendar boundaries", () => { expect(dateRangeStart("2026-01-02")).toBe(Date.parse("2026-01-02T00:00:00.000Z")); expect(dateRangeEnd("2026-01-02")).toBe(Date.parse("2026-01-02T23:59:59.999Z")); });
+
+  it("resets database-specific fixed values when the database source changes while preserving the varying dimension", () => {
+    const reset = settingsForDatabaseSource({ ...defaultUISettings("dark"), activePage: "trend-board", varyingDimensionKeys: ["dimension-1"], dimensionValueSelections: [{ dimensionKey: "d2", valueKeys: ["a", "b"] }], selectedBenchmarkKeys: ["old-benchmark"], focusPointKey: "old-point", trendLineShape: "line", trendBoardColumns: 5 }, "db-2");
+    expect(reset).toMatchObject({ activePage: "trend-board", selectedDatabaseId: "db-2", varyingDimensionKeys: ["dimension-1"], dimensionValueSelections: [], selectedBenchmarkKeys: [], focusPointKey: "", trendLineShape: "line", trendBoardColumns: 5 });
   });
 });

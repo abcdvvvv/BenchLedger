@@ -1,113 +1,37 @@
-import { useEffect, useMemo } from "react";
-import { dateRangeEnd, dateRangeStart, formatDateRangePart, type DisplayStrategy } from "../../lib/dashboard-settings";
-import {
-  resolveBenchmarkViewBaseSlice,
-  resolveBenchmarkViewGroupSlice,
-  type BenchmarkViewIndex,
-  type BenchmarkViewBenchmarkOption,
-  type BenchmarkViewGroupOption
-} from "../../lib/benchmark-view";
-import type { BenchmarkRow } from "../../lib/types";
+import { useEffect, useMemo, useState } from "react";
+import { benchmarkDefinitionsForKeys, buildBenchmarkOptions, resolveBenchmarkViewFilter, type BenchmarkViewBenchmarkOption } from "../../lib/benchmark-view";
+import type { BenchmarkDatabaseSession, BenchmarkResultQuery } from "../../lib/benchmark-database";
+import { dateRangeEnd, dateRangeStart, formatDateRangePart } from "../../lib/dashboard-settings";
+import type { BenchmarkDefinition, BenchmarkViewCatalog } from "../../lib/types";
+import type { DisplayStrategy } from "../../lib/dashboard-settings";
+import { LatestTaskRunner } from "../../lib/latest-task";
 
-type UseBenchmarkViewSliceOptions = {
-  index: BenchmarkViewIndex;
-  environmentPair: string;
-  onEnvironmentPairChange: (environmentPair: string) => void;
-  metricKind: string;
-  onMetricKindChange: (metricKind: string) => void;
-  branch: string;
-  onBranchChange: (branch: string) => void;
-  timeStart: string;
-  timeEnd: string;
-  displayStrategy: DisplayStrategy;
-  group: string;
-  onGroupChange: (group: string) => void;
-};
+export type UseBenchmarkViewSliceOptions = { session: BenchmarkDatabaseSession | null; catalog: BenchmarkViewCatalog; benchmarksByKey: ReadonlyMap<string, BenchmarkDefinition>; sourceRevision: number; configurationKeys: readonly string[]; yAxis: string; onYAxisChange: (value: string) => void; branch: string; onBranchChange: (value: string) => void; timeStart: string; timeEnd: string; displayStrategy: DisplayStrategy; };
+export type BenchmarkViewSlice = { yAxisOptions: string[]; branchOptions: string[]; databaseTimeStart: string; databaseTimeEnd: string; benchmarkOptions: BenchmarkViewBenchmarkOption[]; resultQuery: BenchmarkResultQuery; runsEmptyTimeRangeLabel: string; loading: boolean; error: string; };
 
-type UseBenchmarkViewSliceResult = {
-  metricOptions: string[];
-  branchOptions: string[];
-  datasetTimeStart: string;
-  datasetTimeEnd: string;
-  filteredRows: BenchmarkRow[];
-  groupOptions: BenchmarkViewGroupOption[];
-  selectedGroupLabel: string;
-  scopedRows: BenchmarkRow[];
-  benchmarkOptions: BenchmarkViewBenchmarkOption[];
-  runsEmptyTimeRangeLabel: string;
-};
+export function useBenchmarkViewSlice(options: UseBenchmarkViewSliceOptions): BenchmarkViewSlice {
+  const { session, catalog, benchmarksByKey, sourceRevision, configurationKeys, yAxis, onYAxisChange, branch, onBranchChange, timeStart, timeEnd, displayStrategy } = options;
+  const filter = useMemo(() => resolveBenchmarkViewFilter(catalog, { yAxis, branch, timeStartValue: dateRangeStart(timeStart), timeEndValue: dateRangeEnd(timeEnd), displayStrategy, configurationKeys }), [branch, catalog, configurationKeys, displayStrategy, timeEnd, timeStart, yAxis]);
+  const [benchmarkKeys, setBenchmarkKeys] = useState<string[]>([]);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const benchmarkKeyQueries = useMemo(() => new LatestTaskRunner<string[]>(), []);
 
-export function useBenchmarkViewSlice(
-  options: UseBenchmarkViewSliceOptions
-): UseBenchmarkViewSliceResult {
-  const {
-    index,
-    environmentPair,
-    onEnvironmentPairChange,
-    metricKind,
-    onMetricKindChange,
-    branch,
-    onBranchChange,
-    timeStart,
-    timeEnd,
-    displayStrategy,
-    group,
-    onGroupChange
-  } = options;
+  useEffect(() => { if (filter.yAxisOptions.length && yAxis !== filter.yAxis) onYAxisChange(filter.yAxis); }, [filter.yAxis, filter.yAxisOptions.length, onYAxisChange, yAxis]);
+  useEffect(() => { if (branch !== filter.branch) onBranchChange(filter.branch); }, [branch, filter.branch, onBranchChange]);
 
-  const timeStartValue = useMemo(() => dateRangeStart(timeStart), [timeStart]);
-  const timeEndValue = useMemo(() => dateRangeEnd(timeEnd), [timeEnd]);
-
-  const baseSlice = useMemo(() => resolveBenchmarkViewBaseSlice(index, {
-    environmentPair,
-    metricKind,
-    branch,
-    timeStartValue,
-    timeEndValue,
-    displayStrategy
-  }), [branch, displayStrategy, environmentPair, index, metricKind, timeEndValue, timeStartValue]);
-
-  const resolvedSlice = useMemo(
-    () => resolveBenchmarkViewGroupSlice(baseSlice, group),
-    [baseSlice, group]
-  );
+  const resultQuery = useMemo<BenchmarkResultQuery>(() => ({ yAxis: filter.yAxis, branch: filter.branch, timeStartValue: filter.timeStartValue, timeEndValue: filter.timeEndValue, displayStrategy: filter.displayStrategy, configurationKeys: filter.configurationKeys }), [filter]);
 
   useEffect(() => {
-    if (environmentPair === resolvedSlice.effectiveEnvironmentPair) return;
-    onEnvironmentPairChange(resolvedSlice.effectiveEnvironmentPair);
-  }, [environmentPair, onEnvironmentPairChange, resolvedSlice.effectiveEnvironmentPair]);
+    let cancelled = false;
+    setError("");
+    if (!session || !filter.yAxis || !configurationKeys.length) { benchmarkKeyQueries.clearPending(); setBenchmarkKeys([]); setLoading(false); return; }
+    setLoading(true);
+    void benchmarkKeyQueries.run(() => session.queryBenchmarkKeys(resultQuery)).then((keys) => { if (!cancelled) { setBenchmarkKeys(keys); setLoading(false); } }, (queryError: unknown) => { if (!cancelled) { setBenchmarkKeys([]); setLoading(false); setError(queryError instanceof Error ? queryError.message : "Failed to query benchmark keys."); } });
+    return () => { cancelled = true; };
+  }, [benchmarkKeyQueries, configurationKeys.length, filter.yAxis, resultQuery, session, sourceRevision]);
 
-  useEffect(() => {
-    if (!resolvedSlice.metricOptions.length || metricKind === resolvedSlice.effectiveMetricKind) return;
-    onMetricKindChange(resolvedSlice.effectiveMetricKind);
-  }, [metricKind, onMetricKindChange, resolvedSlice.effectiveMetricKind, resolvedSlice.metricOptions.length]);
-
-  useEffect(() => {
-    if (branch === resolvedSlice.effectiveBranch) return;
-    onBranchChange(resolvedSlice.effectiveBranch);
-  }, [branch, onBranchChange, resolvedSlice.effectiveBranch]);
-
-  const runsEmptyTimeRangeLabel = useMemo(() => (
-    timeStart || timeEnd
-      ? `${formatDateRangePart(timeStart, "Any start")} - ${formatDateRangePart(timeEnd, "Any end")}`
-      : "All time"
-  ), [timeEnd, timeStart]);
-
-  useEffect(() => {
-    if (group === resolvedSlice.effectiveGroup) return;
-    onGroupChange(resolvedSlice.effectiveGroup);
-  }, [group, onGroupChange, resolvedSlice.effectiveGroup]);
-
-  return {
-    metricOptions: resolvedSlice.metricOptions,
-    branchOptions: resolvedSlice.branchOptions,
-    datasetTimeStart: resolvedSlice.datasetTimeStart,
-    datasetTimeEnd: resolvedSlice.datasetTimeEnd,
-    filteredRows: resolvedSlice.filteredRows,
-    groupOptions: resolvedSlice.groupOptions,
-    selectedGroupLabel: resolvedSlice.selectedGroupLabel,
-    scopedRows: resolvedSlice.scopedRows,
-    benchmarkOptions: resolvedSlice.benchmarkOptions,
-    runsEmptyTimeRangeLabel
-  };
+  const benchmarkOptions = useMemo(() => buildBenchmarkOptions(benchmarkDefinitionsForKeys(benchmarkKeys, benchmarksByKey)), [benchmarkKeys, benchmarksByKey]);
+  const runsEmptyTimeRangeLabel = timeStart || timeEnd ? `${formatDateRangePart(timeStart, "Start")} - ${formatDateRangePart(timeEnd, "End")}` : "All time";
+  return { yAxisOptions: filter.yAxisOptions, branchOptions: filter.branchOptions, databaseTimeStart: filter.databaseTimeStart, databaseTimeEnd: filter.databaseTimeEnd, benchmarkOptions, resultQuery, runsEmptyTimeRangeLabel, loading, error };
 }

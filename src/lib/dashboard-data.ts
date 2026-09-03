@@ -1,5 +1,5 @@
 import { formatDate, parseDate, percentageChange, shortCommit, unique } from "./format";
-import { metricFamilyKey, metricFamilyLabel, trendDisplayUnitContext } from "./dashboard-plotting";
+import { metricFamilyKey, trendDisplayUnitContext } from "./dashboard-plotting";
 import type { RunPairSortKey, SortDirection } from "./dashboard-settings";
 import type {
   BenchmarkRow,
@@ -7,7 +7,7 @@ import type {
   BenchmarkDefinition,
   BenchLedgerManifestDatabase,
   BenchLedgerMetadata,
-  LoadedBenchmarkDataset,
+  LoadedBenchmarkDatabase,
   PairComparison
 } from "./types";
 
@@ -38,42 +38,11 @@ export type DatabaseCatalogEntry = {
   stats: DatabaseCatalogStats | null;
 };
 
-export function buildDatabaseCatalogStats(
-  dataset: LoadedBenchmarkDataset | null,
-  rows: readonly BenchmarkRow[],
-  runs: readonly BenchmarkRun[]
-): DatabaseCatalogStats | null {
-  if (!dataset) return null;
-
-  let latestRunDate = "";
-  let latestRunValue = Number.NEGATIVE_INFINITY;
-  for (const run of runs) {
-    const measuredAt = parseDate(run.measured_at)?.valueOf();
-    if (measuredAt === undefined || measuredAt <= latestRunValue) continue;
-    latestRunValue = measuredAt;
-    latestRunDate = run.measured_at;
-  }
-
-  return {
-    rowCount: rows.length,
-    runCount: runs.length,
-    keyCount: dataset.benchmarksByKey.size,
-    hardwareEnvironmentCount: dataset.hardwareEnvironmentsById.size,
-    softwareEnvironmentCount: dataset.softwareEnvironmentsById.size,
-    configurationCount: unique(runs.map((run) => run.configuration_key)).length,
-    metrics: unique(rows.map(metricFamilyLabel)).sort(),
-    latestRunDate,
-    dirtyRunCount: runs.filter((run) => run.code_state_metadata.source?.dirty === true).length
-  };
+export function buildDatabaseCatalogStats(database: LoadedBenchmarkDatabase | null): DatabaseCatalogStats | null {
+  return database?.stats ?? null;
 }
 
 export const Asset_Base_URL = import.meta.env.BASE_URL;
-
-export const deltaColorKey = {
-  up: "deltaUp",
-  down: "deltaDown",
-  neutral: "deltaNeutral"
-} as const;
 
 export const runPairTableColumns: { key: RunPairSortKey; label: string }[] = [
   { key: "benchmark", label: "Benchmark" },
@@ -81,15 +50,6 @@ export const runPairTableColumns: { key: RunPairSortKey; label: string }[] = [
   { key: "focus", label: "Focus" },
   { key: "delta", label: "Delta" }
 ];
-
-export function comparePath(left: string[], right: string[]): number {
-  const length = Math.min(left.length, right.length);
-  for (let index = 0; index < length; index += 1) {
-    const order = left[index].localeCompare(right[index]);
-    if (order !== 0) return order;
-  }
-  return left.length - right.length;
-}
 
 function _metadataRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -131,10 +91,6 @@ function _dirtyRunSuffix(run: BenchmarkRun): string {
   return ` (${digest ? digest.slice(0, 6) : "dirty"})`;
 }
 
-export function runId(row: Pick<BenchmarkRow, "run_id">): string {
-  return row.run_id;
-}
-
 export function runHeadline(run: BenchmarkRun): string {
   const suffix = _dirtyRunSuffix(run);
   const tags = _runTags(run);
@@ -145,13 +101,6 @@ export function runHeadline(run: BenchmarkRun): string {
   const branch = _runBranch(run);
   if (branch) return `${branch}${suffix}`;
   return `${run.environment_pair_label || "local"}${suffix}`;
-}
-
-export function runTone(run: BenchmarkRun): "tag" | "master" | "branch" {
-  if (_runTags(run).length) return "tag";
-  const branch = _runBranch(run);
-  if (branch === "master" || branch === "main") return "master";
-  return "branch";
 }
 
 export function runAxisLabel(run: BenchmarkRun): string {
@@ -170,10 +119,9 @@ export function runIdentityTitle(run: BenchmarkRun, separator = "\n"): string {
     `Revision: ${_codeStateRevision(run) || "n/a"}`, `Dirty: ${run.code_state_metadata.source?.dirty === true}`, `Diff digest: ${digest || "n/a"}`].join(separator);
 }
 
-
-export function buildRunPairComparisons(
-  focusRows: BenchmarkRow[],
-  baselineRows: BenchmarkRow[],
+export function buildBenchmarkPairComparisons(
+  focusRows: Array<Pick<BenchmarkRow, "benchmark_key" | "metric_name" | "statistic" | "value" | "unit" | "better">>,
+  baselineRows: Array<Pick<BenchmarkRow, "benchmark_key" | "metric_name" | "statistic" | "value" | "unit" | "better">>,
   benchmarksByKey: ReadonlyMap<string, BenchmarkDefinition>
 ): PairComparison[] {
   const focusByBenchmark = new Map(focusRows.map((row) => [row.benchmark_key, row]));
@@ -279,19 +227,12 @@ function compareRuns(left: BenchmarkRun, right: BenchmarkRun): number {
   return right.run_id.localeCompare(left.run_id);
 }
 
-export function buildRuns(dataset: LoadedBenchmarkDataset): BenchmarkRun[] {
-  const benchmarkKeysByRun = new Map<string, Set<string>>();
-  for (const row of dataset.rows) {
-    const benchmarkKeys = benchmarkKeysByRun.get(row.run_id);
-    if (benchmarkKeys) benchmarkKeys.add(row.benchmark_key);
-    else benchmarkKeysByRun.set(row.run_id, new Set([row.benchmark_key]));
-  }
-
+export function buildRuns(database: LoadedBenchmarkDatabase): BenchmarkRun[] {
   const runs: BenchmarkRun[] = [];
-  for (const run of dataset.runsById.values()) {
-    const codeState = dataset.codeStatesById.get(run.code_state_id);
-    const hardwareEnvironment = dataset.hardwareEnvironmentsById.get(run.hardware_environment_id);
-    const softwareEnvironment = dataset.softwareEnvironmentsById.get(run.software_environment_id);
+  for (const run of database.runsById.values()) {
+    const codeState = database.codeStatesById.get(run.code_state_id);
+    const hardwareEnvironment = database.hardwareEnvironmentsById.get(run.hardware_environment_id);
+    const softwareEnvironment = database.softwareEnvironmentsById.get(run.software_environment_id);
     if (!codeState || !hardwareEnvironment || !softwareEnvironment) continue;
 
     const hardwareLabel = hardwareEnvironment.label || hardwareEnvironment.id;
@@ -321,7 +262,7 @@ export function buildRuns(dataset: LoadedBenchmarkDataset): BenchmarkRun[] {
       software_environment_identity: softwareEnvironment.identity,
       software_environment_metadata: softwareEnvironment.metadata,
       run_metadata: run.metadata,
-      benchmark_count: benchmarkKeysByRun.get(run.id)?.size ?? 0
+      benchmark_count: database.benchmarkCountByRun.get(run.id) ?? 0
     });
   }
 
@@ -361,10 +302,10 @@ export function metadataTitle(metadata: BenchLedgerMetadata): string {
 }
 
 export function metadataDescription(metadata: BenchLedgerMetadata): string {
-  return metadata.description || metadata.notes || "Performance tracking for benchmark datasets.";
+  return metadata.description || metadata.notes || "Performance tracking for benchmark databases.";
 }
 
-export function sourceSummary(dataset: LoadedBenchmarkDataset | null): string {
-  if (!dataset) return "No benchmark database loaded";
-  return dataset.source_url ? `Serving ${dataset.source_label}` : `Loaded local file ${dataset.source_label}`;
+export function sourceSummary(database: LoadedBenchmarkDatabase | null): string {
+  if (!database) return "No benchmark database loaded";
+  return database.source_url ? `Serving ${database.source_label}` : `Loaded local file ${database.source_label}`;
 }

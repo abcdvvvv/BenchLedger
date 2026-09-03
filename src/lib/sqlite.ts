@@ -1,27 +1,14 @@
-import initSqlJs, { type Database } from "sql.js";
-import sqlWasmUrl from "sql.js/dist/sql-wasm.wasm?url";
-import { aggregateBenchmarkRows } from "./benchmark-aggregation";
 import type {
-  BenchmarkCodeState,
-  BenchmarkCodeStateIdentity,
-  BenchmarkCodeStateMetadata,
-  BenchmarkDefinition,
-  BenchmarkEnvironmentMetadata,
-  BenchmarkHardwareEnvironment,
-  BenchmarkHardwareEnvironmentIdentity,
-  BenchmarkRunMetadata,
-  BenchmarkRunRecord,
-  BenchmarkRow,
-  BenchmarkSoftwareEnvironment,
-  BenchmarkSoftwareEnvironmentIdentity,
-  BenchLedgerManifest,
-  BenchLedgerManifestDatabase,
-  BenchLedgerMetadata,
-  LoadedBenchmarkDataset
+  BenchmarkCodeState, BenchmarkCodeStateIdentity, BenchmarkCodeStateMetadata, BenchmarkDefinition, BenchmarkEnvironmentMetadata,
+  BenchmarkHardwareEnvironment, BenchmarkHardwareEnvironmentIdentity, BenchmarkRunMetadata, BenchmarkRunRecord, BenchmarkRow,
+  BenchmarkSoftwareEnvironment, BenchmarkSoftwareEnvironmentIdentity, BenchLedgerManifest, BenchLedgerManifestDatabase, BenchLedgerMetadata
 } from "./types";
+import { hasOwn, isRecord } from "./object";
 
 const _Default_Manifest_Url = "./benchledger.json";
 const _Supported_Schema_Version = 6;
+const _Maximum_Database_Bytes = 512 * 1024 * 1024;
+const _Maximum_Database_Size_Label = "512 MiB";
 const _Canonical_Integer_Text = /^(0|[1-9]\d*)$/;
 const _Sha256_Hex = /^[0-9a-f]{64}$/i;
 const _Metadata_Defaults = {
@@ -35,25 +22,58 @@ const _Metadata_Defaults = {
   notes: ""
 } as const;
 
-let sqlPromise: Promise<Awaited<ReturnType<typeof initSqlJs>>> | null = null;
-
-async function loadSqlJs() {
-  if (!sqlPromise) sqlPromise = initSqlJs({ locateFile: () => sqlWasmUrl });
-  return sqlPromise;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function hasOwn(record: Record<string, unknown>, key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(record, key);
-}
+const databaseResponseRevisions = new Map<string, string>();
 
 function errorWithCause(message: string, cause: unknown): Error {
   const error = new Error(message);
   (error as Error & { cause?: unknown }).cause = cause;
   return error;
+}
+
+function assertDatabaseSize(sizeBytes: number, sourceLabel: string) {
+  if (sizeBytes > _Maximum_Database_Bytes) throw new Error(`SQLite database ${sourceLabel} is ${sizeBytes.toLocaleString()} bytes, exceeding BenchLedger's ${_Maximum_Database_Size_Label} browser safety limit.`);
+}
+
+async function databaseBytesFromResponse(response: Response, sourceLabel: string, expectedSizeBytes?: number): Promise<ArrayBuffer> {
+  const contentLength = response.headers.get("content-length");
+  const responseSize = contentLength && /^\d+$/.test(contentLength) ? Number(contentLength) : null;
+  if (responseSize !== null) assertDatabaseSize(responseSize, sourceLabel);
+  if (expectedSizeBytes !== undefined) assertDatabaseSize(expectedSizeBytes, sourceLabel);
+  if (!response.body) {
+    const bytes = await response.arrayBuffer();
+    assertDatabaseSize(bytes.byteLength, sourceLabel);
+    return bytes;
+  }
+
+  const expectedSize = expectedSizeBytes ?? responseSize;
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] | null = expectedSize === null ? [] : null;
+  let bytes = expectedSize === null ? null : new Uint8Array(expectedSize);
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const nextTotal = totalBytes + value.byteLength;
+      if (nextTotal > _Maximum_Database_Bytes) {
+        try { await reader.cancel(); } catch { /* Keep the size-limit error. */ }
+        assertDatabaseSize(nextTotal, sourceLabel);
+      }
+      if (bytes) {
+        if (nextTotal > bytes.byteLength) { const next = new Uint8Array(Math.min(_Maximum_Database_Bytes, Math.max(nextTotal, Math.ceil(Math.max(bytes.byteLength, 1) * 1.5)))); next.set(bytes); bytes = next; }
+        bytes.set(value, totalBytes);
+      } else chunks!.push(value);
+      totalBytes = nextTotal;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  if (bytes) return totalBytes === bytes.byteLength ? bytes.buffer : bytes.slice(0, totalBytes).buffer;
+  const combined = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks!) { combined.set(chunk, offset); offset += chunk.byteLength; }
+  return combined.buffer;
 }
 
 function stringValue(value: unknown, fieldName: string, context: string): string {
@@ -81,6 +101,68 @@ function parseJsonRecord(value: unknown, fieldName: string, context: string): Re
     const detail = error instanceof Error ? error.message : "invalid JSON";
     throw errorWithCause(`Invalid ${fieldName} in ${context}: ${detail}.`, error);
   }
+}
+
+type JsonShape = Record<string, JsonRule>;
+type JsonRule = "string" | "number" | "integer" | "boolean" | { object: JsonShape } | { array: JsonRule } | { oneOf: readonly string[] };
+
+const _Named_Version_Shape = { name: "string", version: "string" } as const satisfies JsonShape;
+const _Code_State_Identity_Shape = { source: { object: { kind: "string", revision: "string", diff_digest: "string" } } } as const satisfies JsonShape;
+const _Code_State_Metadata_Shape = { source: { object: { dirty: "boolean" } } } as const satisfies JsonShape;
+const _Run_Metadata_Shape = {
+  notes: "string",
+  writer: { object: { name: "string", schema_version: "integer" } },
+  source: { object: { branch: "string", tags: { array: "string" } } },
+  ci: { object: { provider: "string", workflow: "string", job: "string", run_id: "string", event: "string", runner_name: "string", run_attempt: "integer", run_url: "string" } }
+} as const satisfies JsonShape;
+const _Hardware_Identity_Shape = {
+  architecture: "string",
+  cpu: { object: { model: "string", vendor: "string", physical_cores: "number", logical_threads: "number", packages: "number", microarchitecture: "string", numa_nodes: "number" } },
+  memory: { object: { total_bytes: "number" } },
+  gpu: { array: { object: { vendor: "string", model: "string", type: { oneOf: ["integrated", "discrete", "unknown"] }, memory_bytes: "number", count: "number" } } }
+} as const satisfies JsonShape;
+const _Software_Identity_Shape = {
+  platform: { object: { os: { object: _Named_Version_Shape }, kernel: { object: _Named_Version_Shape } } },
+  runtime: { object: _Named_Version_Shape },
+  gpu_drivers: { array: { object: { vendor: "string", name: "string", variant: "string", version: "string", device_count: "number" } } },
+  gpu: { object: { interface: { object: _Named_Version_Shape } } },
+  gpu_runtime: { object: { backend: "string", runtime: { object: _Named_Version_Shape } } },
+  execution: { object: { processes: "number", threads: "number" } },
+  math_libraries: { object: { blas: { object: { libraries: { array: { object: { implementation: "string", interface: "string" } } }, threads: "number" } } } },
+  benchmark: { object: { framework: { object: _Named_Version_Shape } } },
+  dependencies: { object: { kind: "string", format: "string", digest: "string" } }
+} as const satisfies JsonShape;
+
+function invalidJsonValue(context: string, expected: string): never {
+  throw new Error(`Invalid ${context}: must be ${expected}.`);
+}
+
+function validateJsonRule(value: unknown, rule: JsonRule, context: string) {
+  if (rule === "string") { if (typeof value !== "string") invalidJsonValue(context, "a string"); return; }
+  if (rule === "number") { if (typeof value !== "number" || !Number.isFinite(value)) invalidJsonValue(context, "a finite number"); return; }
+  if (rule === "integer") { if (typeof value !== "number" || !Number.isSafeInteger(value)) invalidJsonValue(context, "a safe integer"); return; }
+  if (rule === "boolean") { if (typeof value !== "boolean") invalidJsonValue(context, "a boolean"); return; }
+  if ("object" in rule) {
+    if (!isRecord(value)) invalidJsonValue(context, "an object");
+    validateJsonShape(value, rule.object, context);
+    return;
+  }
+  if ("array" in rule) {
+    if (!Array.isArray(value)) invalidJsonValue(context, "an array");
+    value.forEach((item, index) => validateJsonRule(item, rule.array, `${context}[${index}]`));
+    return;
+  }
+  if (typeof value !== "string" || !rule.oneOf.includes(value)) invalidJsonValue(context, rule.oneOf.map((item) => `"${item}"`).join(", "));
+}
+
+function validateJsonShape(record: Record<string, unknown>, shape: JsonShape, context: string) {
+  for (const [key, rule] of Object.entries(shape)) if (hasOwn(record, key)) validateJsonRule(record[key], rule, `${context}.${key}`);
+}
+
+function parseValidatedJsonRecord<T>(value: unknown, fieldName: string, context: string, shape: JsonShape): T {
+  const record = parseJsonRecord(value, fieldName, context);
+  validateJsonShape(record, shape, `${fieldName} in ${context}`);
+  return record as T;
 }
 
 export function normalizeBenchmarkKey(value: unknown, context = "benchmark result"): BenchmarkDefinition {
@@ -134,7 +216,7 @@ export function normalizeBenchmarkRow(values: Record<string, unknown>): Benchmar
   };
 }
 
-function normalizeBenchmarkRunRecord(values: Record<string, unknown>): BenchmarkRunRecord {
+export function normalizeBenchmarkRunRecord(values: Record<string, unknown>): BenchmarkRunRecord {
   const id = nonemptyString(values.id, "run id", "runs");
   return {
     id,
@@ -142,80 +224,39 @@ function normalizeBenchmarkRunRecord(values: Record<string, unknown>): Benchmark
     hardware_environment_id: nonemptyString(values.hardware_environment_id, "hardware_environment_id", id),
     software_environment_id: nonemptyString(values.software_environment_id, "software_environment_id", id),
     measured_at: nonemptyString(values.measured_at, "measured_at", id),
-    metadata: parseJsonRecord(values.metadata, "run metadata", id) as BenchmarkRunMetadata
+    metadata: parseValidatedJsonRecord<BenchmarkRunMetadata>(values.metadata, "run metadata", id, _Run_Metadata_Shape)
   };
 }
 
-function normalizeBenchmarkCodeState(values: Record<string, unknown>): BenchmarkCodeState {
+export function normalizeBenchmarkCodeState(values: Record<string, unknown>): BenchmarkCodeState {
   const id = nonemptyString(values.id, "code-state id", "code_states");
   return {
     id,
     label: stringValue(values.label, "label", id),
     code_date: nonemptyString(values.code_date, "code_date", id),
-    identity: parseJsonRecord(values.identity, "code-state identity", id) as BenchmarkCodeStateIdentity,
-    metadata: parseJsonRecord(values.metadata, "code-state metadata", id) as BenchmarkCodeStateMetadata
+    identity: parseValidatedJsonRecord<BenchmarkCodeStateIdentity>(values.identity, "code-state identity", id, _Code_State_Identity_Shape),
+    metadata: parseValidatedJsonRecord<BenchmarkCodeStateMetadata>(values.metadata, "code-state metadata", id, _Code_State_Metadata_Shape)
   };
 }
 
-function normalizeBenchmarkHardwareEnvironment(values: Record<string, unknown>): BenchmarkHardwareEnvironment {
+export function normalizeBenchmarkHardwareEnvironment(values: Record<string, unknown>): BenchmarkHardwareEnvironment {
   const id = nonemptyString(values.id, "hardware-environment id", "hardware_environments");
   return {
     id,
     label: stringValue(values.label, "label", id),
-    identity: parseJsonRecord(values.identity, "hardware-environment identity", id) as BenchmarkHardwareEnvironmentIdentity,
+    identity: parseValidatedJsonRecord<BenchmarkHardwareEnvironmentIdentity>(values.identity, "hardware-environment identity", id, _Hardware_Identity_Shape),
     metadata: parseJsonRecord(values.metadata, "hardware-environment metadata", id) as BenchmarkEnvironmentMetadata
   };
 }
 
-function normalizeBenchmarkSoftwareEnvironment(values: Record<string, unknown>): BenchmarkSoftwareEnvironment {
+export function normalizeBenchmarkSoftwareEnvironment(values: Record<string, unknown>): BenchmarkSoftwareEnvironment {
   const id = nonemptyString(values.id, "software-environment id", "software_environments");
   return {
     id,
     label: stringValue(values.label, "label", id),
-    identity: parseJsonRecord(values.identity, "software-environment identity", id) as BenchmarkSoftwareEnvironmentIdentity,
+    identity: parseValidatedJsonRecord<BenchmarkSoftwareEnvironmentIdentity>(values.identity, "software-environment identity", id, _Software_Identity_Shape),
     metadata: parseJsonRecord(values.metadata, "software-environment metadata", id) as BenchmarkEnvironmentMetadata
   };
-}
-
-function forEachQueryRow(db: Database, query: string, visit: (row: Record<string, unknown>) => void) {
-  const statement = db.prepare(query);
-  try {
-    while (statement.step()) visit(statement.getAsObject() as Record<string, unknown>);
-  } finally {
-    statement.free();
-  }
-}
-
-function rowsFromQuery(db: Database, query: string): BenchmarkRow[] {
-  const rows: BenchmarkRow[] = [];
-  forEachQueryRow(db, query, (row) => rows.push(normalizeBenchmarkRow(row)));
-  return rows;
-}
-
-function mapFromQuery<T extends { id: string }>(
-  db: Database,
-  query: string,
-  relationName: string,
-  normalize: (row: Record<string, unknown>) => T
-): ReadonlyMap<string, T> {
-  const values = new Map<string, T>();
-  forEachQueryRow(db, query, (row) => {
-    const value = normalize(row);
-    if (values.has(value.id)) throw new Error(`Invalid ${relationName}: duplicate id=${value.id}.`);
-    values.set(value.id, value);
-  });
-  return values;
-}
-
-function benchmarkDefinitionsFromRows(rows: readonly BenchmarkRow[]): ReadonlyMap<string, BenchmarkDefinition> {
-  const definitions = new Map<string, BenchmarkDefinition>();
-  for (const row of rows) {
-    if (!definitions.has(row.benchmark_key)) {
-      const definition = normalizeBenchmarkKey(row.benchmark_key, `run_id=${row.run_id}`);
-      definitions.set(definition.key, definition);
-    }
-  }
-  return new Map(Array.from(definitions.entries()).sort(([left], [right]) => left.localeCompare(right)));
 }
 
 function optionalString(record: Record<string, unknown>, key: string): string | undefined | null {
@@ -301,37 +342,6 @@ export function normalizeManifest(json: unknown): BenchLedgerManifest | null {
   };
 }
 
-function relationExists(db: Database, relationName: string): boolean {
-  const statement = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1");
-  try {
-    statement.bind([relationName]);
-    return statement.step();
-  } finally {
-    statement.free();
-  }
-}
-
-function validateReferences(dataset: Pick<LoadedBenchmarkDataset,
-  "rows" | "runsById" | "codeStatesById" | "hardwareEnvironmentsById" | "softwareEnvironmentsById"
->) {
-  for (const run of dataset.runsById.values()) {
-    if (!dataset.codeStatesById.has(run.code_state_id)) {
-      throw new Error(`Invalid run ${run.id}: unknown code_state_id=${run.code_state_id}.`);
-    }
-    if (!dataset.hardwareEnvironmentsById.has(run.hardware_environment_id)) {
-      throw new Error(`Invalid run ${run.id}: unknown hardware_environment_id=${run.hardware_environment_id}.`);
-    }
-    if (!dataset.softwareEnvironmentsById.has(run.software_environment_id)) {
-      throw new Error(`Invalid run ${run.id}: unknown software_environment_id=${run.software_environment_id}.`);
-    }
-  }
-  for (const row of dataset.rows) {
-    if (!dataset.runsById.has(row.run_id)) {
-      throw new Error(`Invalid benchmark result: unknown run_id=${row.run_id}.`);
-    }
-  }
-}
-
 function parseCanonicalIntegerText(value: string | undefined): number | null {
   if (value === undefined || !_Canonical_Integer_Text.test(value)) return null;
   const parsed = Number(value);
@@ -353,96 +363,10 @@ export function metadataFromRaw(raw: Record<string, string>): BenchLedgerMetadat
   };
 }
 
-function readMetadata(db: Database): BenchLedgerMetadata {
-  const raw: Record<string, string> = {};
-  if (relationExists(db, "benchledger_metadata")) {
-    forEachQueryRow(db, "SELECT key, value FROM benchledger_metadata", (row) => {
-      const key = nonemptyString(row.key, "metadata key", "benchledger_metadata");
-      const value = stringValue(row.value, `metadata value for key=${key}`, "benchledger_metadata");
-      if (hasOwn(raw, key)) throw new Error(`Invalid benchledger_metadata: duplicate key=${key}.`);
-      raw[key] = value;
-    });
-  }
-  return metadataFromRaw(raw);
-}
-
 export function validateSchemaVersion(metadata: BenchLedgerMetadata) {
   if (metadata.schema_version === _Supported_Schema_Version) return;
   const actual = hasOwn(metadata.raw, "schema_version") ? metadata.raw.schema_version : "missing";
   throw new Error(`Unsupported BenchLedger schema version: ${actual}. Expected ${_Supported_Schema_Version}.`);
-}
-
-export function readBenchmarkDataset(
-  db: Database,
-  sourceLabel: string,
-  sourceUrl: string | null
-): LoadedBenchmarkDataset {
-  const metadata = readMetadata(db);
-  validateSchemaVersion(metadata);
-
-  const rows = rowsFromQuery(db, `
-    SELECT run_id, benchmark_key, metric_name, statistic, unit, value, better
-    FROM benchmark_results
-    ORDER BY run_id, benchmark_key, metric_name, statistic
-  `);
-  const benchmarksByKey = benchmarkDefinitionsFromRows(rows);
-  const runsById = mapFromQuery(
-    db,
-    `SELECT id, code_state_id, hardware_environment_id, software_environment_id, measured_at, metadata
-     FROM runs`,
-    "runs",
-    normalizeBenchmarkRunRecord
-  );
-  const codeStatesById = mapFromQuery(
-    db,
-    "SELECT id, label, code_date, identity, metadata FROM code_states",
-    "code_states",
-    normalizeBenchmarkCodeState
-  );
-  const hardwareEnvironmentsById = mapFromQuery(
-    db,
-    "SELECT id, label, identity, metadata FROM hardware_environments",
-    "hardware_environments",
-    normalizeBenchmarkHardwareEnvironment
-  );
-  const softwareEnvironmentsById = mapFromQuery(
-    db,
-    "SELECT id, label, identity, metadata FROM software_environments",
-    "software_environments",
-    normalizeBenchmarkSoftwareEnvironment
-  );
-
-  const datasetWithoutAggregates = {
-    rows,
-    runsById,
-    codeStatesById,
-    hardwareEnvironmentsById,
-    softwareEnvironmentsById
-  };
-  validateReferences(datasetWithoutAggregates);
-
-  return {
-    ...datasetWithoutAggregates,
-    aggregateRows: aggregateBenchmarkRows(rows, runsById),
-    benchmarksByKey,
-    metadata,
-    source_label: sourceLabel,
-    source_url: sourceUrl
-  };
-}
-
-export async function loadBenchmarkDataset(
-  bytes: Uint8Array,
-  sourceLabel: string,
-  sourceUrl: string | null
-): Promise<LoadedBenchmarkDataset> {
-  const SQL = await loadSqlJs();
-  const db = new SQL.Database(bytes);
-  try {
-    return readBenchmarkDataset(db, sourceLabel, sourceUrl);
-  } finally {
-    db.close();
-  }
 }
 
 function joinRelativeUrl(basePath: string, target: string): string {
@@ -479,9 +403,9 @@ export async function validateManifestDatabaseBytes(
   }
 }
 
-export async function loadManifest(manifestUrl?: string): Promise<{ manifest: BenchLedgerManifest; url: string } | null> {
+export async function loadManifest(manifestUrl?: string, signal?: AbortSignal): Promise<{ manifest: BenchLedgerManifest; url: string } | null> {
   const url = manifestUrl ?? _Default_Manifest_Url;
-  const response = await fetch(url, { cache: "no-store" });
+  const response = await fetch(url, { cache: "no-store", signal });
   if (response.status === 404) return null;
   if (!response.ok) throw new Error(`Failed to load benchledger.json: ${response.status}`);
   const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
@@ -491,35 +415,51 @@ export async function loadManifest(manifestUrl?: string): Promise<{ manifest: Be
   return { manifest, url };
 }
 
-export async function loadBenchmarkDatasetFromUrl(
-  url: string,
-  sourceLabel = sourceLabelFromUrl(url)
-): Promise<LoadedBenchmarkDataset> {
-  const response = await fetch(url, { cache: "no-store" });
+function databaseResponseRevision(response: Response): string | null {
+  const etag = response.headers.get("etag")?.trim() ?? "";
+  const lastModified = response.headers.get("last-modified")?.trim() ?? "";
+  if (!etag && !lastModified) return null;
+  return JSON.stringify([etag, lastModified, response.headers.get("content-length")?.trim() ?? ""]);
+}
+
+function rememberDatabaseResponseRevision(url: string, response: Response) {
+  const revision = databaseResponseRevision(response);
+  if (revision !== null) databaseResponseRevisions.set(url, revision);
+}
+
+export async function databaseUrlHasChanged(url: string, signal?: AbortSignal): Promise<boolean> {
+  const response = await fetch(url, { method: "HEAD", cache: "no-store", signal });
+  if (response.status === 405 || response.status === 501) return true;
+  if (!response.ok) throw new Error(`Failed to check SQLite file: ${response.status}`);
+  const revision = databaseResponseRevision(response);
+  const previousRevision = databaseResponseRevisions.get(url);
+  return revision === null || previousRevision === undefined || revision !== previousRevision;
+}
+
+export type LoadedDatabaseFile = { bytes: ArrayBuffer; sourceLabel: string; sourceUrl: string | null; };
+
+export async function loadDatabaseFileFromUrl(url: string, sourceLabel = sourceLabelFromUrl(url), signal?: AbortSignal): Promise<LoadedDatabaseFile> {
+  const response = await fetch(url, { cache: "no-store", signal });
   if (!response.ok) throw new Error(`Failed to load SQLite file: ${response.status}`);
-  return loadBenchmarkDataset(new Uint8Array(await response.arrayBuffer()), sourceLabel, url);
+  rememberDatabaseResponseRevision(url, response);
+  return { bytes: await databaseBytesFromResponse(response, sourceLabel), sourceLabel, sourceUrl: url };
 }
 
-export async function loadBenchmarkDatasetFromFile(file: File): Promise<LoadedBenchmarkDataset> {
-  return loadBenchmarkDataset(new Uint8Array(await file.arrayBuffer()), file.name, null);
+export async function refreshDatabaseFileFromUrl(url: string, sourceLabel = sourceLabelFromUrl(url), signal?: AbortSignal): Promise<LoadedDatabaseFile | null> {
+  if (!await databaseUrlHasChanged(url, signal)) return null;
+  return loadDatabaseFileFromUrl(url, sourceLabel, signal);
 }
 
-export async function loadBenchmarkDatasetFromManifestDatabase(
-  database: BenchLedgerManifestDatabase,
-  manifestUrl = _Default_Manifest_Url
-): Promise<LoadedBenchmarkDataset> {
+export async function loadManifestDatabaseFile(database: BenchLedgerManifestDatabase, manifestUrl = _Default_Manifest_Url, signal?: AbortSignal): Promise<LoadedDatabaseFile> {
+  if (database.size_bytes !== undefined) assertDatabaseSize(database.size_bytes, database.name || database.id);
   const manifestPath = new URL(manifestUrl, window.location.href).toString();
   const databaseUrl = joinRelativeUrl(manifestPath, database.url);
-  const response = await fetch(databaseUrl, { cache: "no-store" });
+  const response = await fetch(databaseUrl, { cache: "no-store", signal });
   if (!response.ok) throw new Error(`Failed to load SQLite file: ${response.status}`);
-
-  const bytes = await response.arrayBuffer();
+  rememberDatabaseResponseRevision(databaseUrl, response);
+  const bytes = await databaseBytesFromResponse(response, database.name || database.id, database.size_bytes);
   await validateManifestDatabaseBytes(database, bytes);
-  const dataset = await loadBenchmarkDataset(
-    new Uint8Array(bytes),
-    database.name || database.id,
-    databaseUrl
-  );
-
-  return dataset;
+  return { bytes, sourceLabel: database.name || database.id, sourceUrl: databaseUrl };
 }
+
+export function assertLocalDatabaseSize(file: File) { assertDatabaseSize(file.size, file.name); }

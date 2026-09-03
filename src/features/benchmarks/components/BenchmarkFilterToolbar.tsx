@@ -1,54 +1,19 @@
 import type { ChangeEvent } from "react";
 import type { DisplayStrategy } from "../../../lib/dashboard-settings";
 import { Field, FieldLabel, SelectField, Toolbar, ToolbarGrid } from "../../../components/ui/Field";
-import { GroupCascadeMenu, type GroupMenuOption } from "./GroupCascadeMenu";
-import { TimeRangePopover } from "./TimeRangePopover";
+import { TimeRangePopover, type TimeRangeSelectionProps } from "./TimeRangePopover";
 
-export type BenchmarkFilterToolbarProps = {
-  hasDataset: boolean;
-  environmentPair: string;
-  environmentPairOptions: { value: string; label: string }[];
-  onEnvironmentPairChange: (value: string) => void;
-  metricKind: string;
-  metricOptions: string[];
-  onMetricKindChange: (value: string) => void;
-  displayStrategy: DisplayStrategy;
-  onDisplayStrategyChange: (value: DisplayStrategy) => void;
-  group: string;
-  groupOptions: GroupMenuOption[];
-  selectedGroupLabel: string;
-  onGroupChange: (value: string) => void;
-  branch: string;
-  branchOptions: string[];
-  onBranchChange: (value: string) => void;
-  timeRangeLabel: string;
-  timeStart: string;
-  timeEnd: string;
-  datasetTimeStart: string;
-  datasetTimeEnd: string;
-  onTimeStartChange: (value: string) => void;
-  onTimeEndChange: (value: string) => void;
-};
+export type BenchmarkFilterToolbarProps = TimeRangeSelectionProps & { hasDatabase: boolean; yAxis: string; yAxisOptions: string[]; onYAxisChange: (value: string) => void; displayStrategy: DisplayStrategy; onDisplayStrategyChange: (value: DisplayStrategy) => void; branch: string; branchOptions: string[]; onBranchChange: (value: string) => void; timeRangeLabel: string; };
 
-export function BenchmarkFilterToolbar({ hasDataset, ...filters }: BenchmarkFilterToolbarProps) {
+export function BenchmarkFilterToolbar({ hasDatabase, ...filters }: BenchmarkFilterToolbarProps) {
   return (
     <Toolbar variant="plain">
       <ToolbarGrid>
         <Field>
-          <FieldLabel>Hardware + Software</FieldLabel>
-          <SelectField aria-label="Hardware and software" value={filters.environmentPair} onChange={(event: ChangeEvent<HTMLSelectElement>) => filters.onEnvironmentPairChange(event.target.value)} disabled={!hasDataset}>
-            {filters.environmentPairOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          <FieldLabel>Y-Axis</FieldLabel>
+          <SelectField aria-label="Y-Axis" value={filters.yAxis} onChange={(event: ChangeEvent<HTMLSelectElement>) => filters.onYAxisChange(event.target.value)} disabled={!filters.yAxisOptions.length}>
+            {filters.yAxisOptions.map((option) => <option key={option} value={option}>{option}</option>)}
           </SelectField>
-        </Field>
-        <Field>
-          <FieldLabel>Metric</FieldLabel>
-          <SelectField aria-label="Metric" value={filters.metricKind} onChange={(event: ChangeEvent<HTMLSelectElement>) => filters.onMetricKindChange(event.target.value)} disabled={!filters.metricOptions.length}>
-            {filters.metricOptions.map((option) => <option key={option} value={option}>{option}</option>)}
-          </SelectField>
-        </Field>
-        <Field>
-          <FieldLabel>Group</FieldLabel>
-          <GroupCascadeMenu disabled={!hasDataset} options={filters.groupOptions} selectedValue={filters.group} selectedLabel={filters.selectedGroupLabel} onSelect={filters.onGroupChange} ariaLabel="Group" />
         </Field>
         <Field>
           <FieldLabel>Branch</FieldLabel>
@@ -58,14 +23,12 @@ export function BenchmarkFilterToolbar({ hasDataset, ...filters }: BenchmarkFilt
         </Field>
         <Field>
           <FieldLabel>Time Range</FieldLabel>
-          <TimeRangePopover disabled={!hasDataset} label={filters.timeRangeLabel} timeStart={filters.timeStart} timeEnd={filters.timeEnd} datasetTimeStart={filters.datasetTimeStart} datasetTimeEnd={filters.datasetTimeEnd} onTimeStartChange={filters.onTimeStartChange} onTimeEndChange={filters.onTimeEndChange} />
+          <TimeRangePopover disabled={!hasDatabase} label={filters.timeRangeLabel} timeStart={filters.timeStart} timeEnd={filters.timeEnd} databaseTimeStart={filters.databaseTimeStart} databaseTimeEnd={filters.databaseTimeEnd} onTimeStartChange={filters.onTimeStartChange} onTimeEndChange={filters.onTimeEndChange} />
         </Field>
         <Field>
           <FieldLabel>Display Strategy</FieldLabel>
-          <SelectField aria-label="Display strategy" value={filters.displayStrategy} onChange={(event: ChangeEvent<HTMLSelectElement>) => filters.onDisplayStrategyChange(event.target.value as DisplayStrategy)} disabled={!hasDataset}>
-            <option value="all">All records</option>
-            <option value="tagged-only">Tagged only</option>
-            <option value="tagged-main">Tagged + main/master</option>
+          <SelectField aria-label="Display strategy" value={filters.displayStrategy} onChange={(event: ChangeEvent<HTMLSelectElement>) => filters.onDisplayStrategyChange(event.target.value as DisplayStrategy)} disabled={!hasDatabase}>
+            <option value="all">All records</option><option value="tagged-only">Tagged only</option><option value="tagged-main">Tagged + main/master</option>
           </SelectField>
         </Field>
       </ToolbarGrid>

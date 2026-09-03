@@ -1,16 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   buildTrendTrace,
-  commitAxisLayout,
   metricFamilyLabel,
-  splitTrendRowsByEnvironmentPair,
   trendDisplayUnitContext,
   type TrendPlotRow
 } from "./dashboard-plotting";
 import {
   buildDatabaseCatalogStats,
   buildRuns,
-  buildRunPairComparisons,
+  buildBenchmarkPairComparisons,
   runAxisLabel,
   runHeadline,
   runIdentityTitle
@@ -22,7 +20,7 @@ import type {
   BenchmarkRun,
   BenchmarkRunRecord,
   BenchmarkSoftwareEnvironment,
-  LoadedBenchmarkDataset
+  LoadedBenchmarkDatabase
 } from "./types";
 
 const Base_Key = '["suite","case"]';
@@ -67,18 +65,14 @@ function makeRun(overrides: Partial<BenchmarkRun> = {}): BenchmarkRun {
 function makeTrendRow(overrides: Partial<TrendPlotRow> = {}): TrendPlotRow {
   return {
     ...Base_Row,
-    configuration_key: '["state-1","hardware-1","software-1"]',
-    code_state_id: "state-1",
     code_date: "2026-01-01T00:00:00Z",
-    environment_pair_key: '["hardware-1","software-1"]',
-    environment_pair_label: "Hardware 1 · Software 1",
     measured_at: "2026-01-01T00:00:00Z",
     date_value: new Date("2026-01-01T00:00:00Z"),
     run_axis_label: "2026-01-01",
-    run_headline: "Run 1",
-    run_tone: "branch",
     run_identity_title: "Run: Run 1",
     run_count: 1,
+    x_key: "state-1",
+    x_label: "State 1",
     ...overrides
   };
 }
@@ -96,14 +90,15 @@ describe("dashboard helpers", () => {
   });
 
   it("keeps matched, added, and removed benchmark keys in run diffs", () => {
-    const rows = buildRunPairComparisons(
+    const pairBase = { benchmark_key: Base_Key, metric_name: Base_Row.metric_name, statistic: Base_Row.statistic, unit: Base_Row.unit, value: Base_Row.value, better: Base_Row.better };
+    const rows = buildBenchmarkPairComparisons(
       [
-        { ...Base_Row, benchmark_key: '["shared"]', value: 84.2 },
-        { ...Base_Row, benchmark_key: '["added"]', value: 68.3 }
+        { ...pairBase, benchmark_key: '["shared"]', value: 84.2 },
+        { ...pairBase, benchmark_key: '["added"]', value: 68.3 }
       ],
       [
-        { ...Base_Row, run_id: "run-2", benchmark_key: '["shared"]', value: 91.4 },
-        { ...Base_Row, run_id: "run-2", benchmark_key: '["removed"]', value: 73.1 }
+        { ...pairBase, benchmark_key: '["shared"]', value: 91.4 },
+        { ...pairBase, benchmark_key: '["removed"]', value: 73.1 }
       ],
       new Map([
         ['["shared"]', { key: '["shared"]', path: ["shared"], label: "shared" }],
@@ -114,7 +109,7 @@ describe("dashboard helpers", () => {
     expect(rows.map((row) => row.status)).toEqual(["matched", "focus-only", "baseline-only"]);
   });
 
-  it("normalizes compatible time units and splits series by environment pair", () => {
+  it("normalizes compatible metric units", () => {
     const context = trendDisplayUnitContext([
       { value: 2_000, unit: "ns" },
       { value: 0.000004, unit: "s" }
@@ -124,20 +119,9 @@ describe("dashboard helpers", () => {
     expect(metricFamilyLabel({ ...Base_Row, metric_name: "memory", unit: "bytes" }))
       .toBe("memory median bytes");
 
-    const series = splitTrendRowsByEnvironmentPair([
-      makeTrendRow({ environment_pair_key: "pair-b", environment_pair_label: "Pair B" }),
-      makeTrendRow({ run_id: "run-2", environment_pair_key: "pair-a", environment_pair_label: "Pair A" }),
-      makeTrendRow({ run_id: "run-3", environment_pair_key: "pair-b", environment_pair_label: "Pair B" })
-    ]);
-    expect(series.map((entry) => [entry.environmentPairKey, entry.rows.length]))
-      .toEqual([["pair-a", 1], ["pair-b", 2]]);
   });
 
   it("sorts runs by code date while catalog latest-run uses measurement time", () => {
-    const rows: BenchmarkRow[] = [
-      { ...Base_Row, run_id: "run-old", benchmark_key: '["old"]' },
-      { ...Base_Row, run_id: "run-new", benchmark_key: '["new"]' }
-    ];
     const runsById = new Map<string, BenchmarkRunRecord>([
       ["run-old", {
         id: "run-old", code_state_id: "state-old", hardware_environment_id: "hardware-1",
@@ -158,9 +142,7 @@ describe("dashboard helpers", () => {
     const softwareEnvironmentsById = new Map<string, BenchmarkSoftwareEnvironment>([
       ["software-1", { id: "software-1", label: "Software", identity: {}, metadata: {} }]
     ]);
-    const dataset: LoadedBenchmarkDataset = {
-      rows,
-      aggregateRows: [],
+    const database: LoadedBenchmarkDatabase = {
       benchmarksByKey: new Map([
         ['["old"]', { key: '["old"]', path: ["old"], label: "old" }],
         ['["new"]', { key: '["new"]', path: ["new"], label: "new" }]
@@ -169,6 +151,13 @@ describe("dashboard helpers", () => {
       codeStatesById,
       hardwareEnvironmentsById,
       softwareEnvironmentsById,
+      configurations: [
+        { code_state_id: "state-old", hardware_environment_id: "hardware-1", software_environment_id: "software-1" },
+        { code_state_id: "state-new", hardware_environment_id: "hardware-1", software_environment_id: "software-1" }
+      ],
+      benchmarkCountByRun: new Map([["run-old", 1], ["run-new", 1]]),
+      viewCatalog: { metricOptions: [], metricSourcesByLabel: new Map(), branchOptions: ["all"], databaseTimeStart: "2026-06-10", databaseTimeEnd: "2026-06-11" },
+      stats: { rowCount: 2, runCount: 2, keyCount: 2, hardwareEnvironmentCount: 1, softwareEnvironmentCount: 1, configurationCount: 2, metrics: ["time median"], latestRunDate: "2026-06-20T00:00:00Z", dirtyRunCount: 0 },
       metadata: {
         schema_version: 6, name: "", description: "", project_url: "", logo_url: "", logo_url_dark: "",
         created_at: "", updated_at: "", notes: "", raw: {}
@@ -176,37 +165,23 @@ describe("dashboard helpers", () => {
       source_label: "test.sqlite",
       source_url: null
     };
-    const runs = buildRuns(dataset);
+    const runs = buildRuns(database);
 
     expect(runs.map((run) => run.run_id)).toEqual(["run-new", "run-old"]);
     expect(runs[0]?.environment_pair_label).toBe("AMD EPYC 9V74 80-Core / Software");
-    expect(buildDatabaseCatalogStats(dataset, rows, runs)!.latestRunDate).toBe("2026-06-20T00:00:00Z");
+    expect(buildDatabaseCatalogStats(database)!.latestRunDate).toBe("2026-06-20T00:00:00Z");
   });
 
-  it("uses deterministic commit positions in axis labels and traces", () => {
+  it("uses the resolved varying-dimension labels on trend traces", () => {
     const rows = [
-      makeTrendRow({ code_state_id: "a", run_id: "a", code_date: "2026-06-02", value: 20, run_axis_label: "a" }),
-      makeTrendRow({ code_state_id: "b", run_id: "b", code_date: "2026-06-03", value: 10, run_axis_label: "b" })
+      makeTrendRow({ run_id: "a", code_date: "2026-06-02", value: 20, x_key: "a", x_label: "A" }),
+      makeTrendRow({ run_id: "b", code_date: "2026-06-03", value: 10, x_key: "b", x_label: "B" })
     ];
-    const axis = commitAxisLayout(rows);
-    expect(axis?.tickLabels.tickvals).toEqual([0, 1]);
-
     const traces = buildTrendTrace(rows, {
-      axisMode: "commit",
-      commitAxisPositions: axis?.positionsByCodeStateId,
-      lineShape: "line",
-      markerSymbol: "circle",
-      markerFillMode: "hollow",
-      displayUnitContext: trendDisplayUnitContext(rows),
-      color: "#000000",
-      label: "Series",
-      plotTheme: {
-        paper: "transparent", plot: "transparent", grid: "#ccc", axis: "#333", zero: "#999", line: "#000",
-        areaGradientStart: "rgba(0,0,0,0)", areaGradientEnd: "rgba(0,0,0,0.2)", markerStrong: "#000",
-        marker: "#000", markerMuted: "#666", deltaUp: "#f00", deltaDown: "#0f0", deltaNeutral: "#999"
-      },
+      lineShape: "line", markerSymbol: "circle", markerFillMode: "hollow", displayUnitContext: trendDisplayUnitContext(rows), color: "#000000", label: "Series",
+      plotTheme: { paper: "transparent", plot: "transparent", grid: "#ccc", axis: "#333", zero: "#999", line: "#000", areaGradientStart: "rgba(0,0,0,0)", areaGradientEnd: "rgba(0,0,0,0.2)", markerStrong: "#000", marker: "#000", markerMuted: "#666", deltaUp: "#f00", deltaDown: "#0f0", deltaNeutral: "#999" },
       theme: "light", yMin: 0, yPadding: 1, showLegend: true
     });
-    expect(traces[1]?.x).toEqual([0, 1]);
+    expect(traces[1]?.x).toEqual(["A", "B"]);
   });
 });

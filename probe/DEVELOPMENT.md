@@ -6,7 +6,7 @@ This component is intentionally language-independent. Language-specific writers 
 
 ## Build
 
-A C++26-capable compiler and CMake 3.25 or newer are required. The source intentionally uses only broadly implemented language features.
+A C++23-capable compiler and CMake 3.25 or newer are required. The source intentionally uses only broadly implemented language features.
 
 ```sh
 cmake -S probe -B probe/build -DCMAKE_BUILD_TYPE=Release

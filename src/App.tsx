@@ -2,14 +2,13 @@ import { Suspense, useEffect, useRef, useState, type ChangeEvent, type ReactNode
 import {
   AboutPage,
   BenchmarkKeysPage,
-  CompareFeature,
+  DimensionSelectorPage,
   DatabasesPage,
-  OverviewFeature,
+  OverviewPage,
   SettingsPage,
-  TrendBoardFeature
+  TrendBoardPage
 } from "./app/pageRegistry";
-import packageJson from "../package.json";
-import { useBenchmarkDatasetState } from "./app/useBenchmarkDatasetState";
+import { useBenchmarkDatabaseState } from "./app/useBenchmarkDatabaseState";
 import { Asset_Base_URL } from "./lib/dashboard-data";
 import type { ActivePage } from "./lib/dashboard-settings";
 import { AppSidebar } from "./shell/AppSidebar";
@@ -22,7 +21,6 @@ function PageSlot(props: { active: boolean; children: ReactNode }) {
     if (!props.active) return;
     const frame = window.requestAnimationFrame(() => {
       slotRef.current?.querySelector<HTMLElement>("h1")?.focus({ preventScroll: true });
-      window.dispatchEvent(new Event("resize"));
     });
     return () => window.cancelAnimationFrame(frame);
   }, [props.active]);
@@ -58,7 +56,7 @@ function LoadingState(props: { phase: "booting" | "loading-database" }) {
 const Page_Render_Order: ActivePage[] = [
   "overview",
   "trend-board",
-  "compare",
+  "dimension-selector",
   "benchmark-keys",
   "settings",
   "about",
@@ -66,26 +64,28 @@ const Page_Render_Order: ActivePage[] = [
 ];
 
 function App() {
-  const state = useBenchmarkDatasetState();
+  const state = useBenchmarkDatabaseState();
   const { settings, setSetting } = state;
   const activePage = settings.activePage;
+  // Visited pages intentionally stay mounted for the lifetime of the current database source. This is a deliberate latency tradeoff:
+  // keeping their Plotly state and derived UI state resident makes repeated page switches effectively immediate. Do not evict inactive pages for memory alone.
   const [pageCache, setPageCache] = useState<{ sourceRevision: number; visitedPages: Set<ActivePage> }>(() => ({
-    sourceRevision: state.datasetSourceRevision,
+    sourceRevision: state.databaseSourceRevision,
     visitedPages: new Set([activePage])
   }));
-  const visitedPages = pageCache.sourceRevision === state.datasetSourceRevision
+  const visitedPages = pageCache.sourceRevision === state.databaseSourceRevision
     ? pageCache.visitedPages
     : new Set<ActivePage>([activePage]);
 
   useEffect(() => {
     setPageCache((current) => {
-      if (current.sourceRevision !== state.datasetSourceRevision) {
-        return { sourceRevision: state.datasetSourceRevision, visitedPages: new Set([activePage]) };
+      if (current.sourceRevision !== state.databaseSourceRevision) {
+        return { sourceRevision: state.databaseSourceRevision, visitedPages: new Set([activePage]) };
       }
       if (current.visitedPages.has(activePage)) return current;
       return { ...current, visitedPages: new Set(current.visitedPages).add(activePage) };
     });
-  }, [activePage, state.datasetSourceRevision]);
+  }, [activePage, state.databaseSourceRevision]);
 
   if (state.phase === "booting" || state.phase === "loading-database") {
     return <LoadingState phase={state.phase} />;
@@ -93,22 +93,24 @@ function App() {
 
   const openLocalFilePicker = () => state.fileInputRef.current?.click();
   const pages: Record<ActivePage, ReactNode> = {
-    overview: <OverviewFeature state={state} onOpenLocalFilePicker={openLocalFilePicker} />,
-    "trend-board": <TrendBoardFeature state={state} />,
-    compare: <CompareFeature state={state} />,
+    overview: <OverviewPage state={state} onOpenLocalFilePicker={openLocalFilePicker} />,
+    "trend-board": <TrendBoardPage state={state} />,
+    "dimension-selector": <DimensionSelectorPage state={state} />,
     "benchmark-keys": <BenchmarkKeysPage benchmarks={state.benchmarkDefinitions} />,
     "database-catalog": <DatabasesPage databaseCatalog={state.databaseCatalog} onOpenLocalFilePicker={openLocalFilePicker} />,
     settings: (
       <SettingsPage
+        theme={settings.theme}
         trendLineShape={settings.trendLineShape}
         trendMarkerSymbol={settings.trendMarkerSymbol}
         trendMarkerFillMode={settings.trendMarkerFillMode}
+        onThemeChange={(value) => setSetting("theme", value)}
         onTrendLineShapeChange={(value) => setSetting("trendLineShape", value)}
         onTrendMarkerSymbolChange={(value) => setSetting("trendMarkerSymbol", value)}
         onTrendMarkerFillModeChange={(value) => setSetting("trendMarkerFillMode", value)}
       />
     ),
-    about: <AboutPage applicationName="BenchLedger" version={packageJson.version} repositoryUrl="https://github.com/abcdvvvv/BenchLedger" />
+    about: <AboutPage applicationName="BenchLedger" version={__BENCHLEDGER_VERSION__} repositoryUrl="https://github.com/abcdvvvv/BenchLedger" />
   };
 
   return (
@@ -132,18 +134,16 @@ function App() {
             sourceDatabases={state.sourceDatabases}
             selectedDatabaseId={settings.selectedDatabaseId}
             onDatabaseChange={state.handleDatabaseSelection}
-            dataset={state.dataset}
+            database={state.database}
             currentMetadata={state.currentMetadata}
             theme={settings.theme}
-            onThemeToggle={() => setSetting("theme", settings.theme === "dark" ? "light" : "dark")}
-            latestRun={state.latestRun}
             assetBaseUrl={Asset_Base_URL}
             siteTitle={state.siteTitle}
             onRequestClose={closeDrawer}
           />
         )}
       >
-        <Suspense key={state.datasetSourceRevision} fallback={<PageLoadingState />}>
+        <Suspense key={state.databaseSourceRevision} fallback={<PageLoadingState />}>
           {Page_Render_Order.map((id) => (
             id === activePage || visitedPages.has(id)
               ? <PageSlot key={id} active={activePage === id}>{pages[id]}</PageSlot>

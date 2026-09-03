@@ -2,17 +2,23 @@
 #include "benchledger_probe/normalize.hpp"
 #include "benchledger_probe/process.hpp"
 
+#include <array>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 
 #ifndef BENCHLEDGER_PROBE_VERSION
 #define BENCHLEDGER_PROBE_VERSION "dev"
 #endif
 
 namespace {
+
+constexpr auto Fastfetch_Timeout = std::chrono::seconds(30);
+constexpr std::size_t Max_Input_Bytes = 16 * 1024 * 1024;
 
 struct Options {
     bool pretty{};
@@ -38,11 +44,27 @@ Options parse_options(int argc, char** argv) {
     return options;
 }
 
+std::string read_stream(std::istream& stream, std::string_view source) {
+    std::string result;
+    std::array<char, 8192> buffer{};
+    while (stream) {
+        stream.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+        const auto count = stream.gcount();
+        if (count <= 0) break;
+        if (result.size() + static_cast<std::size_t>(count) > Max_Input_Bytes) throw std::runtime_error(std::string(source) + " exceeds 16 MiB input limit");
+        result.append(buffer.data(), static_cast<std::size_t>(count));
+    }
+    return result;
+}
+
 std::string read_input(const std::filesystem::path& path) {
-    if (path == "-") return {std::istreambuf_iterator<char>(std::cin), std::istreambuf_iterator<char>()};
+    if (path == "-") return read_stream(std::cin, "stdin");
+    std::error_code error;
+    const auto size = std::filesystem::file_size(path, error);
+    if (!error && size > Max_Input_Bytes) throw std::runtime_error("input file exceeds 16 MiB input limit: " + path.string());
     std::ifstream stream(path, std::ios::binary);
     if (!stream) throw std::runtime_error("cannot open input file: " + path.string());
-    return {std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
+    return read_stream(stream, "input file");
 }
 
 void print_help() {
@@ -72,7 +94,7 @@ int main(int argc, char** argv) {
             const auto process = benchledger::probe::run_process(executable, {
                 "--config", "none",
                 "-s", "CPU:PhysicalMemory:Memory:GPU:OS:Kernel:Version",
-                "--format", "json"});
+                "--format", "json"}, Fastfetch_Timeout);
             if (process.exit_code != 0) {
                 throw std::runtime_error("Fastfetch exited with code " + std::to_string(process.exit_code) +
                     (process.standard_error.empty() ? std::string{} : ": " + process.standard_error));

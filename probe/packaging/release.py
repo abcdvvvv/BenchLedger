@@ -10,6 +10,7 @@ import os
 import re
 import sys
 import tarfile
+import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -231,10 +232,13 @@ def resolve_fastfetch(args: argparse.Namespace) -> int:
         if match is None:
             raise RuntimeError(f"Fastfetch asset {asset_name} has no valid SHA-256 digest")
         download_url = validate_github_asset_url(repository, asset.get("browser_download_url"), asset_name)
+        size = asset.get("size")
+        if isinstance(size, bool) or not isinstance(size, int) or size < 0:
+            raise RuntimeError(f"Fastfetch asset {asset_name} has no valid size")
         selected_assets[asset_name] = {
             "browser_download_url": download_url,
             "digest": f"sha256:{match.group(1).lower()}",
-            "size": asset.get("size"),
+            "size": size,
         }
 
     version = tag[1:] if tag.startswith("v") else tag
@@ -250,19 +254,34 @@ def resolve_fastfetch(args: argparse.Namespace) -> int:
     return 0
 
 
-def _stream_download(url: str, output: Path) -> str:
+def _stream_download(url: str, output: Path, expected_sha256: str, expected_size: int, asset_name: str) -> str:
     request = urllib.request.Request(url, headers={"User-Agent": "benchledger-release-packager"})
     digest = hashlib.sha256()
+    downloaded = 0
     output.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path: Path | None = None
     try:
-        with urllib.request.urlopen(request, timeout=120) as response, output.open("wb") as stream:
-            while chunk := response.read(1024 * 1024):
-                stream.write(chunk)
-                digest.update(chunk)
+        with tempfile.NamedTemporaryFile(mode="wb", dir=output.parent, prefix=f".{output.name}.", suffix=".part", delete=False) as stream:
+            temporary_path = Path(stream.name)
+            with urllib.request.urlopen(request, timeout=120) as response:
+                while chunk := response.read(1024 * 1024):
+                    downloaded += len(chunk)
+                    if downloaded > expected_size:
+                        raise RuntimeError(f"Fastfetch asset {asset_name} exceeds expected size {expected_size} bytes")
+                    stream.write(chunk)
+                    digest.update(chunk)
+        if downloaded != expected_size:
+            raise RuntimeError(f"Fastfetch asset {asset_name} size mismatch: expected {expected_size} bytes, got {downloaded}")
+        actual = digest.hexdigest()
+        if actual != expected_sha256:
+            raise RuntimeError(f"SHA-256 mismatch for {asset_name}: expected {expected_sha256}, got {actual}")
+        os.replace(temporary_path, output)
+        return actual
     except (urllib.error.HTTPError, urllib.error.URLError) as exc:
-        output.unlink(missing_ok=True)
         raise RuntimeError(f"Fastfetch asset download failed: {exc}") from exc
-    return digest.hexdigest()
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
 
 
 def download_fastfetch(args: argparse.Namespace) -> int:
@@ -274,11 +293,11 @@ def download_fastfetch(args: argparse.Namespace) -> int:
     if match is None:
         raise RuntimeError(f"release manifest has an invalid digest for {args.asset_name}")
     expected = match.group(1).lower()
+    expected_size = asset.get("size")
+    if isinstance(expected_size, bool) or not isinstance(expected_size, int) or expected_size < 0:
+        raise RuntimeError(f"release manifest has an invalid size for {args.asset_name}")
     output = Path(args.output)
-    actual = _stream_download(str(asset["browser_download_url"]), output)
-    if actual != expected:
-        output.unlink(missing_ok=True)
-        raise RuntimeError(f"SHA-256 mismatch for {args.asset_name}: expected {expected}, got {actual}")
+    actual = _stream_download(str(asset["browser_download_url"]), output, expected, expected_size, args.asset_name)
     write_json(args.metadata_output, {
         "repository": manifest["repository"],
         "tag": manifest["tag"],

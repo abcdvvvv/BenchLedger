@@ -2,18 +2,21 @@ import type { ReactNode } from "react";
 import { MarkerSymbolMenu } from "../benchmarks/components/MarkerSymbolMenu";
 import { PageHeader } from "../../components/common/PageHeader";
 import { SegmentedToggle } from "../../components/ui/SegmentedToggle";
-import { type TrendLineShape, type TrendMarkerFillMode } from "../../lib/dashboard-settings";
+import { type ThemeMode, type TrendLineShape, type TrendMarkerFillMode } from "../../lib/dashboard-settings";
 import { Trend_Marker_Symbol_Options, type TrendMarkerSymbol } from "../../lib/trend-marker-symbols";
 
 export type SettingsPageProps = {
+  theme: ThemeMode;
   trendLineShape: TrendLineShape;
   trendMarkerSymbol: TrendMarkerSymbol;
   trendMarkerFillMode: TrendMarkerFillMode;
+  onThemeChange: (theme: ThemeMode) => void;
   onTrendLineShapeChange: (shape: TrendLineShape) => void;
   onTrendMarkerSymbolChange: (symbol: TrendMarkerSymbol) => void;
   onTrendMarkerFillModeChange: (mode: TrendMarkerFillMode) => void;
 };
 
+const Theme_Help = "Choose the interface color theme.";
 const Trend_Line_Style_Help = "Choose whether the main trend chart connects points with straight line segments or the current smoothed curve.";
 const Trend_Marker_Symbol_Help = "Choose the marker symbol used for benchmark data points in trend plots.";
 const Trend_Marker_Fill_Help = "Choose whether benchmark data point markers are hollow or filled.";
@@ -39,12 +42,13 @@ function SettingRow(props: {
 }
 
 function SettingsSection(props: {
+  id: string;
   title: string;
   children: ReactNode;
 }) {
   return (
-    <section className="grid gap-3" aria-labelledby="settings-plot-heading">
-      <h2 id="settings-plot-heading" className="m-0 text-[1.1rem] font-semibold text-[var(--color-text-theme-strong)]">
+    <section className="grid gap-3" aria-labelledby={props.id}>
+      <h2 id={props.id} className="m-0 text-[1.1rem] font-semibold text-[var(--color-text-theme-strong)]">
         {props.title}
       </h2>
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,25rem),1fr))] gap-4">
@@ -56,9 +60,11 @@ function SettingsSection(props: {
 
 export function SettingsPage(props: SettingsPageProps) {
   const {
+    theme,
     trendLineShape,
     trendMarkerSymbol,
     trendMarkerFillMode,
+    onThemeChange,
     onTrendLineShapeChange,
     onTrendMarkerSymbolChange,
     onTrendMarkerFillModeChange
@@ -68,7 +74,23 @@ export function SettingsPage(props: SettingsPageProps) {
     <>
       <PageHeader eyebrow="Benchmarking › Settings" title="Settings" />
       <div className="grid gap-6">
-        <SettingsSection title="Plot">
+        <SettingsSection id="settings-appearance-heading" title="Appearance">
+          <SettingRow
+            title="Theme"
+            help={Theme_Help}
+            control={
+              <SegmentedToggle
+                value={theme}
+                options={[{ value: "light", label: "Light" }, { value: "dark", label: "Dark" }]}
+                onChange={(value) => onThemeChange(value as ThemeMode)}
+                ariaLabel="Interface theme"
+                className="min-w-[8rem]"
+                buttonClassName="px-3"
+              />
+            }
+          />
+        </SettingsSection>
+        <SettingsSection id="settings-plot-heading" title="Plot">
           <SettingRow
             title="Line Interpolation"
             help={Trend_Line_Style_Help}

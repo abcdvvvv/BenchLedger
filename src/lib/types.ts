@@ -293,14 +293,45 @@ export type BenchLedgerMetadata = {
   raw: Record<string, string>;
 };
 
-export type LoadedBenchmarkDataset = {
-  rows: BenchmarkRow[];
-  aggregateRows: BenchmarkAggregateRow[];
+export type BenchmarkMetricSource = { metric_name: string; statistic: string; unit: string; };
+
+export type BenchmarkViewCatalog = {
+  metricOptions: string[];
+  metricSourcesByLabel: ReadonlyMap<string, BenchmarkMetricSource[]>;
+  branchOptions: string[];
+  databaseTimeStart: string;
+  databaseTimeEnd: string;
+};
+
+export type BenchmarkConfigurationIds = {
+  code_state_id: string;
+  hardware_environment_id: string;
+  software_environment_id: string;
+};
+
+export type BenchmarkDatabaseStats = {
+  rowCount: number;
+  runCount: number;
+  keyCount: number;
+  hardwareEnvironmentCount: number;
+  softwareEnvironmentCount: number;
+  configurationCount: number;
+  metrics: string[];
+  latestRunDate: string;
+  dirtyRunCount: number;
+};
+
+/** Lightweight database snapshot. Benchmark result rows remain inside SQLocal and are queried on demand. */
+export type LoadedBenchmarkDatabase = {
   benchmarksByKey: ReadonlyMap<string, BenchmarkDefinition>;
   runsById: ReadonlyMap<string, BenchmarkRunRecord>;
   codeStatesById: ReadonlyMap<string, BenchmarkCodeState>;
   hardwareEnvironmentsById: ReadonlyMap<string, BenchmarkHardwareEnvironment>;
   softwareEnvironmentsById: ReadonlyMap<string, BenchmarkSoftwareEnvironment>;
+  configurations: BenchmarkConfigurationIds[];
+  benchmarkCountByRun: ReadonlyMap<string, number>;
+  viewCatalog: BenchmarkViewCatalog;
+  stats: BenchmarkDatabaseStats;
   metadata: BenchLedgerMetadata;
   source_label: string;
   source_url: string | null;

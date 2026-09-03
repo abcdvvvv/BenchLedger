@@ -15,7 +15,7 @@ import {
   buildBenchmarkKeyTree,
   flattenVisibleBenchmarkKeyNodes,
   initiallyExpandedBenchmarkGroupIds
-} from "./benchmark-key-tree";
+} from "../../lib/benchmark-key-tree";
 
 export type BenchmarkKeysPageProps = {
   benchmarks: BenchmarkDefinition[];
@@ -24,7 +24,7 @@ export type BenchmarkKeysPageProps = {
 const Tree_Indent_Rem = 1.125;
 
 export function BenchmarkKeysPage(props: BenchmarkKeysPageProps) {
-  const tree = useMemo(() => buildBenchmarkKeyTree(props.benchmarks), [props.benchmarks]);
+  const tree = useMemo(() => buildBenchmarkKeyTree(props.benchmarks, (benchmark) => benchmark.key), [props.benchmarks]);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => initiallyExpandedBenchmarkGroupIds(tree));
 
   useEffect(() => {
@@ -42,7 +42,7 @@ export function BenchmarkKeysPage(props: BenchmarkKeysPageProps) {
       <PageHeader
         eyebrow="Benchmarking › Benchmark Keys"
         title="Benchmark Keys"
-        description="Explore the benchmark key hierarchy as a collapsible tree built from the loaded dataset."
+        description="Explore the benchmark key hierarchy as a collapsible tree built from the loaded database."
       />
       {hasKeys ? (
         <Panel className="min-h-[32rem]">

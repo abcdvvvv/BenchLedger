@@ -1,27 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { benchmarkDeltaColor, benchmarkDeltaDirection, benchmarkDeltaTone } from "./benchmarkDeltaPresentation";
-import type { PlotTheme } from "../../lib/dashboard-plotting";
-
-const Plot_Theme: PlotTheme = {
-  paper: "", plot: "", grid: "", axis: "", zero: "", line: "",
-  areaGradientStart: "", areaGradientEnd: "", markerStrong: "", marker: "", markerMuted: "",
-  deltaUp: "red", deltaDown: "green", deltaNeutral: "gray"
-};
+import { benchmarkDeltaTone } from "./benchmarkDeltaPresentation";
 
 describe("benchmark delta presentation", () => {
-  it("maps raw deltas to metric-aware direction, tone, and color", () => {
+  it("maps raw deltas to metric-aware semantic tone", () => {
     const cases = [
-      [12, "lower", "up", "negative", "red"],
-      [-12, "lower", "down", "positive", "green"],
-      [12, "higher", "down", "positive", "green"],
-      [12, "neutral", "neutral", "neutral", "gray"],
-      [0.001, "lower", "neutral", "neutral", "gray"]
+      [12, "lower", "negative"],
+      [-12, "lower", "positive"],
+      [12, "higher", "positive"],
+      [12, "neutral", "neutral"],
+      [0.001, "lower", "neutral"]
     ] as const;
 
-    for (const [value, better, direction, tone, color] of cases) {
-      expect(benchmarkDeltaDirection(value, better)).toBe(direction);
-      expect(benchmarkDeltaTone(value, better)).toBe(tone);
-      expect(benchmarkDeltaColor(value, better, Plot_Theme)).toBe(color);
-    }
+    for (const [value, better, tone] of cases) expect(benchmarkDeltaTone(value, better)).toBe(tone);
   });
 });

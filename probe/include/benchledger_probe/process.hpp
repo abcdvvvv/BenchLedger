@@ -1,5 +1,7 @@
 #pragma once
 
+#include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -14,7 +16,9 @@ struct ProcessResult {
 
 [[nodiscard]] ProcessResult run_process(
     const std::filesystem::path& executable,
-    const std::vector<std::string>& arguments);
+    const std::vector<std::string>& arguments,
+    std::chrono::milliseconds timeout,
+    std::uintmax_t max_output_bytes = 16ULL * 1024ULL * 1024ULL);
 
 [[nodiscard]] std::filesystem::path resolve_fastfetch(
     const std::filesystem::path& argv0,

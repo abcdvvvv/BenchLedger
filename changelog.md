@@ -1,7 +1,20 @@
 # Changelog
 
 ## [Unreleased]
-## Fixed
+
+### Added
+- Added Dimension Selector for choosing exactly one varying identity dimension for the x-axis and selecting values for all fixed dimensions across Dashboard and Trend Board, with validation for incomplete selections.
+
+### Changed
+- Dimension Selector now presents Code, Hardware, and Software dimensions hierarchically and manages fixed-dimension values directly in the table, with one selected value shown as Exact and multiple values shown as Grouped.
+- Dashboard Baseline and Focus selectors now prefer tags over commit SHAs, show measurement time, and list newer measurements first.
+- View-level condition controls now focus on Y-Axis, Branch, Time Range, and Display Strategy, while identity-dimension choices are managed in Dimension Selector.
+- Theme selection has moved to Settings as a Light/Dark control.
+- Improved responsiveness during dimension and filter changes and reduced memory use when loading large SQLite databases.
+
+### Fixed
+- Fixed Dimension Selector persistence so dimension rules and fixed-value choices survive reloads, including temporarily incomplete selections.
+- Fixed dependent benchmark views so incomplete Dimension Selector configurations are reported clearly instead of continuing with a stale previous selection.
 - Fixed environment labels that could display conflicting CPU core counts when a processor model already included its own core-count designation.
 
 ## [0.7.0] - 2026-08-02
