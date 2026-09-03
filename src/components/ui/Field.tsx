@@ -33,7 +33,7 @@ type ControlClassNameOptions = {
 
 function controlClassName(options?: ControlClassNameOptions) {
   return cn(
-    "type-body control-h-theme pad-control-x w-full outline-none transition focus-visible:ring-4 focus-visible:ring-brand-500/15",
+    "type-body control-h-theme pad-control-x w-full outline-none transition",
     options?.invalid
       ? "border-error-300 bg-error-25 text-error-700 focus:border-error-500 dark:border-error-500/40 dark:bg-error-500/10 dark:text-error-200"
       : options?.active

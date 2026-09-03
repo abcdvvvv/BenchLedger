@@ -28,7 +28,7 @@ export const Disclosure_Trigger_Icon_Class_Name = "size-4 shrink-0 text-white";
 
 export function menuTriggerClassName(options?: MenuTriggerClassNameOptions) {
   return cn(
-    "type-menu control-frame control-h-theme pad-control-x inline-flex w-full items-center justify-between gap-3 text-left shadow-none focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-500/15 focus-visible:border-brand-500 focus-within:ring-4 focus-within:ring-brand-500/10 focus-within:border-brand-500",
+    "type-menu control-frame control-h-theme pad-control-x inline-flex w-full items-center justify-between gap-3 text-left shadow-none focus-visible:outline-none focus-visible:border-brand-500 focus-within:border-brand-500",
     "surface-control border-hover-theme",
     options?.disabled && "cursor-not-allowed opacity-60"
   );

@@ -77,7 +77,7 @@ export function DimensionSelectorPage({ state }: { state: BenchmarkDatabaseState
       <PageHeader eyebrow="Benchmarking › Dimension Selector" title="Dimension Selector" description="Select exactly one varying dimension for the x-axis and choose values for all fixed dimensions." />
       {!dimensionSelection.dimensions.length ? <EmptyState title="No identity dimensions available" description="Load a benchmark database to configure dimension rules." /> : (
         <>
-          <Banner tone={dimensionSelection.validation.isValid ? "positive" : "negative"} title={dimensionSelection.validation.isValid ? "Dimension Selector configuration is valid" : "Dimension Selector configuration is invalid"} description={dimensionSelection.validation.isValid ? "Exactly one dimension is Varying, and every Fixed dimension has at least one selected value." : dimensionSelection.validation.issues.join(" ")} />
+          <Banner tone={dimensionSelection.validation.isValid ? "positive" : "negative"} title={dimensionSelection.validation.isValid ? "Dimension Selector configuration is valid" : "Dimension Selector configuration is invalid"} description={dimensionSelection.validation.isValid ? "\u00A0" : dimensionSelection.validation.issues.join(" ")} />
           <DataTableShell label="Global dimension selector">
             <DataTable>
               <thead><tr><DataHeadCell colSpan={hierarchyDepth}>Dimension</DataHeadCell><DataHeadCell>Rule</DataHeadCell><DataHeadCell>Values</DataHeadCell><DataHeadCell>Resolution</DataHeadCell></tr></thead>

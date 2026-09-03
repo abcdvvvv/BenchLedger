@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [0.8.2] - 2026/09/03
 - Baseline and Focus revision selectors now order points by code commit date while continuing to show benchmark measurement time.
 
 ## [0.8.1] - 2026/09/03
@@ -194,7 +196,8 @@ The bundled GitHub Actions workflow now supports three target modes through one 
 
 Initial usable release of BenchLedger.
 
-[Unreleased]: https://github.com/abcdvvvv/BenchLedger/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/abcdvvvv/BenchLedger/compare/v0.8.2...HEAD
+[0.8.2]: https://github.com/abcdvvvv/BenchLedger/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/abcdvvvv/BenchLedger/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/abcdvvvv/BenchLedger/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/abcdvvvv/BenchLedger/compare/v0.6.1...v0.7.0

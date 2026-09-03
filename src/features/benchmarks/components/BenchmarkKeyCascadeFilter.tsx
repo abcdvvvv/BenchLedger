@@ -261,7 +261,7 @@ export function BenchmarkKeyCascadeFilter(props: BenchmarkKeyCascadeFilterProps)
           store={combobox}
           disabled={isDisabled}
           readOnly={!open}
-          className="type-menu min-w-0 flex-1 border-0 bg-transparent outline-none placeholder:text-stone-400 dark:placeholder:text-stone-500"
+          className="type-menu min-w-0 flex-1 border-0 bg-transparent outline-none placeholder:text-[var(--color-text-theme-body)] placeholder:opacity-100"
           placeholder={inputPlaceholder}
           autoComplete="off"
           aria-label={open ? `Search ${ariaLabel.toLocaleLowerCase()}` : ariaLabel}
